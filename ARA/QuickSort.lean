@@ -24,18 +24,6 @@ private noncomputable abbrev qs_branch (L : List ℕ) (i : Fin L.length) : PMF (
   (QuickSort_A ((L.eraseIdx i).filter (· ≥ L[i]))).bind fun S2 =>
   PMF.pure (S1 ++ [L[i]] ++ S2)
 
-private noncomputable abbrev qs_branch_1 (L : List ℕ) (i : Fin L.length) : PMF (List ℕ) := do
-   (QuickSort_A ((L.eraseIdx i).filter (· < L[i]))).bind fun S1 =>
-   (QuickSort_A ((L.eraseIdx i).filter (· ≥ L[i]))).bind fun S2 =>
-   PMF.pure (S1 ++ [L[i]] ++ S2)
-
-private noncomputable abbrev qs_branch_1' (L : List ℕ) (i : Fin L.length) : PMF (List ℕ) :=
-   (QuickSort_A ((L.eraseIdx i).filter (· < L[i]))).bind fun S1 =>
-   (QuickSort_A ((L.eraseIdx i).filter (· ≥ L[i]))).bind fun S2 =>
-   PMF.pure (S1 ++ [L[i]] ++ S2)
-
-lemma qs_br_eq: qs_branch_1 = qs_branch_1' := by rfl
-
 /-- Two sorted ℕ-permutations are equal. -/
 lemma eq_of_sortedLE_perm {l1 l2 : List ℕ}
     (h1 : l1.SortedLE) (h2 : l2.SortedLE) (hp : l1.Perm l2) : l1 = l2 :=
@@ -94,7 +82,8 @@ lemma Correctness_Quicksort_A : ∀ L : List ℕ, ∃ Output : List ℕ,
       obtain ⟨O2, h2, s2, p2⟩ := ihL2 i
       use O1 ++ [L[i]] ++ O2
       split_ands
-      · grind only [= PMF.pure_bind]
+      · unfold qs_branch
+        grind only [= PMF.pure_bind]
       · apply sorted_concat_pivot s1 s2 <;> grind
       · exact (Perm.append (Perm.append p1 (.refl _)) p2).trans (perm_filter_partition L i)
     -- All pivots yield the same output (uniqueness of sorted permutation)
