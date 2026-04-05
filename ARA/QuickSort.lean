@@ -24,12 +24,18 @@ private noncomputable abbrev qs_branch (L : List ℕ) (i : Fin L.length) : PMF (
   (QuickSort_A ((L.eraseIdx i).filter (· ≥ L[i]))).bind fun S2 =>
   PMF.pure (S1 ++ [L[i]] ++ S2)
 
-private noncomputable abbrev qs_branch' (L : List ℕ) (i : Fin L.length) : PMF (List ℕ) :=
+private noncomputable abbrev qs_branch_1 (L : List ℕ) (i : Fin L.length) : PMF (List ℕ) := do
    (QuickSort_A ((L.eraseIdx i).filter (· < L[i]))).bind fun S1 =>
    (QuickSort_A ((L.eraseIdx i).filter (· ≥ L[i]))).bind fun S2 =>
    PMF.pure (S1 ++ [L[i]] ++ S2)
 
-lemma qs_br_eq: qs_branch = qs_branch' := by rfl
+private noncomputable abbrev qs_branch_1' (L : List ℕ) (i : Fin L.length) : PMF (List ℕ) :=
+   (QuickSort_A ((L.eraseIdx i).filter (· < L[i]))).bind fun S1 =>
+   (QuickSort_A ((L.eraseIdx i).filter (· ≥ L[i]))).bind fun S2 =>
+   PMF.pure (S1 ++ [L[i]] ++ S2)
+
+lemma qs_br_eq: qs_branch_1 = qs_branch_1' := by rfl
+
 /-- Two sorted ℕ-permutations are equal. -/
 lemma eq_of_sortedLE_perm {l1 l2 : List ℕ}
     (h1 : l1.SortedLE) (h2 : l2.SortedLE) (hp : l1.Perm l2) : l1 = l2 :=
