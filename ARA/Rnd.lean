@@ -4,62 +4,64 @@ import ARA.Basic
 # The `Rnd` Monad: Combining Probability and Cost
 
 This module defines the `Rnd` monad, which pairs the probability space (`PMF`)
-with a cost accumulator, enabling formal analysis of **both** the output distribution
+with a cost accumulator, enabling formal analysis of both the output distribution
 and the running time distribution of randomized algorithms.
 
 ## Design
 
-The insight is that a randomized computation with cost tracking is a
-joint distribution over `(output, cost)` pairs:
+A randomized computation with cost tracking is a joint distribution over
+(output, cost) pairs:
 
-```
-Rnd T α ≅ PMF (α × T)
-```
+  Rnd T α ≅ PMF (α × T)
 
-where `T` is the cost type (typically `ℕ` for counting operations).
+where T is the cost type (typically ℕ for counting operations).
 
-This is equivalent to a `WriterT T PMF` monad transformer stack, where:
-- `PMF` provides the probability backbone (Giry monad)
-- `WriterT T` accumulates costs additively
-
-we could extend TimeM
-
-### Monad Operations
-
-- **`pure a`**: Returns `a` and zero cost with probability 1.
-  Formally : for a : α, `PMF.pure (a, 0)`
-
-- **`bind m f`**: The PMF distribution that attributes to (e, c) : β × T
-  (PMF.bind m (fun p => (f p.1).bind (fun q => PMF.pure (q.1, p.2 + q.2)))) (e, c)
-  that is the probability of getting (e, c) (the output e with cost c)
-  from `Rnd.bind m f` is the sum over all (a, c_1) : α × T of the probability of
-  getting (a, c_1) (the output a with cost c_1) from m times the sum over all
-  cost c_2 : T that satisfies c_1 + c_2 = c of the probability
-  of getting (e, c_2) from f a.
-
-### Extraction Functions
-
-Given `m : Rnd T α`, we can extract:
-- **Output distribution**: `m.outputDist : PMF α` — marginalizes over costs
-- **Cost distribution**: `m.costDist : PMF T` — marginalizes over outputs
-- **Joint distribution**: `m.run : PMF (α × T)` — the full joint distribution
-
-### Primitives
-
-- **`Rnd.coin p`**: Fair/biased coin flip (Bernoulli distribution), zero cost
-- **`Rnd.uniformFin n`**: Uniform choice over `Fin n`, zero cost
-- **`Rnd.uniformFintype α`**: Uniform choice over a finite type, zero cost
-- **`Rnd.tick c`**: Deterministic unit computation that charges cost `c`
-- **`Rnd.liftPMF p`**: Lift a pure PMF into the Rnd monad with zero cost
+This is equivalent to a WriterT T PMF monad transformer stack, where:
+- PMF provides the probability backbone (Giry monad)
+- WriterT T accumulates costs additively
 
 ## Relationship to TimeM
 
-`TimeM T α` from the companion module tracks cost deterministically (no probability).
-`Rnd T α` generalizes this: a deterministic `TimeM` computation `(a, c)` corresponds
-to the degenerate `Rnd` computation `PMF.pure (a, c)`.
+TimeM T α = (α × T) is cost tracking over the identity monad: one deterministic
+(value, cost) pair. Rnd T α = PMF (α × T) is cost tracking over the PMF monad:
+a distribution over (value, cost) pairs.
 
-The function `Rnd.fromTimeM` embeds any `TimeM` computation into `Rnd` as a
-point-mass distribution.
+Both are instances of the same pattern: WriterT T M α = M (α × T), where
+- M = Id   gives TimeM
+- M = PMF  gives Rnd
+- M = IO   would give executable cost tracking
+
+A natural future direction: instead of defining Rnd from scratch, recognize that
+cost tracking is a general concern (WriterT T M for any monad M) and generalize
+TimeM accordingly. Whether we should literally use WriterT or keep a custom
+structure (for better simp lemmas, notation, etc.) is an open question.
+
+Rnd.fromTimeM embeds a deterministic TimeM computation (a, c) into Rnd as the
+point-mass distribution PMF.pure (a, c).
+
+### Monad Operations
+
+- pure a: returns a with zero cost, probability 1.
+  Formally: PMF.pure (a, 0)
+
+- bind m f: the distribution that assigns to (e, c) : β × T the probability
+  ∑ (a, c₁), m (a, c₁) * ∑ c₂ with c₁ + c₂ = c, (f a) (e, c₂)
+  i.e. probabilities multiply (via PMF bind) and costs add.
+
+### Extraction Functions
+
+Given m : Rnd T α, we can extract:
+- m.outputDist : PMF α  — marginalizes over costs
+- m.costDist   : PMF T  — marginalizes over outputs
+- m.run        : PMF (α × T) — the full joint distribution
+
+### Primitives
+
+- Rnd.coin p          : biased coin flip, zero cost
+- Rnd.uniformFin n    : uniform choice over Fin n, zero cost
+- Rnd.uniformFintype α: uniform choice over a finite type, zero cost
+- Rnd.tick c          : charges cost c, returns PUnit
+- Rnd.liftPMF p       : lift a PMF into Rnd with zero cost
 -/
 
 namespace ARA

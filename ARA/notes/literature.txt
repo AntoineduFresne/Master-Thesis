@@ -1,0 +1,43 @@
+Literature notes on approaches for reasoning about randomized algorithms
+========================================================================
+
+(Extracted from FutureWork.lean — belongs in the thesis writeup, not the code.)
+
+There are various approaches for reasoning about randomized algorithms in a
+formal way. Analogously to the non-randomized setting, there exists an entire 
+spectrum of different approaches:
+
+- Fully explicit/deeply-embedded approaches
+- "No embedding" approaches that model randomized algorithms directly in the
+  logic as functions returning a probability distribution
+- Shallow embeddings, e.g. with shallow deterministic operations but explicit
+  random choice and explicit "while" loops. Examples are the approaches by
+  Petcher and Morrisett [165] in Coq and by Hölzl [105].
+- Combined approaches that start with a program in a deeply-embedded prob-
+  abilistic programming language and then relate it to a distribution specified
+  directly in the logic, cf. e.g. Tassarotti and Harper [188].
+
+We chose a no-embedding / shallow embedding approach.
+
+Directly in the Logic (No Embedding):
+Many ITPs offer functionality to define algorithms directly in the logic of the
+system — usually functionally. This approach is more flexible since algorithms
+can use the full expressiveness of the system's logic and not only some fixed
+restricted set of language constructs. One possible drawback is that it can be
+difficult or even impossible to reason about notions such as running time
+explicitly. A possible workaround is to define an explicit cost function for the
+algorithm, but since there is no formal connection between that function and
+the algorithm, one must check by inspection that the cost function really does
+correspond to the incurred cost. Another disadvantage is that most logics do
+not have builtin support for imperative algorithms.
+
+Hybrids between these two approaches also exist (such as shallow embeddings).
+The different approaches can be combined; e.g. one can show a correspondence
+between the running time of a deeply-embedded algorithm and a cost function
+specified as a recurrence directly in the logic, so that results obtained about
+the latter have a formal connection to the former.
+
+Our approach:
+We use shallow embedding with Lean's native do-notation. The trade-off is that
+cost annotations (tick calls) are trusted — not automatically derived from code
+structure. This is the same trade-off as in TimeM.

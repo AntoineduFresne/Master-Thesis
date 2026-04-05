@@ -2,252 +2,121 @@ import ARA.Rnd
 import ARA.Tactics
 
 /-!
-# Future-Proofing the Architecture: Extraction Framework
-
-This module addresses the vision outlined in Phase 3 of the thesis:
-the ability to write algorithms in a **pseudo-code style** and automatically
-extract both the **running time distribution** and the **output probability distribution**.
-
-## Architecture Overview
-
-The `Rnd T α` monad (defined in `ARA.Rnd`) is the foundation. It represents a
-joint distribution over `(output, cost)` pairs, combining the Giry monad (PMF)
-with a cost accumulator (WriterT-style).
-
-### The Three-Layer Extraction Pipeline
-
-```
-┌──────────────────────────────────────────────────┐
-│  Layer 1: Algorithm Specification (Pseudo-code)  │
-│  ─────────────────────────────────────────────── │
-│  Write your algorithm using `do` notation in     │
-│  the `Rnd T α` monad. Use:                      │
-│  • `Rnd.uniformFin n` for uniform random choice  │
-│  • `Rnd.coin p` for biased coin flips            │
-│  • `Rnd.tick c` to charge cost                   │
-│  • Standard `if/then/else`, `match`, recursion   │
-├──────────────────────────────────────────────────┤
-│  Layer 2: Property Extraction                    │
-│  ─────────────────────────────────────────────── │
-│  From any `m : Rnd T α`, automatically extract:  │
-│  • `m.outputDist : PMF α` (output distribution)  │
-│  • `m.costDist : PMF T` (cost distribution)      │
-│  • `m.probOutput a` (prob of specific output)    │
-│  • `m.probCost c` (prob of specific cost)        │
-├──────────────────────────────────────────────────┤
-│  Layer 3: Formal Verification                    │
-│  ─────────────────────────────────────────────── │
-│  Prove properties using `pmf_simp`, `grind`,     │
-│  and the Layer C derived lemmas:                 │
-│  • Correctness: `m.outputDist = PMF.pure answer` │
-│  • Complexity: `𝔼[m.costDist] ≤ bound`          │
-│  • Tail bounds: `P(cost > k) ≤ ε`               │
-└──────────────────────────────────────────────────┘
-```
-
-## Design Decisions and Rationale
-
-### Why `PMF (α × T)` and not `α → T → ℝ≥0∞`?
-
-Using `PMF (α × T)` gives us:
-1. **Automatic normalization**: The sum-to-1 constraint is enforced by `PMF`.
-2. **Monad structure for free**: We inherit `bind` from `PMF` (with cost addition).
-3. **Mathlib integration**: All existing PMF lemmas apply directly.
-4. **Marginalization**: Output/cost distributions are just `PMF.map Prod.fst/snd`.
-
-### Why not deeply embed a programming language?
-
-A shallow embedding (algorithms as Lean functions returning `Rnd`) gives:
-1. **Full expressiveness**: Use Lean's entire logic (pattern matching, recursion, etc.)
-2. **Natural notation**: `do` blocks look like pseudo-code.
-3. **Direct proofs**: Properties are stated about the same object, no translation.
-
-The trade-off is that cost annotations are **trusted** (not automatically derived
-from the code structure). This is the same trade-off as in `TimeM`. The user must
-ensure that `tick` calls faithfully represent the cost model.
-
-### Handling Non-Termination
-
-For potentially non-terminating algorithms (e.g., Las Vegas algorithms):
-- Use `partial` for executable versions.
-- For formal analysis, define the algorithm with a fuel parameter `n : ℕ` and
-  analyze the limit behavior.
-- The `PMF` type naturally handles sub-distributions (measures with total mass ≤ 1)
-  via `PMF.toOuterMeasure`, though `PMF` itself requires total mass = 1.
-
-### Mixing Continuous and Discrete Distributions
-
-The current `PMF`-based approach handles discrete distributions. For continuous
-distributions (e.g., exponential waiting times), future work could:
-1. Use `MeasureTheory.Measure` directly instead of `PMF`.
-2. Define `RndC α := MeasureTheory.Measure (α × ℝ≥0)` with normalization.
-3. Provide a coercion from `Rnd` (discrete) to `RndC` (continuous).
--/
-
-/-!
-## Preserved Comments from Original Phase 3
-
-The following are the original architectural comments from the thesis,
-preserved verbatim for reference.
--/
-
-/-
-One first goal would be to prove the most important properties of quicksort, such as:
-- Correctness: The probability that QuickSort_A on any list
-  returns the sorted list is 1 (100%).
-
-- Complexity: The expected running time of QuickSort_A on a list of n
-distinct elements is O(n log n).  mybe do running time isnide the funciton use time monad, import CS lib
-
-
-
-
-- Essentially, if we fix multiple random variables and an algorithm that uses them,
-we want to model the entire execution of the algorithm and at the end be able to
-prove bounds on the probability of certain events (e.g. "the algorithm returns the wrong answer")
-prove bounds on the expected running time of the algorithm (so a cost function)
-prove bounds on the probability of certain events happening within a certain time bound
-(e.g. "the algorithm returns the wrong answer within 100 steps"). Things like this.
-
-
-
-
-- A nice thing to have would be that we can specify a randomized algorithm in pseudo code
-and then analyze each of its branch very easily.
-
-
-
-
-Ideal goal:
-
-Would it have been possible to first define the quicksort algorithm without other quantity and
-then after putting a function like probability (quicksort pivot a ) ? Like is it possible to
-have a funciton f that is our algorithm (other representaation of algorithm could be
-a state machie, or a recurrence relation, or a pseudo code, or a flowchart, or a program in a programming language,
-or even a mathematical object like a function from lists to lists) and then somehow have a genrela function
-running time (f) that gives us the running time of f and a function probability (f) that gives us the
-probability distribution over outputs of f ? Maybe this is too ambitious but it would be interesting to
-see if we can have a general framework for writing such f sufficiently expressive to be able to represent
-a wide variety of algorithms, sufficently restraint for hoping a "simple" existence of general functions
-that allows us to take any such algorithm written in this framework and then automatically extract
-from it the probability distribution over outputs and the running time distribution.
-This would be a very powerful tool for analyzing randomized algorithms, as it would allow us
-to work with them in a more intuitive way (e.g. writing them in pseudo code) and then automatically get the
-formal properties we want to prove.
-
-So we want to build this framework, we need to look at general representations of algorithms and
-how to extract from them the probability distribution over outputs and the running time distribution.
-
-Algorithm decomposes into steps, in which we should be able at each step: the probability distribution
-over outputs of that step and the running time distribution of that step.
-
-
-Then we can compose these steps together to get the overall probability distribution over outputs and the overall running time distribution.
-We also need to look at how to represent the state of the algorithm and how to model the transitions between states. This is a very ambitious goal, but it would be a very powerful tool for analyzing randomized algorithms.
-
-
-
-
-
-We should also be able handle and distinguishe non-termination
-observation failures and error states.
-
-
-
-
-A nice thing would be to potentially mixing continuous and discrete dis-
-tributions.
-
-
-
-
-
-  NOTE ON RUNNING TIME:
-  The standard `PMF` monad tracks probability mass but not computational cost (running time).
-  In "Phase 2: Framework Construction", we will extend this to a custom `Rnd` monad
-  that pairs the probability space with a cost accumulator (WriterT Cost PMF), allowing
-  formal bounds on time complexity alongside probability.
-
-
-
-There are various approaches for reasoning about randomized algorithms in a
-formal way. Analogously to the non-randomized setting described in Sect. 2,
-there again exists an entire spectrum of diﬀerent approaches:
-– fully explicit/deeply-embedded approaches
-– "no embedding" approaches that model randomized algorithms directly in the
-logic as functions returning a probability distribution
-– shallow embeddings, e.g. with shallow deterministic operations but explicit
-random choice and explicit "while" loops. Examples are the approaches by
-Petcher and Morrisett [165] in Coq and by Hölzl [105].
-– combined approaches that start with a program in a deeply-embedded prob-
-abilistic programming language and then relate it to a distribution specified
-directly in the logic, cf. e.g. Tassarotti and Harper [188].
-
-The ideal would be no embedings.
-
-
-
-Directly in the Logic (No Embedding). As was mentioned before, many
-ITPs oﬀer functionality to define algorithms directly in the logic of the system
-– usually functionally. This approach is more flexible since algorithms can use
-the full expressiveness of the system's logic and not only some fixed restricted
-set of language constructs. One possible drawback of this approach is that it
-can be diﬃcult or even impossible to reason about notions such as running time
-explicitly. A possible workaround is to define an explicit cost function for the
-algorithm, but since there is no formal connection between that function and
-the algorithm, one must check by inspection that the cost function really does
-correspond to the incurred cost. Another disadvantage is that, as was said earlier,
-most logics do not have builtin support for imperative algorithms.
-
-
-
-Hybrids between these two approaches also exist (such as shallow embed-
-dings). And, of course, the diﬀerent approaches can be combined to reap the
-advantages of all of them; e.g. one can show a correspondence between the run-
-ning time of a deeply-embedded algorithm and a cost function specified as a
-recurrence directly in the logic, so that results obtained about the latter have a
-formal connection to the former.
-
-
-- Extend TimeM to any monad (like WriterT) in particular the extension to PMF shopuld look like Rnd
-- Have a framework where we can write algorithms abstractly and gets two version for free: the
-implemented version like with IO.rand and the analysis version with PMF (non computable).
-start with a simple typeclass toy example, toy algorithm. Like sample a random number.
-
-For example "toss a single coin" is abstraction, then it should output a algorithm that uses IO.rand
-and an analysis version that uses PMF. Then we can write more complex algorithms like quicksort and get the same thing: an implemented version and an analysis version. We can then prove properties about the analysis version and get them for free for the implemented version.
-
-I could write a statement about deterministic algorithm (i.e. the PMF is pure) and then have some lemmas to show
-and make the correctness analysis of certain algorithm simpler by using induction. Correctness of quicksort
+  Future directions for the framework.
+
+  The big picture is a three-layer pipeline:
+
+  1. Write the algorithm once, in pseudo-code style (do-notation), parameterized
+     by a typeclass (RandMonad) that abstracts over the source of randomness.
+     The same code then instantiates into different monads:
+     - IO    → executable version (run it, benchmark it, test it)
+     - PMF   → noncomputable probability distribution over outputs (analyze it)
+     - Rnd T → joint distribution over (output, cost) pairs (analyze cost too)
+     This is what the RandMonad typeclass does: write QuickSort_Gen once, get
+     QuickSort_IO, QuickSort_PMF, QuickSort_RndGen for free.
+
+  2. From the PMF or Rnd version, extract the quantities we care about:
+     - m.outputDist : PMF α   (what does the algorithm return?)
+     - m.costDist   : PMF T   (how much does it cost?)
+     These come for free from the definition of Rnd = PMF (α × T).
+
+  3. Prove properties about the extracted distributions:
+     - correctness:  m.outputDist = PMF.pure answer
+     - complexity:   E[m.costDist] ≤ bound
+     - tail bounds:  P(cost > k) ≤ ε
+
+  Layers 1 and 2 exist. Layer 3 is the actual future work.
+
+  The framework is not specialized to quicksort — quicksort is just a demo.
+  The goal is to handle different classes of randomized algorithms. Of course
+  no single framework can generalize everything, and we'll likely need
+  specialized modules for certain algorithm families (e.g. Las Vegas, Monte Carlo,
+  randomized data structures), but the typeclass + monad approach should give a
+  common backbone.
+
+  Open question on cost tracking:
+  Right now the RandMonad typeclass only abstracts randomness, not cost. So cost
+  annotations (tick calls) need to be written manually in the Rnd version, separately
+  from the generic version. Two possible directions:
+  - Extend the typeclass to include a tick primitive, so one generic algorithm has
+    both randomness and cost, and when instantiated in IO the ticks are no-ops
+    but in Rnd ℕ they accumulate.
+  - Keep cost as a separate concern layered on top (manual annotation).
+  Both have tradeoffs and the right design is not clear yet. The Rnd monad itself
+  is a rough first attempt and will likely be rebuilt — in particular, Rnd should
+  probably be generalized via WriterT so that TimeM (deterministic cost) and Rnd
+  (probabilistic cost) share the same infrastructure (see Rnd.lean comments).
+
+  Design notes:
+  - We represent Rnd T α as PMF (α × T) rather than α → T → ℝ≥0∞ because
+    PMF gives normalization, bind, and all Mathlib lemmas for free.
+  - We use shallow embedding (algorithms are Lean functions, not an embedded
+    language). The cost is that tick annotations are trusted — the user must
+    check they match the intended cost model. (see also ARA/notes/literature.txt)
+  - Non-termination is a real limitation: PMF requires total mass = 1, meaning
+    the algorithm must terminate with probability 1. For Las Vegas algorithms
+    (retry until success), we'd need either sub-probability distributions or a
+    fuel parameter with limit analysis. PMF.toOuterMeasure can handle mass ≤ 1
+    but PMF itself cannot, so this is a structural limitation of the current approach.
+  - Extending to continuous distributions (e.g. exponential waiting times) would
+    require replacing PMF with MeasureTheory.Measure. This is very far from where
+    we are right now — it means dealing with sigma-algebras and measurability proofs
+    everywhere, no more nice finite sums. Worth thinking about eventually.
+
+  What is already done:
+  - ✓ Correctness of quicksort (QuickSort.lean: always returns sorted permutation)
+  - ✓ Rnd monad with cost tracking (Rnd.lean) — rough first version
+  - ✓ RandMonad typeclass: one algorithm → IO + PMF + Rnd ℕ for free (below)
+  - ✓ Deterministic output = PMF is pure → correctness via induction (QuickSort.lean)
+
+  What remains:
+  - Complexity proof: E[comparisons for quicksort] = O(n log n)
+  - The ideal goal: a general framework where you write an algorithm f
+    and get running_time(f) and probability(f) extracted automatically.
+    An algorithm decomposes into steps; each step has its own cost/output distribution;
+    composing steps (via bind) gives the overall distributions. The Rnd monad is
+    a first step toward this but the extraction + proof automation (Layer 3) is
+    where most of the remaining work lies.
+  - Generalize TimeM to any monad via WriterT: TimeM T α = (α × T) is cost
+    tracking over the identity monad. Rnd T α = PMF (α × T) is cost tracking
+    over PMF. Both are WriterT T M for different M. The Rnd monad should probably
+    be rebuilt on top of this generalization, so that TimeM, Rnd, and potentially
+    a cost-tracking IO version all share the same infrastructure. Whether to use
+    Lean's WriterT directly or a custom structure is still open.
+  - Better induction infrastructure for correctness proofs
+    (the QuickSort proof was painful — can we make it more systematic?)
+  - Generalize beyond quicksort to other algorithm families
+
+  This file contains:
+  - QuickSort_Rnd: demo of Rnd with manual cost tracking (rough prototype)
+  - RandMonad typeclass + QuickSort_Gen: write once, instantiate in IO / PMF / Rnd ℕ
 -/
 
 namespace ARA
 
 open PMF ENNReal
 
-/-! ## Demonstration: QuickSort with Cost Tracking
+/-! ## Demo: QuickSort with Cost Tracking (Rnd monad)
 
-Below we show how the `Rnd` monad would be used to write QuickSort
-with integrated cost tracking, enabling formal analysis of both
-correctness and complexity.
+  This version has explicit tick calls for the partition cost, unlike
+  QuickSort_RndGen below which is derived from the generic RandMonad
+  version and has no cost annotations. So this is the one to use for
+  complexity analysis.
 -/
 
 /-- QuickSort in the `Rnd ℕ` monad: tracks both probability and comparison count.
-    Each comparison costs 1 unit. The pivot selection is uniform random. -/
+    The partition step charges |rest| comparisons. -/
 noncomputable def QuickSort_Rnd : List ℕ → Rnd ℕ (List ℕ) := fun
 | [] => pure []
 | L@(head::tail) => do
-  -- Uniform random pivot selection (zero cost — it's a random oracle call)
-  have : Nonempty (Fin L.length) := ⟨⟨0, by grind only [= List.length_cons]⟩⟩
+  have : Nonempty (Fin L.length) := ⟨⟨0, by grind⟩⟩
   let idx ← Rnd.uniformFintype (Fin L.length)
   let pivot := L[idx]
   let rest := L.eraseIdx idx
-  -- Partition: each element comparison costs 1 tick
-  -- (In a full implementation, we'd charge per-element; here we charge |rest| total)
+  -- charge |rest| comparisons for the partition step
   Rnd.tick rest.length
   let L1 := rest.filter (· < pivot)
   let L2 := rest.filter (· ≥ pivot)
-  -- Recursive calls
   let S1 ← QuickSort_Rnd L1
   let S2 ← QuickSort_Rnd L2
   pure (S1 ++ [pivot] ++ S2)
@@ -260,35 +129,90 @@ decreasing_by
     · apply List.length_filter_le
     · grind
 
-/-- Extract the output distribution: should equal `PMF.pure (mergeSort L)`. -/
 noncomputable def QuickSort_Rnd_outputDist (L : List ℕ) : PMF (List ℕ) :=
   (QuickSort_Rnd L).outputDist
 
-/-- Extract the cost distribution: gives the distribution of comparison counts. -/
 noncomputable def QuickSort_Rnd_costDist (L : List ℕ) : PMF ℕ :=
   (QuickSort_Rnd L).costDist
 
-/-! ## Framework for Expected Cost Analysis
+/-!
+## Expected Cost Analysis
 
-To prove expected running time bounds (e.g., E[comparisons] = O(n log n) for QuickSort),
-the general approach is:
+To prove E[comparisons] = O(n log n):
+1. Define expected cost: `expectedCost m = ∑' (a, c), m.run (a, c) * c`
+2. Express as a recurrence: `E[T(n)] = 1/n * ∑ᵢ (n-1 + E[T(i)] + E[T(n-1-i)])`
+3. Solve the recurrence in Lean (show it satisfies E[T(n)] ≤ 2n ln n)
 
-1. **Define expected cost**: `expectedCost m = ∑' (a, c), m.run (a, c) * c`
-   (weighted sum of costs over the joint distribution).
-
-2. **Set up a recurrence**: For recursive algorithms, express the expected cost
-   as a recurrence relation: `E[T(n)] = 1/n * ∑ᵢ (n-1 + E[T(i)] + E[T(n-1-i)])`
-
-3. **Solve the recurrence**: Use standard techniques (e.g., show it satisfies
-   `E[T(n)] ≤ 2n ln n`) and prove the bound in Lean.
-
-The `Rnd` monad makes step 1 automatic (via `costDist`), and the `pmf_simp`
-toolkit helps with step 2. Step 3 requires mathematical analysis.
+Step 1 is automatic via `costDist`. Step 2 needs some work. Step 3 is pure math.
 -/
 
-/-- Expected cost of a `Rnd ℕ α` computation, defined as the expected value
-    of the cost distribution. -/
+/-- Expected cost of a `Rnd ℕ α` computation. -/
 noncomputable def expectedCostNat {α : Type*} (m : Rnd ℕ α) : ℝ≥0∞ :=
   ∑' (p : α × ℕ), m.run p * p.2
+
+/-!
+## RandMonad typeclass: write once, instantiate in IO and PMF
+
+The idea: write one algorithm parameterized by a monad with a random index primitive,
+then get the IO version (executable) and the PMF version (for analysis) for free by
+instantiation. No code duplication.
+
+This is orthogonal to the Rnd monad above:
+- Rnd tracks cost + probability in one object
+- RandMonad abstracts over IO vs PMF (or Rnd ℕ too — see below)
+
+You can combine both: a `RandMonad (Rnd ℕ)` instance gives you a generic algorithm
+that is simultaneously executable (via IO), analyzable (via PMF), and cost-tracking (via Rnd ℕ).
+Note: the Rnd ℕ instantiation via RandMonad does NOT charge any cost for pivot selection
+(unlike QuickSort_Rnd above which has explicit tick calls). To get cost tracking you still
+need to write the algorithm with tick annotations.
+-/
+
+class RandMonad (M : Type → Type) [Monad M] where
+  randIdx {α} : (L : List α) → 0 < L.length → M (Fin L.length)
+
+-- one algorithm, works in any monad with RandMonad
+def QuickSort_Gen [Monad M] [RandMonad M] : List ℕ → M (List ℕ)
+  | [] => return []
+  | L@(_::_) => do
+      let idx ← RandMonad.randIdx L (by grind)
+      let pivot := L[idx]
+      let rest := L.eraseIdx idx
+      let L1 := rest.filter (· < pivot)
+      let L2 := rest.filter (· ≥ pivot)
+      let S1 ← QuickSort_Gen L1
+      let S2 ← QuickSort_Gen L2
+      return (S1 ++ [pivot] ++ S2)
+  termination_by L => L.length
+  decreasing_by all_goals grind
+
+-- IO instance: uses the system RNG
+instance : RandMonad IO where
+  randIdx L hne := do
+    let i ← IO.rand 0 (L.length - 1)
+    return ⟨i % L.length, Nat.mod_lt i hne⟩
+
+-- PMF instance: uniform distribution over indices
+noncomputable instance : RandMonad PMF where
+  randIdx L hne :=
+    have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
+    PMF.uniformOfFintype (Fin L.length)
+
+-- Rnd ℕ instance: uniform distribution, zero cost for pivot selection
+-- (cost charged separately via tick if needed)
+noncomputable instance : RandMonad (Rnd ℕ) where
+  randIdx L hne :=
+    have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
+    Rnd.uniformFintype (Fin L.length)
+
+-- executable version
+def QuickSort_IO : List ℕ → IO (List ℕ) := QuickSort_Gen
+
+-- PMF analysis version (same code as QuickSort_A in Phase2 but derived here for free)
+noncomputable def QuickSort_PMF : List ℕ → PMF (List ℕ) := QuickSort_Gen
+
+-- Rnd ℕ version: both probability and cost accessible (but no tick calls,
+-- so cost is always 0 — use QuickSort_Rnd for actual cost analysis)
+noncomputable def QuickSort_RndGen : List ℕ → Rnd ℕ (List ℕ) := QuickSort_Gen
 
 end ARA
