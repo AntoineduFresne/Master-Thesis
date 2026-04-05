@@ -4,8 +4,8 @@ import ARA.Basic
   Tactic infrastructure for PMF proofs.
 
   Organized in layers:
-  - A: grind/simp tags to bridge PMF into concrete arithmetic
-  - B: pmf_simp macro and pmf_norm for computing concrete probabilities
+  - A: grind/simp tags to bridge PMF into arithmetic
+  - B: pmf_simp macro and pmf_norm for computing probabilities
   - C: reusable derived lemmas
 -/
 
@@ -85,6 +85,7 @@ attribute [grind =] PMF.bernoulli_apply
 attribute [grind =] Fintype.card_fin
 attribute [grind =] Fintype.card_bool
 
+-- also register for grind
 attribute [grind =] PMF.map_comp
 attribute [grind =] PMF.bind_map
 attribute [grind =] PMF.map_bind
