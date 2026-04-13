@@ -10,6 +10,7 @@ require mathlib from git
 lean_lib «ARA» where
   roots := #[`ARA.Basic, `ARA.Phase1, `ARA.Phase2, `ARA.Tactics,
              `ARA.Demos, `ARA.QuickSort, `ARA.Rnd, `ARA.FutureWork]
+  leanLibDeps := #[«TimeM»]
 
 lean_lib «MasterThesis» where
 

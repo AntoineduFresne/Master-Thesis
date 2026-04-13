@@ -4,28 +4,48 @@ import ARA.Tactics
 /-!
   Future directions for the framework.
 
-  The big picture is a three-layer pipeline:
+  The big picture is a two-layer pipeline:
 
   1. Write the algorithm once, in pseudo-code style (do-notation), parameterized
      by a typeclass (RandMonad) that abstracts over the source of randomness.
      The same code then instantiates into different monads:
      - IO    → executable version (run it, benchmark it, test it)
      - PMF   → noncomputable probability distribution over outputs (analyze it)
+     - TimeM  → deterministic cost tracking (analyze it)
      - Rnd T → joint distribution over (output, cost) pairs (analyze cost too)
      This is what the RandMonad typeclass does: write QuickSort_Gen once, get
      QuickSort_IO, QuickSort_PMF, QuickSort_RndGen for free.
 
-  2. From the PMF or Rnd version, extract the quantities we care about:
-     - m.outputDist : PMF α   (what does the algorithm return?)
-     - m.costDist   : PMF T   (how much does it cost?)
-     These come for free from the definition of Rnd = PMF (α × T).
+     Note: For now, a joint distribution is too strong (indeed, to get the
+     PMF distribution from it we would need to project onto the first
+     component and to get the cost distribution we would need to project
+     onto the second component) and too hard to work with so we do not
+     look at it now.
 
-  3. Prove properties about the extracted distributions:
-     - correctness:  m.outputDist = PMF.pure answer
-     - complexity:   E[m.costDist] ≤ bound
+  2. Prove properties about the extracted distributions:
+     - correctness, but what kind of correctness ?
+     sometimes we want exact distributions (e.g.
+     quicksort output is exactly pure), sometimes we
+     want bounds (e.g. tail bounds on cost distribution)
+     sometimes the algorithm gives multiple answer
+     but they are related to the fact that they are
+     not too far from the optimum (e.g. approximation
+     algorithms that can be randomized e.g. Karger’s
+     algorithm for max cut). What other type of
+     correctness could fit as not a pure distribution ?
+     How to handle the fact that the output distribution
+     is not exactly what we want but close enough for our
+     purposes ? How to specify such correctness in lean ?
+     Is there a nice classification of such different correctness
+     properties ?
+     - complexity: E[cost] ≤ f(n) for some function f, but also
+      maybe we want an amortized complexity bound,
+      or a high-probability bound, or the exact distribution of the cost.
      - tail bounds:  P(cost > k) ≤ ε
 
-  Layers 1 and 2 exist. Layer 3 is the actual future work.
+  The current progress in layers 1 is:
+
+  The current progress in layer 2 is:
 
   The framework is not specialized to quicksort — quicksort is just a demo.
   The goal is to handle different classes of randomized algorithms. Of course
@@ -63,13 +83,7 @@ import ARA.Tactics
     we are right now — it means dealing with sigma-algebras and measurability proofs
     everywhere, no more nice finite sums. Worth thinking about eventually.
 
-  What is already done:
-  - ✓ Correctness of quicksort (QuickSort.lean: always returns sorted permutation)
-  - ✓ Rnd monad with cost tracking (Rnd.lean) — rough first version
-  - ✓ RandMonad typeclass: one algorithm → IO + PMF + Rnd ℕ for free (below)
-  - ✓ Deterministic output = PMF is pure → correctness via induction (QuickSort.lean)
-
-  What remains:
+  Future work:
   - Complexity proof: E[comparisons for quicksort] = O(n log n)
   - The ideal goal: a general framework where you write an algorithm f
     and get running_time(f) and probability(f) extracted automatically.
@@ -82,7 +96,7 @@ import ARA.Tactics
     over PMF. Both are WriterT T M for different M. The Rnd monad should probably
     be rebuilt on top of this generalization, so that TimeM, Rnd, and potentially
     a cost-tracking IO version all share the same infrastructure. Whether to use
-    Lean's WriterT directly or a custom structure is still open.
+    Lean's WriterT directly or a custom structure is still open. Rnd monad
   - Better induction infrastructure for correctness proofs
     (the QuickSort proof was painful — can we make it more systematic?)
   - Generalize beyond quicksort to other algorithm families
@@ -107,8 +121,8 @@ open PMF ENNReal
 /-- QuickSort in the `Rnd ℕ` monad: tracks both probability and comparison count.
     The partition step charges |rest| comparisons. -/
 noncomputable def QuickSort_Rnd : List ℕ → Rnd ℕ (List ℕ) := fun
-| [] => pure []
-| L@(head::tail) => do
+| [] => return []
+| L@(_::_) => do
   have : Nonempty (Fin L.length) := ⟨⟨0, by grind⟩⟩
   let idx ← Rnd.uniformFintype (Fin L.length)
   let pivot := L[idx]

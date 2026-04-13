@@ -92,7 +92,21 @@ attribute [grind =] PMF.map_bind
 attribute [grind =] PMF.bind_pure_comp
 
 
-/-! ##### A.4  Support & bindOnSupport -/
+/-! ##### A.4  Do-notation Desugaring
+
+  do-notation desugars `←` to `Bind.bind`, `return` to `Pure.pure`, and
+  sometimes `←` to `Functor.map`.  These typeclass methods are
+  definitionally equal to their concrete counterparts (e.g. `PMF.bind`),
+  but `grind`/`simp` pattern-match syntactically and won't see through
+  the typeclass layer.
+
+  `unfold_do` resolves them via `dsimp` (definitional unfolding).
+  Globally tagging them at `@[simp]` would be too aggressive.
+-/
+macro "unfold_do" : tactic => `(tactic| dsimp only [Bind.bind, Pure.pure, Functor.map])
+
+
+/-! ##### A.5  Support & bindOnSupport -/
 
 attribute [grind =] PMF.support_uniformOfFintype
 attribute [grind =] PMF.support_uniformOfFinset

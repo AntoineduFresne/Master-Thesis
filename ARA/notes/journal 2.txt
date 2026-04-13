@@ -1,0 +1,41 @@
+Journal
+
+6 march:
+
+- Made the overleaf start of the master thesis and this journal
+- started to read the suggested document from Sorrachai
+- Started to try to implement the algorithm and their analysis
+
+7 march: 
+
+- Learned the Giry Monad
+- Impementation of PMF and the Giry MOnad
+- Did the coin flip and some other
+
+9 march:
+
+- Phase 1 started
+
+11 march:
+
+- phase 1 finished
+
+13 march:
+
+- Phase 2 started
+
+14 to 27 march:
+
+- During this time finished phase 2, implemented quicksort with PMF, proved some properties of the algorithm (correctness). Proof were annoying so tried to make them better by building macros, puting grind local lemma.
+
+29 march:
+
+- Nice discussion with Gemini Pro, do a pmf version over the real not ENNReal.
+
+4-5 april:
+
+- Finished the correctness proof of QuickSort_A in a clean way (QuickSort.lean), using QuickSort_A.induct and helper lemmas for sorted permutation uniqueness, sorted concat around pivot, eraseIdx permutation, filter-partition permutation
+- Cleaned up comments across all files, fixed outdated stuff (e.g. Phase2 comment said bindOnSupport but code uses Fin so plain bind works)
+- Removed dead code in Tactics.lean and unused QuickSort_A_cons_bind lemma
+- Rewrote FutureWork.lean with the three-layer pipeline idea, added the RandMonad typeclass (write once → IO + PMF + Rnd ℕ), documented open questions
+- Moved literature survey to ARA/notes/literature.txt
