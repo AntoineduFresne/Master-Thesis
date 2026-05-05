@@ -72,7 +72,6 @@ attribute [grind =] PMF.pure_bind
 attribute [grind =] PMF.bind_pure
 attribute [grind =] PMF.bind_bind
 
-
 /-! ##### A.3  PMF Pointwise Application & Distribution Weights (@[grind =]) -/
 
 -- not safe as @[simp] (introducing tsum/ite can blow up), but fine for grind's e-matching

@@ -100,7 +100,75 @@ lemma Correctness_Quicksort_A : ∀ L : List ℕ, ∃ Output : List ℕ,
           rwa [eq_of_sortedLE_perm si hS (pi.trans hP.symm)] at hi
       _ = PMF.pure Output := PMF.bind_const _ _
 
-open Cslib.Algorithms.Lean in
+class RandMonad (M : Type → Type) [Monad M] where
+  -- Given a nonempty list, pick a random valid index
+  randIdx {α} : (L : List α) → 0 < L.length → M (Fin L.length)
+
+def QuickSort {M : Type → Type} [Monad M] [RandMonad M] : List ℕ → M (List ℕ)
+  | [] => return []
+  | L@(_::_) => do
+      let idx ← RandMonad.randIdx L (by grind)
+      let pivot := L[idx]
+      let rest := L.eraseIdx idx
+      let L1 := rest.filter (· < pivot)
+      let L2 := rest.filter (· ≥ pivot)
+      let S1 ← QuickSort L1
+      let S2 ← QuickSort L2
+      return (S1 ++ [pivot] ++ S2)
+  termination_by L => L.length
+decreasing_by all_goals grind
+
+instance : RandMonad IO where
+  randIdx L hne := do
+    let i ← IO.rand 0 (L.length - 1)
+    return ⟨i % L.length, Nat.mod_lt i hne⟩
+
+noncomputable instance : RandMonad PMF where
+  randIdx L hne :=
+    have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
+    PMF.uniformOfFintype (Fin L.length)
+
+-- IO version (executable)
+def QuickSort_Rand_ : List ℕ → IO (List ℕ) := QuickSort
+
+#eval QuickSort_Rand [5,2,4,1]
+
+noncomputable def QuickSort_PMF : List ℕ → PMF (List ℕ) := QuickSort
+
+lemma Correctness_Quicksort_PMF : ∀ L : List ℕ, ∃ Output : List ℕ,
+    QuickSort_PMF L = PMF.pure Output ∧ Output.SortedLE ∧ Output.Perm L := by
+  apply QuickSort.induct
+  -- Base case
+  · exact ⟨[], by {simp [QuickSort_PMF.eq_1, QuickSort] ; rfl}, by simp [sortedLE_iff_pairwise], by simp⟩
+  -- Inductive case
+  · intro head tail ihL1 ihL2
+    let L := head :: tail
+    -- For each pivot, build a correct output from the IH
+    have h_step : ∀ i : Fin L.length, ∃ Out,
+        qs_branch L i = PMF.pure Out ∧ Out.SortedLE ∧ Out.Perm L := by
+      intro i
+      obtain ⟨O1, h1, s1, p1⟩ := ihL1 i
+      obtain ⟨O2, h2, s2, p2⟩ := ihL2 i
+      use O1 ++ [L[i]] ++ O2
+      split_ands
+      · unfold qs_branch; unfold_do; sorry
+      · apply sorted_concat_pivot s1 s2 <;> grind
+      · exact (Perm.append (Perm.append p1 (.refl _)) p2).trans (perm_filter_partition L i)
+    -- All pivots yield the same output (uniqueness of sorted permutation)
+    obtain ⟨Output, h0, hS, hP⟩ := h_step ⟨0, by grind⟩
+    refine ⟨Output, ?_, hS, hP⟩
+    calc QuickSort L
+        = (PMF.uniformOfFintype (Fin L.length)).bind (qs_branch L) := by
+          unfold qs_branch; simpa [L, ← PMF.bind_pure_comp] using QuickSort_A.eq_2 head tail
+      _ = (PMF.uniformOfFintype (Fin L.length)).bind fun _ => PMF.pure Output := by
+          congr 1; funext i
+          obtain ⟨Oi, hi, si, pi⟩ := h_step i
+          rwa [eq_of_sortedLE_perm si hS (pi.trans hP.symm)] at hi
+      _ = PMF.pure Output := PMF.bind_const _ _
+
+end ARA
+/--/
+--open Cslib.Algorithms.Lean in
 /-! ================================================================
     ## Modular Typeclasses: MonadRand + MonadCost
     ================================================================
@@ -115,7 +183,7 @@ open Cslib.Algorithms.Lean in
   - QuickSort needs both: `[MonadRand M] [MonadCost M]`
 
 
-  This is the "write once, analyze many ways" pipeline:
+  This is the pipeline:
   1. Write `QuickSort_Gen` once with `[MonadRand M] [MonadCost M]`
   2. Instantiate as `QuickSort_Gen (M := IO)` → run it
   3. Instantiate as `QuickSort_Gen (M := PMF)` → analyze output distribution
@@ -128,53 +196,141 @@ open Cslib.Algorithms.Lean in
   Each is independent; algorithms opt in to exactly what they need.
 -/
 
-/-- A monad that can sample a random index from a nonempty list. -/
-class MonadRand (M : Type → Type) [Monad M] where
-  randIdx : {α : Type} → (L : List α) → 0 < L.length → M (Fin L.length)
+class RandMonad (M : Type → Type) [Monad M] where
+  -- Given a nonempty list, pick a random valid index
+  randIdx {α} : (L : List α) → 0 < L.length → M (Fin L.length)
 
-/-- A monad that can track cost. -/
-class MonadCost (M : Type → Type) [Monad M] where
-  tick : ℕ → M PUnit
-
-/-! ### Generic QuickSort
-
-  Needs both randomness (pivot selection) and cost (partition charging).
-  Any monad with both capabilities can run it.
--/
-
-/-- Generic QuickSort parameterized by monad capabilities.
-    One definition → IO, PMF, TimeM versions for free. -/
-def QuickSort_Gen [Monad M] [MonadRand M] [MonadCost M] : List ℕ → M (List ℕ)
+def QuickSort [Monad M] [RandMonad M] : List ℕ → M (List ℕ)
   | [] => return []
   | L@(_::_) => do
-      let idx ← MonadRand.randIdx L (by grind)
+      let idx ← RandMonad.randIdx L (by grind)
       let pivot := L[idx]
       let rest := L.eraseIdx idx
-      let _ ← MonadCost.tick rest.length  -- charge |rest| comparisons
       let L1 := rest.filter (· < pivot)
       let L2 := rest.filter (· ≥ pivot)
-      let S1 ← QuickSort_Gen L1
-      let S2 ← QuickSort_Gen L2
+      let S1 ← QuickSort L1
+      let S2 ← QuickSort L2
       return (S1 ++ [pivot] ++ S2)
   termination_by L => L.length
-  decreasing_by all_goals grind
+decreasing_by all_goals grind
 
-/-! ### Instances -/
-
--- IO: real randomness, cost is silent
-instance : MonadRand IO where
+instance : RandMonad IO where
   randIdx L hne := do
     let i ← IO.rand 0 (L.length - 1)
     return ⟨i % L.length, Nat.mod_lt i hne⟩
 
-instance : MonadCost IO where
-  tick _ := pure ()
-
--- PMF: uniform pivot distribution, cost is silent
-noncomputable instance : MonadRand PMF where
+noncomputable instance : RandMonad PMF where
   randIdx L hne :=
     have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
     PMF.uniformOfFintype (Fin L.length)
+
+-- IO version (executable)
+def QuickSort_Rand_ : List ℕ → IO (List ℕ) := QuickSort
+
+#eval QuickSort_Rand [5,4,2,1]
+
+noncomputable def QuickSort_PMF : List ℕ → PMF (List ℕ) := QuickSort
+
+-- quick select
+-- hash table theorem
+-- random graph
+-- random contraction
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/-! ### Instances -/
+
+-- IO: real randomness, cost is silent
+instance : MonadRand_Cost IO where
+  randIdx L hne := do
+    let i ← IO.rand 0 (L.length - 1)
+    return ⟨i % L.length, Nat.mod_lt i hne⟩
+  tick _ := pure ()
+
+def QuickSort_IO : List ℕ → IO (List ℕ) := QuickSort_Gen
+
+#eval QuickSort_IO [3, 1, 4, 1, 5, 9, 2, 6]
+
+
+def QuickSort [Monad M] [RandMonad M] : List ℕ → M (List ℕ)
+  | [] => return []
+  | L@(_::_) => do
+      let idx ← RandMonad.randIdx L (by grind)
+      let pivot := L[idx]
+      let rest := L.eraseIdx idx
+      let L1 := rest.filter (· < pivot)
+      let L2 := rest.filter (· ≥ pivot)
+      let S1 ← QuickSort L1
+      let S2 ← QuickSort L2
+      return (S1 ++ [pivot] ++ S2)
+  termination_by L => L.length
+decreasing_by all_goals grind
+
+instance : RandMonad IO where
+  randIdx L hne := do
+    let i ← IO.rand 0 (L.length - 1)
+    return ⟨i % L.length, Nat.mod_lt i hne⟩
+
+noncomputable instance : RandMonad PMF where
+  randIdx L hne :=
+    have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
+    PMF.uniformOfFintype (Fin L.length)
+
+-- IO version (executable)
+def QuickSort_Rand : List ℕ → IO (List ℕ) := QuickSort
+
+#eval QuickSort_Rand [5,4,2,1]
+
+-- PMF version (noncomputable specification)
+noncomputable def QuickSort_A : List ℕ → PMF (List ℕ) := QuickSort
+
+
+
+
+
+
+
+
+
+
+
+
+
+noncomputable def QuickSort_PMF : List ℕ → PMF (List ℕ) := QuickSort_Gen
+
+-- PMF: uniform pivot distribution, cost is silent
+noncomputable instance : MonadRand_Cost PMF where
+  randIdx L hne :=
+    have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
+    PMF.uniformOfFintype (Fin L.length)
+  tick _ := PMF.pure ()
 
 noncomputable instance : MonadCost PMF where
   tick _ := PMF.pure ()
@@ -190,51 +346,17 @@ instance : MonadCost (TimeM ℕ) where
 
 /-! ### Derived Versions (no code duplication) -/
 
-def QuickSort_IO' : List ℕ → IO (List ℕ) := QuickSort_Gen
-noncomputable def QuickSort_PMF' : List ℕ → PMF (List ℕ) := QuickSort_Gen
+def QuickSort_IO : List ℕ → IO (List ℕ) := QuickSort_Gen
+noncomputable def QuickSort_PMF : List ℕ → PMF (List ℕ) := QuickSort_Gen
 open Cslib.Algorithms.Lean in
 def QuickSort_TimeM : List ℕ → TimeM ℕ (List ℕ) := QuickSort_Gen
 
-#eval do
-  let sorted ← QuickSort_IO' [3, 1, 4, 1, 5, 9, 2, 6]
-  IO.println s!"IO sorted: {sorted}"
+#eval QuickSort_IO [3, 1, 4, 1, 5, 9, 2, 6]
 
 open Cslib.Algorithms.Lean in
 #eval do
   let result := QuickSort_TimeM [3, 1, 4, 1, 5, 9, 2, 6]
-  IO.println s!"TimeM sorted: {result.ret}, comparisons: {result.time}"
+  return s!"sorted: {result.ret}, comparisons: {result.time}"
 
-/-! ================================================================
-    ## Expected Running Time: O(n log n) (sorry proof)
-    ================================================================
-
-  The expected number of comparisons of randomized quicksort on n elements
-  satisfies the recurrence:
-
-      T(0)   = 0
-      T(n+1) = n + (2/(n+1)) · Σᵢ₌₀ⁿ T(i)
-
-  which gives T(n) ≤ 2n ln n ∈ O(n log n).
-
-  We define the recurrence as a pair `(T(n), Σᵢ₌₀ⁿ T(i))` for clean
-  well-founded recursion, then state the O(n log n) bound with sorry.
--/
-
-/-- Helper: computes `(T(n), Σᵢ₌₀ⁿ T(i))` where T is the expected comparison count. -/
-noncomputable def qs_ec : ℕ → ℝ × ℝ
-  | 0 => (0, 0)
-  | (n + 1) =>
-    let (_, sum_prev) := qs_ec n
-    let tn := ↑n + (2 / (↑n + 1)) * sum_prev
-    (tn, sum_prev + tn)
-
-/-- Expected number of comparisons for randomized quicksort on n elements. -/
-noncomputable def qs_expected_comparisons (n : ℕ) : ℝ := (qs_ec n).1
-
-/-- Randomized quicksort performs O(n log n) expected comparisons.
-    More precisely: T(n) ≤ 2 · n · (⌊log₂ n⌋ + 1). -/
-theorem qs_expected_comparisons_le (n : ℕ) :
-    qs_expected_comparisons n ≤ 2 * (↑n : ℝ) * (↑(Nat.log 2 n) + 1) := by
-  sorry
 
 end ARA

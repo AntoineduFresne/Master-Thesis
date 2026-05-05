@@ -1,5 +1,5 @@
-import ARA.Phase1
-import ARA.Phase2
+import ARA.Tests_&_Familiarisation.Phase1
+import ARA.Tests_&_Familiarisation.Phase2
 import ARA.Tactics
 
 /-!

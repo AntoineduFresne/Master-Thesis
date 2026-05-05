@@ -1,59 +1,78 @@
 import ARA.Rnd
 import ARA.Tactics
+import ARA.Basic
 
 /-!
   Future directions for the framework.
 
   The big picture is a two-layer pipeline:
 
-  1. Write the algorithm once, in pseudo-code style (do-notation), parameterized
-     by a typeclass (RandMonad) that abstracts over the source of randomness.
-     The same code then instantiates into different monads:
-     - IO    → executable version (run it, benchmark it, test it)
-     - PMF   → noncomputable probability distribution over outputs (analyze it)
-     - TimeM  → deterministic cost tracking (analyze it)
-     - Rnd T → joint distribution over (output, cost) pairs (analyze cost too)
-     This is what the RandMonad typeclass does: write QuickSort_Gen once, get
-     QuickSort_IO, QuickSort_PMF, QuickSort_RndGen for free.
+1. Write the algorithm once, in pseudo-code style (do-notation), parameterized
+  by a typeclass (RandMonad) that abstracts over the source of randomness.
+  The same code then instantiates into different monads:
+  - IO    → executable version (run it, benchmark it, test it)
+  - PMF   → noncomputable probability distribution over outputs (analyze it)
+  - TimeM  → deterministic cost tracking (analyze it)
+  - Rnd T α → joint distribution over (output, cost) pairs (analyze cost too)
+  This is what the RandMonad typeclass does: write QuickSort_Gen once, get
+  QuickSort_IO, QuickSort_PMF, QuickSort_RndGen for free.
 
-     Note: For now, a joint distribution is too strong (indeed, to get the
-     PMF distribution from it we would need to project onto the first
-     component and to get the cost distribution we would need to project
-     onto the second component) and too hard to work with so we do not
-     look at it now.
+  Note: For now, a joint distribution (Rnd) is too strong (indeed, to get the
+  PMF distribution from it we would need to project onto the first
+  component and to get the cost distribution we would need to project
+  onto the second component) and too hard to work with so we do not
+  look at it now.
 
-  2. Prove properties about the extracted distributions:
-     - correctness, but what kind of correctness ?
-     sometimes we want exact distributions (e.g.
-     quicksort output is exactly pure), sometimes we
-     want bounds (e.g. tail bounds on cost distribution)
-     sometimes the algorithm gives multiple answer
-     but they are related to the fact that they are
-     not too far from the optimum (e.g. approximation
-     algorithms that can be randomized e.g. Karger’s
-     algorithm for max cut). What other type of
-     correctness could fit as not a pure distribution ?
-     How to handle the fact that the output distribution
-     is not exactly what we want but close enough for our
-     purposes ? How to specify such correctness in lean ?
-     Is there a nice classification of such different correctness
-     properties ?
-     - complexity: E[cost] ≤ f(n) for some function f, but also
-      maybe we want an amortized complexity bound,
-      or a high-probability bound, or the exact distribution of the cost.
-     - tail bounds:  P(cost > k) ≤ ε
+2. Prove properties about the extracted distributions:
+  - correctness, but what kind of correctness ?
+    sometimes we want exact distributions (e.g.
+    quicksort output is exactly pure), sometimes we
+    want bounds (e.g. tail bounds on cost distribution)
+    sometimes the algorithm gives multiple answer
+    but they are related to the fact that they are
+    not too far from the optimum (e.g. approximation
+    algorithms that can be randomized e.g. Karger’s
+    algorithm for max cut). What other type of
+    correctness could fit as not a pure distribution ?
+    How to handle the fact that the output distribution
+    is not exactly what we want but close enough for our
+    purposes ? How to specify such correctness in lean ?
+    Is there a nice classification of such different correctness
+    properties ?
+  - complexity: E[cost] ≤ f(n) for some function f, but also
+    maybe we want an amortized complexity bound,
+    or a high-probability bound, or the exact distribution of the cost.
+  - tail bounds:  P(cost > k) ≤ ε
 
-  The current progress in layers 1 is:
 
-  The current progress in layer 2 is:
-
-  The framework is not specialized to quicksort — quicksort is just a demo.
+- The framework is not specialized to quicksort — quicksort is just a demo.
   The goal is to handle different classes of randomized algorithms. Of course
   no single framework can generalize everything, and we'll likely need
   specialized modules for certain algorithm families (e.g. Las Vegas, Monte Carlo,
   randomized data structures), but the typeclass + monad approach should give a
   common backbone.
 
+
+For now:
+
+  Goal: The goal after this understanding is to be able to make TimeM manipualte PMF.
+        Indeed Rnd monad is too complicate: we would like instead to stack to monad
+        and make them work idependantly. We dont want to say what is happening each
+        time to the pair (cost, time) this is too complicate and convoluted.
+
+  In order to achieve this:
+    - Understand how Monad Transformer work:
+      - Try to make sense what is a transformer:
+
+      - Understand the file WriterT.lean in mathlib.
+    - Understand how TimeM works in CSLib
+    - Try to design a TimeMT (by generalizing TimeM to manipulate a monad)
+
+-/
+
+
+/-
+Draft of future work: maybe bullshit, AI slop, needs to be refined/cancelled and structured.
   Open question on cost tracking:
   Right now the RandMonad typeclass only abstracts randomness, not cost. So cost
   annotations (tick calls) need to be written manually in the Rnd version, separately
@@ -101,132 +120,6 @@ import ARA.Tactics
     (the QuickSort proof was painful — can we make it more systematic?)
   - Generalize beyond quicksort to other algorithm families
 
-  This file contains:
-  - QuickSort_Rnd: demo of Rnd with manual cost tracking (rough prototype)
-  - RandMonad typeclass + QuickSort_Gen: write once, instantiate in IO / PMF / Rnd ℕ
+
+  Cool Idea: print the algorithm running wiht the time on the side and the different brnches it takes ?
 -/
-
-namespace ARA
-
-open PMF ENNReal
-
-/-! ## Demo: QuickSort with Cost Tracking (Rnd monad)
-
-  This version has explicit tick calls for the partition cost, unlike
-  QuickSort_RndGen below which is derived from the generic RandMonad
-  version and has no cost annotations. So this is the one to use for
-  complexity analysis.
--/
-
-/-- QuickSort in the `Rnd ℕ` monad: tracks both probability and comparison count.
-    The partition step charges |rest| comparisons. -/
-noncomputable def QuickSort_Rnd : List ℕ → Rnd ℕ (List ℕ) := fun
-| [] => return []
-| L@(_::_) => do
-  have : Nonempty (Fin L.length) := ⟨⟨0, by grind⟩⟩
-  let idx ← Rnd.uniformFintype (Fin L.length)
-  let pivot := L[idx]
-  let rest := L.eraseIdx idx
-  -- charge |rest| comparisons for the partition step
-  Rnd.tick rest.length
-  let L1 := rest.filter (· < pivot)
-  let L2 := rest.filter (· ≥ pivot)
-  let S1 ← QuickSort_Rnd L1
-  let S2 ← QuickSort_Rnd L2
-  pure (S1 ++ [pivot] ++ S2)
-termination_by L => L.length
-decreasing_by
-  all_goals
-    have h_rest : (L.eraseIdx idx).length < L.length := by
-      rw [List.length_eraseIdx]; grind
-    apply Nat.lt_of_le_of_lt
-    · apply List.length_filter_le
-    · grind
-
-noncomputable def QuickSort_Rnd_outputDist (L : List ℕ) : PMF (List ℕ) :=
-  (QuickSort_Rnd L).outputDist
-
-noncomputable def QuickSort_Rnd_costDist (L : List ℕ) : PMF ℕ :=
-  (QuickSort_Rnd L).costDist
-
-/-!
-## Expected Cost Analysis
-
-To prove E[comparisons] = O(n log n):
-1. Define expected cost: `expectedCost m = ∑' (a, c), m.run (a, c) * c`
-2. Express as a recurrence: `E[T(n)] = 1/n * ∑ᵢ (n-1 + E[T(i)] + E[T(n-1-i)])`
-3. Solve the recurrence in Lean (show it satisfies E[T(n)] ≤ 2n ln n)
-
-Step 1 is automatic via `costDist`. Step 2 needs some work. Step 3 is pure math.
--/
-
-/-- Expected cost of a `Rnd ℕ α` computation. -/
-noncomputable def expectedCostNat {α : Type*} (m : Rnd ℕ α) : ℝ≥0∞ :=
-  ∑' (p : α × ℕ), m.run p * p.2
-
-/-!
-## RandMonad typeclass: write once, instantiate in IO and PMF
-
-The idea: write one algorithm parameterized by a monad with a random index primitive,
-then get the IO version (executable) and the PMF version (for analysis) for free by
-instantiation. No code duplication.
-
-This is orthogonal to the Rnd monad above:
-- Rnd tracks cost + probability in one object
-- RandMonad abstracts over IO vs PMF (or Rnd ℕ too — see below)
-
-You can combine both: a `RandMonad (Rnd ℕ)` instance gives you a generic algorithm
-that is simultaneously executable (via IO), analyzable (via PMF), and cost-tracking (via Rnd ℕ).
-Note: the Rnd ℕ instantiation via RandMonad does NOT charge any cost for pivot selection
-(unlike QuickSort_Rnd above which has explicit tick calls). To get cost tracking you still
-need to write the algorithm with tick annotations.
--/
-
-class RandMonad (M : Type → Type) [Monad M] where
-  randIdx {α} : (L : List α) → 0 < L.length → M (Fin L.length)
-
--- one algorithm, works in any monad with RandMonad
-def QuickSort_Gen [Monad M] [RandMonad M] : List ℕ → M (List ℕ)
-  | [] => return []
-  | L@(_::_) => do
-      let idx ← RandMonad.randIdx L (by grind)
-      let pivot := L[idx]
-      let rest := L.eraseIdx idx
-      let L1 := rest.filter (· < pivot)
-      let L2 := rest.filter (· ≥ pivot)
-      let S1 ← QuickSort_Gen L1
-      let S2 ← QuickSort_Gen L2
-      return (S1 ++ [pivot] ++ S2)
-  termination_by L => L.length
-  decreasing_by all_goals grind
-
--- IO instance: uses the system RNG
-instance : RandMonad IO where
-  randIdx L hne := do
-    let i ← IO.rand 0 (L.length - 1)
-    return ⟨i % L.length, Nat.mod_lt i hne⟩
-
--- PMF instance: uniform distribution over indices
-noncomputable instance : RandMonad PMF where
-  randIdx L hne :=
-    have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
-    PMF.uniformOfFintype (Fin L.length)
-
--- Rnd ℕ instance: uniform distribution, zero cost for pivot selection
--- (cost charged separately via tick if needed)
-noncomputable instance : RandMonad (Rnd ℕ) where
-  randIdx L hne :=
-    have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
-    Rnd.uniformFintype (Fin L.length)
-
--- executable version
-def QuickSort_IO : List ℕ → IO (List ℕ) := QuickSort_Gen
-
--- PMF analysis version (same code as QuickSort_A in Phase2 but derived here for free)
-noncomputable def QuickSort_PMF : List ℕ → PMF (List ℕ) := QuickSort_Gen
-
--- Rnd ℕ version: both probability and cost accessible (but no tick calls,
--- so cost is always 0 — use QuickSort_Rnd for actual cost analysis)
-noncomputable def QuickSort_RndGen : List ℕ → Rnd ℕ (List ℕ) := QuickSort_Gen
-
-end ARA
