@@ -4,20 +4,29 @@ import TimeM
 /-!
 # QuickSort
 
-This module implement a modular versions of QuickSort
-using typeclasses to abstract over the type of randomness.
+This module implement a modular versions of QuickSort.
+
+We are using typeclasses to abstract over the type of randomness.
 
 RandMonad is the typeclass for the randomness, and we give two instances:
 - `IO` for real computable (pseudo-)randomness
 - `PMF` for noncomputable randomness with uniform distribution over valid indices
+
+We are also using the `TimeMT` monad transformer to get a timed version of QuickSort,
+and we show that `RandMonad` lifts automatically through `TimeMT` via `monadLift`.
+
+Finally, we prove the correctness of the PMF version of QuickSort (which implies
+the correctness of all versions since they share the same code?)
 -/
 
 namespace ARA
 
+-- Abstraction over randomness using typeclasses
 class RandMonad (M : Type → Type) [Monad M] where
   -- Given a nonempty list, pick a random valid index
   randIdx {α} : (L : List α) → 0 < L.length → M (Fin L.length)
 
+-- The main abstracted QuickSort function
 def QuickSort {M : Type → Type} [Monad M] [RandMonad M] : List ℕ → M (List ℕ)
   | [] => return []
   | L@(_::_) => do
@@ -32,7 +41,9 @@ def QuickSort {M : Type → Type} [Monad M] [RandMonad M] : List ℕ → M (List
   termination_by L => L.length
 decreasing_by all_goals grind
 
+-- --------------------------------------
 -- Differente instance of "randomness"
+-- --------------------------------------
 
 -- IO: real computable (pseudo-)randomness
 instance : RandMonad IO where
@@ -54,10 +65,49 @@ def QuickSort_IO: List ℕ → IO (List ℕ) := QuickSort
 -- PMF version (noncomputable specification)
 noncomputable def QuickSort_PMF : List ℕ → PMF (List ℕ) := QuickSort
 
--- ------------------------------------------------------------
+-- ---------------------------------------
+-- Monad transformer version (timed)
+-- ---------------------------------------
+
+open Cslib.Algorithms.Lean
+#check TimeMT
+
+/--
+RandMonad lifts automatically through TimeMT via monadLift
+This is where we "stack" monads: an abstarct monad get wrapped up
+in a TimeMT to get a timed version of the same monad.
+-/
+instance {M} [Monad M] [RandMonad M] : RandMonad (TimeMT ℕ M) where
+  randIdx L h := TimeMT.lift (RandMonad.randIdx L h)
+
+def QuickSortTimed [Monad M] [RandMonad M] :
+    List ℕ → TimeMT ℕ M (List ℕ)
+  | [] => return []
+  | L@(_::_) => do
+      let idx ← RandMonad.randIdx L (by grind)
+      let pivot := L[idx]
+      let rest := L.eraseIdx idx
+      let L1 := rest.filter (· < pivot)
+      let L2 := rest.filter (· ≥ pivot)
+      -- each element of `rest` is compared once against pivot
+      TimeMT.tick rest.length
+      let S1 ← QuickSortTimed L1
+      let S2 ← QuickSortTimed L2
+      return (S1 ++ [pivot] ++ S2)
+  termination_by L => L.length
+decreasing_by all_goals grind
+
+-- IO version (executable)
+def QuickSortT_Rand: List ℕ → TimeMT ℕ IO (List ℕ) := QuickSortTimed
+
+#eval (QuickSortT_Rand [5,4,2,1,3,6,10,29,0]).run
+
+noncomputable def QuickSortT_Rand_PMF: List ℕ → TimeMT ℕ PMF (List ℕ) := QuickSortTimed
+
+
+-- -----------------------------------------
 -- Correctness proof of the PMF version
--- (hence of all versions because the code is the same ?)
--- ------------------------------------------------------------
+-- -----------------------------------------
 
 /-! ### Helper lemmas -/
 
@@ -129,7 +179,8 @@ lemma Correctness_Quicksort_PMF : ∀ L : List ℕ, ∃ Output : List ℕ,
     QuickSort_PMF L = PMF.pure Output ∧ Output.SortedLE ∧ Output.Perm L := by
   apply QuickSort.induct
   -- Base case
-  · exact ⟨[], by {simp [QuickSort.eq_1, QuickSort_PMF] ; rfl}, by simp [sortedLE_iff_pairwise], by simp⟩
+  · exact ⟨[], by {simp [QuickSort.eq_1, QuickSort_PMF] ; rfl},
+    by simp [sortedLE_iff_pairwise], by simp⟩
   -- Inductive case
   · intro head tail ihL1 ihL2
     let L := head :: tail
