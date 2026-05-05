@@ -6,6 +6,10 @@ import TimeM
 
 This module implement a modular versions of QuickSort
 using typeclasses to abstract over the type of randomness.
+
+RandMonad is the typeclass for the randomness, and we give two instances:
+- `IO` for real computable (pseudo-)randomness
+- `PMF` for noncomputable randomness with uniform distribution over valid indices
 -/
 
 namespace ARA
@@ -50,10 +54,10 @@ def QuickSort_IO: List ℕ → IO (List ℕ) := QuickSort
 -- PMF version (noncomputable specification)
 noncomputable def QuickSort_PMF : List ℕ → PMF (List ℕ) := QuickSort
 
--- ----------------------------------------------------
+-- ------------------------------------------------------------
 -- Correctness proof of the PMF version
--- (and hence of all versions because the code is the ?)
--- ----------------------------------------------------
+-- (hence of all versions because the code is the same ?)
+-- ------------------------------------------------------------
 
 /-! ### Helper lemmas -/
 
@@ -104,7 +108,8 @@ lemma perm_filter_partition (L : List ℕ) (i : Fin L.length) :
 of the partition-and-recurse step (at given pivot index) to make the code cleaner.
 -/
 
-private noncomputable abbrev qs_branch (M : Type → Type) [Monad M] [RandMonad M] (L : List ℕ) (i : Fin L.length) : PMF (List ℕ) := do
+private noncomputable abbrev qs_branch (M : Type → Type) [Monad M] [RandMonad M]
+  (L : List ℕ) (i : Fin L.length) : M (List ℕ) := do
   let rest := L.eraseIdx i
   let pivot := L[i]
   let S1 ← QuickSort (rest.filter (· < pivot))
@@ -115,6 +120,11 @@ private noncomputable abbrev qs_branch (M : Type → Type) [Monad M] [RandMonad 
 ### Main correctness lemma
 -/
 
+/-
+For any input list, there exists an output list such that the PMF version
+of QuickSort returns it with probability 1, and this output is sorted and
+a permutation of the input.
+-/
 lemma Correctness_Quicksort_PMF : ∀ L : List ℕ, ∃ Output : List ℕ,
     QuickSort_PMF L = PMF.pure Output ∧ Output.SortedLE ∧ Output.Perm L := by
   apply QuickSort.induct
@@ -131,7 +141,7 @@ lemma Correctness_Quicksort_PMF : ∀ L : List ℕ, ∃ Output : List ℕ,
       obtain ⟨O2, h2, s2, p2⟩ := ihL2 i
       use O1 ++ [L[i]] ++ O2
       split_ands
-      · unfold qs_branch; unfold_do; simp [QuickSort_PMF] at h1 h2; sorry
+      · unfold qs_branch; unfold_do; simp [QuickSort_PMF] at h1 h2; grind
       · apply sorted_concat_pivot s1 s2 <;> grind
       · exact (Perm.append (Perm.append p1 (.refl _)) p2).trans (perm_filter_partition L i)
     -- All pivots yield the same output (uniqueness of sorted permutation)
