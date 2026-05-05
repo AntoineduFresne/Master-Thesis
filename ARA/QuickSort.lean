@@ -77,14 +77,13 @@ open Cslib.Algorithms.Lean
 
 /--
 RandMonad lifts automatically through TimeMT via monadLift
-This is where we "stack" monads: an abstarct monad get wrapped up
+This is where we "stack" monads: an abstract monad get wrapped up
 in a TimeMT to get a timed version of the same monad.
 -/
 instance {M} [Monad M] [RandMonad M] : RandMonad (TimeMT ℕ M) where
   randIdx L h := TimeMT.lift (RandMonad.randIdx L h)
 
-def QuickSortTimed {M} [Monad M] [RandMonad M] :
-    List ℕ → TimeMT ℕ M (List ℕ)
+def QuickSortTimed {M} [Monad M] [RandMonad M] : List ℕ → TimeMT ℕ M (List ℕ)
   | [] => return []
   | L@(_::_) => do
       let idx ← RandMonad.randIdx L (by grind)
@@ -101,12 +100,11 @@ def QuickSortTimed {M} [Monad M] [RandMonad M] :
 decreasing_by all_goals grind
 
 -- IO version (executable)
-def QuickSortT_Rand: List ℕ → TimeMT ℕ IO (List ℕ) := QuickSortTimed
+def QuickSortT_IO: List ℕ → TimeMT ℕ IO (List ℕ) := QuickSortTimed
 
-#eval (QuickSortT_Rand [5,4,2,1,3,6,10,29,0]).run
+#eval (QuickSortT_IO [5,4,2,1,3,6,2,1,24,6]).run
 
-noncomputable def QuickSortT_Rand_PMF: List ℕ → TimeMT ℕ PMF (List ℕ) := QuickSortTimed
-
+noncomputable def QuickSortT_PMF: List ℕ → TimeMT ℕ PMF (List ℕ) := QuickSortTimed
 
 -- ---------------------------------------
 -- Correctness proof of the PMF version
