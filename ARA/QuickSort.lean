@@ -8,7 +8,7 @@ This module implement a modular versions of QuickSort.
 
 We are using typeclasses to abstract over the type of randomness.
 
-RandMonad is the typeclass for the randomness, and we give two instances:
+`RandMonad` is the typeclass for the randomness, and we give two instances:
 - `IO` for real computable (pseudo-)randomness
 - `PMF` for noncomputable randomness with uniform distribution over valid indices
 
@@ -16,18 +16,21 @@ We are also using the `TimeMT` monad transformer to get a timed version of Quick
 and we show that `RandMonad` lifts automatically through `TimeMT` via `monadLift`.
 
 Finally, we prove the correctness of the PMF version of QuickSort (which implies
-the correctness of all versions since they share the same code?)
+the correctness of all versions since they share the same code?).
 -/
 
 namespace ARA
 
--- Abstraction over randomness using typeclasses
+/-
+Typeclasses to abstract over the type of randomness
+(choosing a pivot index).
+-/
 class RandMonad (M : Type → Type) [Monad M] where
   -- Given a nonempty list, pick a random valid index
   randIdx {α} : (L : List α) → 0 < L.length → M (Fin L.length)
 
 -- The main abstracted QuickSort function
-def QuickSort {M : Type → Type} [Monad M] [RandMonad M] : List ℕ → M (List ℕ)
+def QuickSort {M} [Monad M] [RandMonad M] : List ℕ → M (List ℕ)
   | [] => return []
   | L@(_::_) => do
       let idx ← RandMonad.randIdx L (by grind)
@@ -42,7 +45,7 @@ def QuickSort {M : Type → Type} [Monad M] [RandMonad M] : List ℕ → M (List
 decreasing_by all_goals grind
 
 -- --------------------------------------
--- Differente instance of "randomness"
+-- Different instance of "randomness"
 -- --------------------------------------
 
 -- IO: real computable (pseudo-)randomness
@@ -80,7 +83,7 @@ in a TimeMT to get a timed version of the same monad.
 instance {M} [Monad M] [RandMonad M] : RandMonad (TimeMT ℕ M) where
   randIdx L h := TimeMT.lift (RandMonad.randIdx L h)
 
-def QuickSortTimed [Monad M] [RandMonad M] :
+def QuickSortTimed {M} [Monad M] [RandMonad M] :
     List ℕ → TimeMT ℕ M (List ℕ)
   | [] => return []
   | L@(_::_) => do
@@ -105,9 +108,9 @@ def QuickSortT_Rand: List ℕ → TimeMT ℕ IO (List ℕ) := QuickSortTimed
 noncomputable def QuickSortT_Rand_PMF: List ℕ → TimeMT ℕ PMF (List ℕ) := QuickSortTimed
 
 
--- -----------------------------------------
+-- ---------------------------------------
 -- Correctness proof of the PMF version
--- -----------------------------------------
+-- ---------------------------------------
 
 /-! ### Helper lemmas -/
 
@@ -196,8 +199,12 @@ lemma Correctness_Quicksort_PMF : ∀ L : List ℕ, ∃ Output : List ℕ,
       · apply sorted_concat_pivot s1 s2 <;> grind
       · exact (Perm.append (Perm.append p1 (.refl _)) p2).trans (perm_filter_partition L i)
     -- All pivots yield the same output (uniqueness of sorted permutation)
+    -- which is sorted and a permutation of the input. So we use such an output.
     obtain ⟨Output, h0, hS, hP⟩ := h_step ⟨0, by grind⟩
     refine ⟨Output, ?_, hS, hP⟩
+    -- The PMF is uniform over the pivot choice,
+    -- and all pivots yield the same output,
+    -- so the PMF is actually a point mass on this output.
     have : Nonempty (Fin L.length) := ⟨⟨0, by grind⟩⟩
     calc QuickSort_PMF L
         = (PMF.uniformOfFintype (Fin L.length)).bind (qs_branch PMF L) := by
