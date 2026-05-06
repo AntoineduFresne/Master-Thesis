@@ -167,35 +167,56 @@ private noncomputable abbrev qs_branch (M : Type → Type) [Monad M] [RandMonad 
   let S2 ← QuickSort (rest.filter (· ≥ pivot))
   return (S1 ++ [pivot] ++ S2)
 
-/-!
-### Main correctness lemma
--/
+-- ---------------------------------------
+-- Mathematical Specification (Axioms)
+-- ---------------------------------------
 
-/-
-For any input list, there exists an output list such that the PMF version
-of QuickSort returns it with probability 1, and this output is sorted and
-a permutation of the input.
--/
-lemma Correctness_Quicksort_PMF : ∀ L : List ℕ, ∃ Output : List ℕ,
-    QuickSort_PMF L = PMF.pure Output ∧ Output.SortedLE ∧ Output.Perm L := by
+class LawfulRandMonad (M : Type → Type) [Monad M] [LawfulMonad M] extends RandMonad M where
+  -- A way to evaluate the abstract monad as a mathematical probability
+  toPMF : ∀ {α}, M α → PMF α
+
+  -- Axiom 1: pure maps to PMF.pure
+  toPMF_pure : ∀ {α} (a : α), toPMF (pure a) = pure a
+
+  -- Axiom 2: bind maps to PMF.bind
+  toPMF_bind : ∀ {α β} (x : M α) (f : α → M β),
+    toPMF (x >>= f) = (toPMF x) >>= (fun a => toPMF (f a))
+
+  -- Axiom 3: randIdx is perfectly uniform
+  toPMF_randIdx : ∀ (L : List ℕ) (hne : 0 < L.length),
+    toPMF (randIdx L hne) =
+      (have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩;
+       PMF.uniformOfFintype (Fin L.length))
+
+-- ---------------------------------------
+-- The Generic Correctness Lemma
+-- ---------------------------------------
+
+lemma Correctness_Quicksort {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] :
+    ∀ L : List ℕ, ∃ Output : List ℕ,
+    LawfulRandMonad.toPMF (QuickSort L : M (List ℕ)) = pure Output ∧
+    Output.SortedLE ∧ Output.Perm L := by
   apply QuickSort.induct
   -- Base case
-  · exact ⟨[], by {simp [QuickSort.eq_1, QuickSort_PMF] ; rfl},
-    by simp [sortedLE_iff_pairwise], by simp⟩
+  · exact ⟨[], by simp [QuickSort.eq_1, LawfulRandMonad.toPMF_pure],
+    by simp [List.sortedLE_iff_pairwise], by simp⟩
   -- Inductive case
   · intro head tail ihL1 ihL2
     let L := head :: tail
-    -- For each pivot, build a correct output from the IH
+     -- For each pivot, build a correct output from the IH
     have h_step : ∀ i : Fin L.length, ∃ Out,
-        qs_branch PMF L i = PMF.pure Out ∧ Out.SortedLE ∧ Out.Perm L := by
+        LawfulRandMonad.toPMF (qs_branch M L i) = pure Out ∧ Out.SortedLE ∧ Out.Perm L := by
       intro i
       obtain ⟨O1, h1, s1, p1⟩ := ihL1 i
       obtain ⟨O2, h2, s2, p2⟩ := ihL2 i
       use O1 ++ [L[i]] ++ O2
       split_ands
-      · unfold qs_branch; unfold_do; simp [QuickSort_PMF] at h1 h2; grind
+      · unfold qs_branch; unfold_do
+        simp only [LawfulRandMonad.toPMF_bind, LawfulRandMonad.toPMF_pure]
+        rw [h1, h2]; simp_all [length_cons, Fin.getElem_fin, ge_iff_le, L]
+        rfl
       · apply sorted_concat_pivot s1 s2 <;> grind
-      · exact (Perm.append (Perm.append p1 (.refl _)) p2).trans (perm_filter_partition L i)
+      · exact (List.Perm.append (List.Perm.append p1 (.refl _)) p2).trans (perm_filter_partition L i)
     -- All pivots yield the same output (uniqueness of sorted permutation)
     -- which is sorted and a permutation of the input. So we use such an output.
     obtain ⟨Output, h0, hS, hP⟩ := h_step ⟨0, by grind⟩
@@ -204,13 +225,109 @@ lemma Correctness_Quicksort_PMF : ∀ L : List ℕ, ∃ Output : List ℕ,
     -- and all pivots yield the same output,
     -- so the PMF is actually a point mass on this output.
     have : Nonempty (Fin L.length) := ⟨⟨0, by grind⟩⟩
-    calc QuickSort_PMF L
-        = (PMF.uniformOfFintype (Fin L.length)).bind (qs_branch PMF L) := by
-          unfold qs_branch; simpa [L, ← PMF.bind_pure_comp] using QuickSort.eq_2 head tail
-      _ = (PMF.uniformOfFintype (Fin L.length)).bind fun _ => PMF.pure Output := by
+    calc LawfulRandMonad.toPMF (QuickSort L : M (List ℕ))
+        = LawfulRandMonad.toPMF (RandMonad.randIdx L (by grind) >>= fun idx => qs_branch M L idx) := by
+          unfold qs_branch
+          rw [QuickSort.eq_2 head tail]
+      _ = (PMF.uniformOfFintype (Fin L.length)).bind (fun idx => LawfulRandMonad.toPMF (qs_branch M L idx)) := by
+          rw [LawfulRandMonad.toPMF_bind, LawfulRandMonad.toPMF_randIdx]
+          simp_all only [length_cons, Fin.getElem_fin, ge_iff_le, Fin.zero_eta, L]
+          rfl
+      _ = (PMF.uniformOfFintype (Fin L.length)).bind fun _ => pure Output := by
           congr 1; funext i
           obtain ⟨Oi, hi, si, pi⟩ := h_step i
           rwa [eq_of_sortedLE_perm si hS (pi.trans hP.symm)] at hi
-      _ = PMF.pure Output := PMF.bind_const _ _
+      _ = pure Output := PMF.bind_const _ _
+
+-- ---------------------------------------
+-- Free Proof: Untimed QuickSort_PMF
+-- ---------------------------------------
+
+-- First, we prove PMF itself is a LawfulRandMonad trivially
+noncomputable instance : LawfulRandMonad PMF where
+  toPMF := id
+  toPMF_pure _ := rfl
+  toPMF_bind _ _ := rfl
+  toPMF_randIdx _ _ := rfl
+
+-- Now we get the untimed PMF correctness completely for free
+lemma Correctness_Quicksort_PMF : ∀ L : List ℕ, ∃ Output : List ℕ,
+  QuickSort_PMF L = pure Output ∧ Output.SortedLE ∧ Output.Perm L := Correctness_Quicksort (M := PMF)
+
+
+-- ---------------------------------------
+-- Free Proof: Timed QuickSortT_PMF
+-- ---------------------------------------
+
+/-! ### Helper lemmas for TimeMT erasure -/
+
+-- If we chain two steps together, extracting the final answer is the
+-- same as ignoring the time in step 1, then ignoring the time in step 2.
+@[simp] lemma TimeMT_erase_bind {M} [Monad M] [LawfulMonad M] {α β}
+    (m : TimeMT ℕ M α) (f : α → TimeMT ℕ M β) :
+    TimeM.ret <$> (m >>= f).run = (TimeM.ret <$> m.run) >>= fun a => TimeM.ret <$> (f a).run := by
+  simp only [TimeMT.run_bind, map_bind]
+  simp_all only [map_pure, bind_pure_comp, bind_map_left]
+
+-- If we create a plain value with no time cost, extracting the
+-- answer just gives us that exact plain value back.
+@[simp] lemma TimeMT_erase_pure {M} [Monad M] [LawfulMonad M] {α} (a : α) :
+    TimeM.ret <$> (pure a : TimeMT ℕ M α).run = pure a := by
+  simp only [TimeMT.run_pure, map_pure]
+
+-- If we simply advance the clock (a 'tick') without returning any data,
+-- extracting the answer gives us an empty result.
+@[simp] lemma TimeMT_erase_tick {M} [Monad M] [LawfulMonad M] (t : ℕ) :
+    TimeM.ret <$> (TimeMT.tick t : TimeMT ℕ M Unit).run = pure () := by
+  simp only [TimeMT.run_tick, map_pure]
+
+-- If we take a standard function and wrap it to track time, stripping
+-- that time wrapper away gives us the standard function back.
+@[simp] lemma TimeMT_erase_lift {M} [Monad M] [LawfulMonad M] {α} (m : M α) :
+    TimeM.ret <$> (TimeMT.lift m : TimeMT ℕ M α).run = m := by
+  rw [TimeMT.run_lift, ← Functor.map_map]
+  simp_all only [Functor.map_map, id_map']
+
+-- Picking a random number in our timed program is functionally identical
+-- to picking a random number normally and then wrapping it in a time tracker.
+@[simp] lemma TimeMT_randIdx_run {M} [Monad M] [RandMonad M] (L : List ℕ) (h : 0 < L.length) :
+    (RandMonad.randIdx L h : TimeMT ℕ M (Fin L.length)).run =
+    (TimeMT.lift (RandMonad.randIdx L h : M (Fin L.length))).run := rfl
+
+-- ---------------------------------------
+-- Erasure & Main Proof
+-- ---------------------------------------
+
+-- We prove that tracking time doesn't change the actual sorting logic by
+-- checking every step of the QuickSort process.
+lemma QuickSortTimed_erasure {M} [Monad M] [LawfulMonad M] [RandMonad M] (L : List ℕ) :
+    TimeM.ret <$> (QuickSortTimed L : TimeMT ℕ M (List ℕ)).run = QuickSort L := by
+  induction L using QuickSort.induct
+  · -- Base case
+    rw [QuickSort.eq_1, QuickSortTimed.eq_1]
+    simp
+  · -- Inductive case
+    next head tail ih1 ih2 =>
+      rw [QuickSort.eq_2 head tail, QuickSortTimed.eq_2 head tail]
+      -- Push the TimeM.ret erasure down through all the binds and primitives
+      simp only [TimeMT_erase_bind, TimeMT_randIdx_run, TimeMT_erase_lift,
+                 TimeMT_erase_tick, TimeMT_erase_pure]
+      -- Apply the inductive hypotheses directly inside the simplified binds
+      simp only [ih1, ih2]
+      -- Clean up the `pure () >>= fun _ => ...` introduced by `tick`
+      simp only [pure_bind]
+
+-- Now we get the timed PMF correctness completely for free
+lemma Correctness_QuicksortTimed_PMF : ∀ L : List ℕ, ∃ Output : List ℕ,
+    TimeM.ret <$> (QuickSortT_PMF L).run = pure Output ∧ Output.SortedLE ∧ Output.Perm L := by
+  intro L
+  -- 1. Extract the pure math proof we already finished for PMF
+  obtain ⟨Out, hEq, hSort, hPerm⟩ := Correctness_Quicksort_PMF L
+  use Out
+  -- 2. Rewrite the timed goal into the untimed goal using our bridge
+  unfold QuickSortT_PMF
+  rw [QuickSortTimed_erasure]
+  -- 3. Apply the free facts
+  exact ⟨hEq, hSort, hPerm⟩
 
 end ARA
