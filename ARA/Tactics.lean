@@ -1,4 +1,4 @@
-import ARA.Basic
+import ARA.SimpAttr
 
 /-!
   Tactic infrastructure for PMF proofs.
@@ -7,6 +7,12 @@ import ARA.Basic
   - A: grind/simp tags to bridge PMF into arithmetic
   - B: pmf_simp macro and pmf_norm for computing probabilities
   - C: reusable derived lemmas
+
+  ## Custom simp attribute
+
+  We use a registered `@[pmf_simp_attr]` attribute (declared in
+  `ARA.SimpAttr`). Downstream files can locally tag domain-specific
+  lemmas with `@[pmf_simp_attr]` to extend the automation organically.
 -/
 
 namespace ARA
@@ -122,36 +128,42 @@ attribute [grind =] PMF.bindOnSupport_apply
     ================================================================
 
   Use pmf_simp to compute things like P(X = 3) = 1/12.
-  It collapses tsum to finite sums, applies distribution weights, and cleans up arithmetic.
-  For correctness proofs (showing output is a pure) use the lemmas in Layer C instead.
+  It collapses tsum to finite sums, applies distribution weights,
+  and cleans up arithmetic.
+
+  The core simp set is the registered `pmf_simp_attr` attribute
+  (declared in `ARA.SimpAttr`). Downstream files can extend it by
+  tagging their lemmas with `@[pmf_simp_attr]`.
 -/
+
+-- Tag key lemmas with the custom attribute
+attribute [pmf_simp_attr] tsum_fintype
+attribute [pmf_simp_attr] Fin.sum_univ_one Fin.sum_univ_two Fin.sum_univ_three
+attribute [pmf_simp_attr] Fin.sum_univ_four Fin.sum_univ_five Fin.sum_univ_six
+attribute [pmf_simp_attr] Fin.sum_univ_seven Fin.sum_univ_eight
+attribute [pmf_simp_attr] Fintype.sum_bool
+attribute [pmf_simp_attr] tsum_ite_eq
+attribute [pmf_simp_attr] PMF.tsum_coe
+attribute [pmf_simp_attr] PMF.pure_bind PMF.bind_pure PMF.pure_apply
+attribute [pmf_simp_attr] PMF.bind_apply PMF.bind_const
+attribute [pmf_simp_attr] PMF.pure_map PMF.map_apply PMF.map_id
+attribute [pmf_simp_attr] PMF.bind_pure_comp
+attribute [pmf_simp_attr] PMF.uniformOfFintype_apply PMF.uniformOfFinset_apply
+attribute [pmf_simp_attr] PMF.bernoulli_apply
+attribute [pmf_simp_attr] PMF.bindOnSupport_eq_bind PMF.pure_bindOnSupport
+attribute [pmf_simp_attr] PMF.bindOnSupport_apply
+attribute [pmf_simp_attr] Fintype.card_fin Fintype.card_bool
+attribute [pmf_simp_attr] ite_mul mul_ite
+attribute [pmf_simp_attr] Finset.sum_ite_eq Finset.sum_ite_eq'
+attribute [pmf_simp_attr] mul_one one_mul mul_zero zero_mul add_zero zero_add
+attribute [pmf_simp_attr] ENNReal.inv_two_add_inv_two
+attribute [pmf_simp_attr] if_true if_false ite_self dite_true dite_false
+attribute [pmf_simp_attr] eq_self_iff_true ne_eq
+attribute [pmf_simp_attr] Finset.mem_univ Finset.mem_singleton Finset.mem_insert
+
 macro "pmf_simp" : tactic =>
   `(tactic| (
-    simp only [
-      tsum_fintype,
-      Fin.sum_univ_one, Fin.sum_univ_two, Fin.sum_univ_three,
-      Fin.sum_univ_four, Fin.sum_univ_five, Fin.sum_univ_six,
-      Fin.sum_univ_seven, Fin.sum_univ_eight,
-      Fintype.sum_bool,
-      tsum_ite_eq,
-      PMF.tsum_coe,
-      PMF.pure_bind, PMF.bind_pure, PMF.pure_apply,
-      PMF.bind_apply, PMF.bind_const,
-      PMF.pure_map, PMF.map_apply, PMF.map_id,
-      PMF.bind_pure_comp,
-      PMF.uniformOfFintype_apply, PMF.uniformOfFinset_apply,
-      PMF.bernoulli_apply,
-      PMF.bindOnSupport_eq_bind, PMF.pure_bindOnSupport,
-      PMF.bindOnSupport_apply,
-      Fintype.card_fin, Fintype.card_bool,
-      ite_mul, mul_ite,
-      Finset.sum_ite_eq, Finset.sum_ite_eq',
-      mul_one, one_mul, mul_zero, zero_mul, add_zero, zero_add,
-      ENNReal.inv_two_add_inv_two,
-      if_true, if_false, ite_self, dite_true, dite_false,
-      eq_self_iff_true, ne_eq,
-      Finset.mem_univ, Finset.mem_singleton, Finset.mem_insert
-    ]
+    simp only [pmf_simp_attr]
     <;> try simp
     <;> try norm_num
     <;> try ring_nf))

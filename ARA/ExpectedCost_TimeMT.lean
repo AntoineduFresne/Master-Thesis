@@ -1,6 +1,7 @@
 import TimeM
 import ARA.ExpectedCost
 import ARA.LawfulRandMonad
+import ARA.MonadCost
 
 /-!
 # Expected Cost for `TimeMT`

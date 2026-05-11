@@ -6,25 +6,42 @@ import ARA.Tactics
 A typeclass for monads with lawful randomness:
 a monad `M` equipped with a `RandMonad` instance and an
 interpretation into `PMF` that respects `pure`, `bind`,
-and maps `randIdx` to the uniform distribution.
+and maps `randFin` to the uniform distribution.
+
+## Architectural note
+
+The primitive entropy source is `randFin n`, which generates
+a uniform random element of `Fin n`. This is decoupled from
+any particular data structure. Derived helpers like `randIdx`
+for lists are provided as convenience functions.
 
 ## Main declarations
 
-* `LawfulRandMonad` — the typeclass
-* `LawfulRandMonad.toPMF_map` — derived functorial law
+* `RandMonad` — typeclass with primitive `randFin`
+* `randIdx` — derived helper for random list indexing
+* `LawfulRandMonad` — the lawful typeclass with `toPMF`
 * `LawfulRandMonad PMF` — canonical instance for `PMF`
 -/
 
 namespace ARA
 
-/-
-We re-state `RandMonad` here so that downstream files can
-import this module without pulling in QuickSort.
+/-!
+### `RandMonad`: primitive entropy source
 -/
+
+/-- A monad with access to uniform random generation over `Fin n`.
+Every finite discrete choice is isomorphic to `Fin n`, making this
+the universal primitive for finite randomness. -/
 class RandMonad (M : Type → Type) [Monad M] where
-  /-- Given a nonempty list, pick a random valid index. -/
-  randIdx {α} :
-    (L : List α) → 0 < L.length → M (Fin L.length)
+  /-- Generate a uniform random element of `Fin n`. -/
+  randFin (n : ℕ) [NeZero n] : M (Fin n)
+
+/-- Derived polymorphic helper: pick a random valid index into a
+nonempty list. -/
+def randIdx {M} [Monad M] [RandMonad M] {α}
+    (L : List α) (h : 0 < L.length) : M (Fin L.length) :=
+  have : NeZero L.length := ⟨h.ne'⟩
+  RandMonad.randFin L.length
 
 /-!
 ### Mathematical Specification
@@ -34,7 +51,7 @@ class RandMonad (M : Type → Type) [Monad M] where
 interpretation `toPMF` into `PMF` satisfying three axioms:
 1. `pure` maps to `PMF.pure`
 2. `bind` distributes
-3. `randIdx` maps to the uniform distribution -/
+3. `randFin` maps to the uniform distribution -/
 class LawfulRandMonad
     (M : Type → Type) [Monad M] [LawfulMonad M]
     extends RandMonad M where
@@ -46,12 +63,23 @@ class LawfulRandMonad
   toPMF_bind : ∀ {α β} (x : M α) (f : α → M β),
     toPMF (x >>= f) =
       (toPMF x) >>= (fun a => toPMF (f a))
-  /-- `randIdx` maps to the uniform distribution on `Fin n`. -/
-  toPMF_randIdx :
-    ∀ (L : List ℕ) (hne : 0 < L.length),
-      toPMF (randIdx L hne) =
-        (have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
-         PMF.uniformOfFintype (Fin L.length))
+  /-- `randFin n` maps to the uniform distribution on `Fin n`. -/
+  toPMF_randFin :
+    ∀ (n : ℕ) [NeZero n],
+      toPMF (randFin n) =
+        (have : Nonempty (Fin n) := ⟨⟨0, Nat.pos_of_ne_zero (NeZero.ne n)⟩⟩
+         PMF.uniformOfFintype (Fin n))
+
+/-- Derived: `toPMF` maps `randIdx` to the uniform distribution. -/
+lemma LawfulRandMonad.toPMF_randIdx
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (L : List ℕ) (hne : 0 < L.length) :
+    inst.toPMF (randIdx L hne) =
+      (have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
+       PMF.uniformOfFintype (Fin L.length)) := by
+  unfold randIdx
+  have : NeZero L.length := ⟨hne.ne'⟩
+  exact inst.toPMF_randFin L.length
 
 /-- Derived: `toPMF` respects `Functor.map`. -/
 lemma LawfulRandMonad.toPMF_map
@@ -68,14 +96,14 @@ lemma LawfulRandMonad.toPMF_map
 
 /-- `PMF` is trivially a `LawfulRandMonad` via the identity. -/
 noncomputable instance : RandMonad PMF where
-  randIdx L hne :=
-    have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
-    PMF.uniformOfFintype (Fin L.length)
+  randFin n :=
+    have : Nonempty (Fin n) := ⟨⟨0, Nat.pos_of_ne_zero (NeZero.ne n)⟩⟩
+    PMF.uniformOfFintype (Fin n)
 
 noncomputable instance : LawfulRandMonad PMF where
   toPMF := id
   toPMF_pure _ := rfl
   toPMF_bind _ _ := rfl
-  toPMF_randIdx _ _ := rfl
+  toPMF_randFin _ := rfl
 
 end ARA
