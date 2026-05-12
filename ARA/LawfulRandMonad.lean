@@ -39,7 +39,7 @@ class RandMonad (M : Type → Type) [Monad M] where
 /-- Derived polymorphic helper: pick a random valid index into a
 nonempty list. -/
 def randIdx {M} [Monad M] [RandMonad M] {α}
-    (L : List α) (h : 0 < L.length) : M (Fin L.length) :=
+    (L : List α) (h : 0 < L.length := by grind) : M (Fin L.length) :=
   have : NeZero L.length := ⟨h.ne'⟩
   RandMonad.randFin L.length
 

@@ -227,7 +227,7 @@ private lemma quicksort_timed_eq_bind
     (head : ℕ) (tail : List ℕ) :
     (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT
       (head :: tail)) =
-    TimeMT.lift (randIdx (head :: tail) (by grind) : M _) >>=
+    TimeMT.lift (randIdx (head :: tail) : M _) >>=
       fun idx => @qs_branch (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT
         (head :: tail) idx := by
   rw [@QuickSort.eq_2 (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT head tail]
@@ -550,6 +550,7 @@ lemma expected_cost_quicksort_nil
     expected_cost
       (inst.toPMF
         (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT ([] : List ℕ)).run) = 0 := by
+
   rw [@QuickSort.eq_1 (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT]
   simp only [TimeMT.run_pure, inst.toPMF_pure]
   change expected_cost
