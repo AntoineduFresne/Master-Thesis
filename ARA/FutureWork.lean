@@ -1,4 +1,3 @@
-import ARA.Rnd
 import ARA.Tactics
 import ARA.Basic
 

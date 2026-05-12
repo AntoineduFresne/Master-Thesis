@@ -1,10 +1,8 @@
-module
-
-public import Mathlib.Init
-public import Mathlib.Tactic.Common
-public import Batteries.Tactic.Lint.Basic
-public import Lean.Message
-public import Mathlib.Algebra.Group.Defs
+import Mathlib.Init
+import Mathlib.Tactic.Common
+import Batteries.Tactic.Lint.Basic
+import Lean.Message
+import Mathlib.Algebra.Group.Defs
 
 namespace Cslib.Lint
 
@@ -43,7 +41,7 @@ public meta def topNamespace : Batteries.Tactic.Lint.Linter where
 end Cslib.Lint
 
 
-@[expose] public section
+section
 
 /-!
 

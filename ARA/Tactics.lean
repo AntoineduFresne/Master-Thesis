@@ -161,20 +161,18 @@ attribute [pmf_simp_attr] if_true if_false ite_self dite_true dite_false
 attribute [pmf_simp_attr] eq_self_iff_true ne_eq
 attribute [pmf_simp_attr] Finset.mem_univ Finset.mem_singleton Finset.mem_insert
 
+/-- `pmf_simp` normalizes PMF expressions by applying the `pmf_simp_attr`
+simp set, then cleaning up with `norm_num`. -/
 macro "pmf_simp" : tactic =>
-  `(tactic| (
-    simp only [pmf_simp_attr]
-    <;> try simp
-    <;> try norm_num
-    <;> try ring_nf))
+  `(tactic| (simp only [pmf_simp_attr]; try norm_num))
 
-/-- pmf_norm extends pmf_simp with omega for index bounds -/
+/-- `pmf_norm` extends `pmf_simp` with `omega` for index bounds and
+`ring_nf` for residual arithmetic. -/
 macro "pmf_norm" : tactic =>
-  `(tactic| (
-    try pmf_simp
-    <;> try omega
-    <;> try (simp; ring_nf)
-    <;> try norm_num))
+  `(tactic| first
+    | pmf_simp
+    | (simp only [pmf_simp_attr]; omega)
+    | (simp only [pmf_simp_attr]; ring_nf; norm_num))
 
 
 /-! ================================================================

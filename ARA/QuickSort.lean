@@ -1,6 +1,5 @@
 import ARA.Tactics
-import ARA.MonadCost
-import ARA.ExpectedCost_TimeMT
+import ARA.ExpectedCost
 
 /-!
 # QuickSort
@@ -21,11 +20,12 @@ serves as:
 
 ## Main results
 
-* `Correctness_Quicksort` — generic correctness for any
-  `LawfulRandMonad`: the output is a sorted permutation
-* `Expected_Complexity_Quicksort` — the expected number of
-  comparisons on a list of `n` distinct elements is exactly
-  `2(n+1)H(n) − 4n`
+* `Correctness_Quicksort` — Establishes generic correctness over any
+  `LawfulRandMonad`: guarantees the algorithm deterministically
+  returns a sorted permutation of the input list.
+* `Expected_Complexity_Quicksort` — Quantifies the exact expected
+  cost over any `LawfulRandMonad`: sorting a list of `n` distinct
+  elements requires exactly `2(n+1)H(n) - 4n` comparisons.
 -/
 
 namespace ARA
@@ -492,7 +492,7 @@ plus the expected costs of the two recursive calls.
 
 /-- The expected cost of `qs_branch` in `TimeMT` is
 `rest.length + E[QS L1] + E[QS L2]`. -/
-private lemma expected_cost_tm_qs_branch
+private lemma expected_cost_qs_branch
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List ℕ) (i : Fin L.length) :
@@ -500,40 +500,40 @@ private lemma expected_cost_tm_qs_branch
     let rest := L.eraseIdx i
     let L1 := rest.filter (· < pivot)
     let L2 := rest.filter (· ≥ pivot)
-    expected_cost_tm
+    expected_cost
       (inst.toPMF
         (@qs_branch (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L i).run) =
     (rest.length : ENNReal) +
-      expected_cost_tm
+      expected_cost
         (inst.toPMF
           (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L1).run) +
-      expected_cost_tm
+      expected_cost
         (inst.toPMF
           (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L2).run) := by
   intro pivot rest L1 L2
   -- Step 1: peel off the tick
-  show expected_cost_tm (inst.toPMF
+  show expected_cost (inst.toPMF
     (TimeMT.tick rest.length >>=
       fun _ => @QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L1 >>=
         fun S1 => @QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L2 >>=
           fun S2 => pure
             (S1 ++ [pivot] ++ S2)).run) = _
-  rw [expected_cost_tm_toPMF_tick_bind]
+  rw [expected_cost_toPMF_tick_bind]
   -- Step 2: peel off QS(L1)
-  rw [expected_cost_tm_toPMF_bind]
+  rw [expected_cost_toPMF_bind]
   -- Step 3: the inner continuation cost is just E[QS L2]
   have h_inner : ∀ tm : TimeM ℕ (List ℕ),
-      expected_cost_tm
+      expected_cost
         (inst.toPMF
           (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L2 >>= fun S2 =>
             (pure (tm.ret ++ [pivot] ++ S2) :
               TimeMT ℕ M (List ℕ))).run) =
-      expected_cost_tm
+      expected_cost
         (inst.toPMF
           (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L2).run) := by
     intro tm
-    rw [expected_cost_tm_toPMF_bind]
-    simp only [expected_cost_tm_toPMF_pure,
+    rw [expected_cost_toPMF_bind]
+    simp only [expected_cost_toPMF_pure,
       mul_zero, tsum_zero, add_zero]
   simp only [h_inner]
   rw [ENNReal.tsum_mul_right, PMF.tsum_coe,
@@ -544,17 +544,17 @@ private lemma expected_cost_tm_qs_branch
 ### Monadic unfolding: base case
 -/
 
-lemma expected_cost_tm_quicksort_nil
+lemma expected_cost_quicksort_nil
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] :
-    expected_cost_tm
+    expected_cost
       (inst.toPMF
         (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT ([] : List ℕ)).run) = 0 := by
   rw [@QuickSort.eq_1 (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT]
   simp only [TimeMT.run_pure, inst.toPMF_pure]
-  change expected_cost_tm
+  change expected_cost
     (PMF.pure ⟨[], 0⟩) = 0
-  simp [expected_cost_tm_pure_val]
+  simp [expected_cost_pure_val]
 
 /-!
 ### Monadic unfolding: inductive step
@@ -565,12 +565,12 @@ lemma expected_cost_tm_quicksort_nil
 uniform average:
 `E[cost] = (1/n) * Σ_i (|rest_i| + E[L1_i] + E[L2_i])`
 -/
-lemma expected_cost_tm_quicksort_step
+lemma expected_cost_quicksort_step
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (head : ℕ) (tail : List ℕ) :
     let L := head :: tail
-    expected_cost_tm
+    expected_cost
       (inst.toPMF
         (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L).run) =
     (L.length : ENNReal)⁻¹ *
@@ -580,10 +580,10 @@ lemma expected_cost_tm_quicksort_step
         let L1 := rest.filter (· < pivot)
         let L2 := rest.filter (· ≥ pivot)
         ((rest.length : ENNReal) +
-          expected_cost_tm
+          expected_cost
             (inst.toPMF
               (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L1).run) +
-          expected_cost_tm
+          expected_cost
             (inst.toPMF
               (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L2).run)) := by
   intro L
@@ -592,7 +592,7 @@ lemma expected_cost_tm_quicksort_step
     rw [show L = head :: tail from rfl]
   rw [quicksort_timed_eq_bind head tail]
   -- Step 2: apply lift-bind to separate randomness
-  rw [expected_cost_tm_toPMF_lift_bind]
+  rw [expected_cost_toPMF_lift_bind]
   rw [inst.toPMF_randIdx]
   -- Step 3: convert tsum to finsum, factor out 1/n
   have hne : Nonempty (Fin L.length) :=
@@ -603,7 +603,7 @@ lemma expected_cost_tm_quicksort_step
   rw [Finset.mul_sum]
   -- Step 4: apply branch cost lemma to each summand
   congr 1; ext i; congr 1
-  exact expected_cost_tm_qs_branch L i
+  exact expected_cost_qs_branch L i
 
 /-!
 ### Partition size lemma for distinct lists
@@ -756,10 +756,10 @@ lemma nodup_partition_sum
 ### Finiteness of expected cost
 -/
 
-lemma expected_cost_tm_quicksort_ne_top
+lemma expected_cost_quicksort_ne_top
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] (L : List ℕ) :
-    expected_cost_tm
+    expected_cost
       (inst.toPMF
         (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L).run) ≠ ⊤ := by
   induction' n : L.length
@@ -767,9 +767,9 @@ lemma expected_cost_tm_quicksort_ne_top
     with n ih generalizing L
   rcases L with (_ | ⟨head, tail⟩)
   -- Base case: empty list
-  · simp [expected_cost_tm_quicksort_nil]
+  · simp [expected_cost_quicksort_nil]
   -- Inductive case: use step decomposition
-  · rw [expected_cost_tm_quicksort_step]
+  · rw [expected_cost_quicksort_step]
     simp_all +decide
     rw [ENNReal.mul_eq_top]; norm_num
     grind +revert
@@ -789,7 +789,7 @@ theorem Expected_Complexity_Quicksort
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) :
-    (expected_cost_tm
+    (expected_cost
       (inst.toPMF
         (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L).run)).toReal =
     (expected_qs_cost L.length : ℚ) := by
@@ -798,9 +798,9 @@ theorem Expected_Complexity_Quicksort
     with n ih generalizing L
   cases' L with head tail
     <;> simp_all +decide
-      [expected_cost_tm_quicksort_step]
+      [expected_cost_quicksort_step]
   · subst n
-    norm_num [expected_cost_tm_quicksort_nil]
+    norm_num [expected_cost_quicksort_nil]
   · rw [ENNReal.toReal_sum]
     · rw [Finset.sum_congr rfl fun i hi => ?_]
       rotate_left
@@ -822,7 +822,7 @@ theorem Expected_Complexity_Quicksort
       · rw [ENNReal.toReal_add,
           ENNReal.toReal_add]
           <;> norm_num
-            [expected_cost_tm_quicksort_ne_top]
+            [expected_cost_quicksort_ne_top]
         grind
       · have := nodup_partition_sum
           (head :: tail)
