@@ -1,4 +1,3 @@
-import ARA.Tactics
 import ARA.ExpectedCost
 
 /-!

@@ -1,4 +1,4 @@
-import Mathlib
+import ARA
 
 /-! Register the custom simp attribute for PMF computations.
 This must be in a separate file from where it is used, per Lean 4 constraints. -/

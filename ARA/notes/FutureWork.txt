@@ -1,7 +1,3 @@
-import ARA.Tactics
-import ARA.Basic
-
-/-!
   Future directions for the framework.
 
   The big picture is a two-layer pipeline:
@@ -67,10 +63,8 @@ For now:
     - Understand how TimeM works in CSLib
     - Try to design a TimeMT (by generalizing TimeM to manipulate a monad)
 
--/
 
 
-/-
 Draft of future work: maybe bullshit, AI slop, needs to be refined/cancelled and structured.
   Open question on cost tracking:
   Right now the RandMonad typeclass only abstracts randomness, not cost. So cost
@@ -121,4 +115,3 @@ Draft of future work: maybe bullshit, AI slop, needs to be refined/cancelled and
 
 
   Cool Idea: print the algorithm running wiht the time on the side and the different brnches it takes ?
--/

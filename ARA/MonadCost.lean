@@ -1,5 +1,4 @@
 import TimeM
-import ARA.Basic
 
 /-!
 # MonadCost
