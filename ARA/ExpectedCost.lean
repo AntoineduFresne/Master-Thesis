@@ -273,4 +273,32 @@ Erasing time (`TimeM.ret <$> ·`) distributes through
   rw [TimeMT.run_lift, ← Functor.map_map]
   simp_all only [Functor.map_map, id_map']
 
+/-!
+## Notation for expected cost
+
+We provide user-friendly notation so that the expected cost of a
+timed computation can be written concisely.
+
+* `𝔼_cost[m]` — expected cost of a `PMF (TimeM ℕ α)`, i.e. `expected_cost m`.
+* `TimedPMF m` — the distribution over `(value, time)` pairs obtained by
+  interpreting a `TimeMT ℕ M α` computation via a `LawfulRandMonad`.
+-/
+
+/-- The distribution over `(value, time)` pairs obtained by interpreting
+a timed computation `m : TimeMT ℕ M α` via a `LawfulRandMonad` instance.
+This is the object whose expected cost we analyze. -/
+noncomputable abbrev TimedPMF
+    {M : Type → Type} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M] {α : Type}
+    (m : TimeMT ℕ M α) : PMF (TimeM ℕ α) :=
+  inst.toPMF m.run
+
+/-- `𝔼_cost[p]` is notation for `expected_cost p` where `p : PMF (TimeM ℕ α)`. -/
+scoped notation "𝔼_cost[" p "]" => expected_cost p
+
+/-- `𝔼_runtime[m]` is notation for the expected cost of the timed PMF of `m`,
+i.e. `expected_cost (TimedPMF m)`. Typical usage:
+`𝔼_runtime[@QuickSort (TimeMT ℕ M) .. L]`. -/
+scoped notation "𝔼_runtime[" m "]" => expected_cost (TimedPMF m)
+
 end ARA

@@ -25,6 +25,15 @@ serves as:
 * `Expected_Complexity_Quicksort` — Quantifies the exact expected
   cost over any `LawfulRandMonad`: sorting a list of `n` distinct
   elements requires exactly `2(n+1)H(n) - 4n` comparisons.
+
+## Notation
+
+The expected runtime of a timed computation is written using the
+`𝔼_runtime[·]` notation defined in `ARA.ExpectedCost`. For example:
+
+  `𝔼_runtime[@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L]`
+
+reads as "the expected runtime of QuickSort on L".
 -/
 
 namespace ARA
@@ -350,7 +359,9 @@ lemma Correctness_Quicksort_PMF :
 
 /-- Erasing time from the timed QuickSort gives the untimed QuickSort.
 This follows from the unified definition: the `MonadCost.tick` in
-`TimeMT` erases to `pure ()`, matching the no-op `MonadCost` instance. -/
+`TimeMT` erases to `pure ()`, matching the no-op `MonadCost` instance.
+
+Uses **functional induction** on `QuickSort`. -/
 lemma QuickSort_erasure
     {M} [Monad M] [LawfulMonad M] [RandMonad M]
     (L : List ℕ) :
@@ -487,6 +498,8 @@ lemma expected_qs_cost_nonneg (n : ℕ) :
 The expected cost of the deterministic branch
 `qs_branch M L i` (when `M = TimeMT ℕ M'`) is the tick cost
 plus the expected costs of the two recursive calls.
+
+Uses the `𝔼_runtime[·]` notation for readability.
 -/
 
 /-- The expected cost of `qs_branch` in `TimeMT` is
@@ -499,16 +512,10 @@ private lemma expected_cost_qs_branch
     let rest := L.eraseIdx i
     let L1 := rest.filter (· < pivot)
     let L2 := rest.filter (· ≥ pivot)
-    expected_cost
-      (inst.toPMF
-        (@qs_branch (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L i).run) =
+    𝔼_runtime[@qs_branch (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L i] =
     (rest.length : ENNReal) +
-      expected_cost
-        (inst.toPMF
-          (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L1).run) +
-      expected_cost
-        (inst.toPMF
-          (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L2).run) := by
+      𝔼_runtime[@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L1] +
+      𝔼_runtime[@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L2] := by
   intro pivot rest L1 L2
   -- Step 1: peel off the tick
   show expected_cost (inst.toPMF
@@ -546,14 +553,10 @@ private lemma expected_cost_qs_branch
 lemma expected_cost_quicksort_nil
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] :
-    expected_cost
-      (inst.toPMF
-        (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT ([] : List ℕ)).run) = 0 := by
-
+    𝔼_runtime[@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT ([] : List ℕ)] = 0 := by
   rw [@QuickSort.eq_1 (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT]
-  simp only [TimeMT.run_pure, inst.toPMF_pure]
-  change expected_cost
-    (PMF.pure ⟨[], 0⟩) = 0
+  simp only [TimedPMF, TimeMT.run_pure, inst.toPMF_pure]
+  change expected_cost (PMF.pure ⟨[], 0⟩) = 0
   simp [expected_cost_pure_val]
 
 /-!
@@ -570,9 +573,7 @@ lemma expected_cost_quicksort_step
     [inst : LawfulRandMonad M]
     (head : ℕ) (tail : List ℕ) :
     let L := head :: tail
-    expected_cost
-      (inst.toPMF
-        (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L).run) =
+    𝔼_runtime[@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L] =
     (L.length : ENNReal)⁻¹ *
       ∑ i : Fin L.length,
         let pivot := L[i]
@@ -580,18 +581,17 @@ lemma expected_cost_quicksort_step
         let L1 := rest.filter (· < pivot)
         let L2 := rest.filter (· ≥ pivot)
         ((rest.length : ENNReal) +
-          expected_cost
-            (inst.toPMF
-              (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L1).run) +
-          expected_cost
-            (inst.toPMF
-              (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L2).run)) := by
+          𝔼_runtime[@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L1] +
+          𝔼_runtime[@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L2]) := by
   intro L
   -- Step 1: decompose as lift(randIdx) >>= qs_branch
   conv_lhs =>
     rw [show L = head :: tail from rfl]
   rw [quicksort_timed_eq_bind head tail]
   -- Step 2: apply lift-bind to separate randomness
+  show expected_cost (inst.toPMF (TimeMT.lift (randIdx (head :: tail) : M _) >>=
+    fun idx => @qs_branch (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT
+      (head :: tail) idx).run) = _
   rw [expected_cost_toPMF_lift_bind]
   rw [inst.toPMF_randIdx]
   -- Step 3: convert tsum to finsum, factor out 1/n
@@ -607,10 +607,113 @@ lemma expected_cost_quicksort_step
 
 /-!
 ### Partition size lemma for distinct lists
+
+When the list `L` has no duplicates, the rank function
+`i ↦ |{j ≠ i : L[j] < L[i]}|` is a bijection on `Fin L.length`.
+This lets us reindex any sum over pivot choices by rank.
+
+The proof uses `Finset.sum_equiv` with an equivalence constructed
+from the injective rank function on a finite type.
 -/
 
-open Finset in
-/-- Reindexing partition sizes by rank for nodup lists. -/
+/-- The rank of element `i` in a nodup list: number of elements
+strictly less than `L[i]`, excluding position `i`. -/
+private noncomputable def rank (L : List ℕ) (i : Fin L.length) : Fin L.length :=
+  ⟨((Finset.univ.erase i).filter (fun j => L[j] < L[i])).card,
+   by
+    calc ((Finset.univ.erase i).filter (fun j => L[j] < L[i])).card
+        ≤ (Finset.univ.erase i).card := Finset.card_filter_le _ _
+      _ = L.length - 1 := by simp [Finset.card_erase_of_mem]
+      _ < L.length := Nat.sub_lt (Fin.pos i) Nat.one_pos⟩
+
+/-- The rank function equals the filter-length on the erased list. -/
+private lemma rank_eq_filter_length (L : List ℕ) (hnd : L.Nodup) (i : Fin L.length) :
+    ((L.eraseIdx i).filter (· < L[i])).length = (rank L i).val := by
+  unfold rank
+  have h_filter_eq :
+    List.toFinset
+      (List.filter (fun x => x < L[i])
+        (L.eraseIdx i)) =
+    Finset.image (fun x => L[x])
+      (Finset.filter (fun x => L[x] < L[i])
+        (Finset.univ.erase i)) := by
+    ext; simp [Finset.mem_image]
+    constructor
+    · intro h
+      obtain ⟨k, hk⟩ :=
+        List.mem_iff_get.mp h.1
+      use ⟨if k.val < i.val then k.val
+           else k.val + 1, by grind⟩
+      generalize_proofs at *; grind
+    · rintro ⟨j, ⟨hj₁, hj₂⟩, rfl⟩
+      rw [List.mem_iff_get]
+      simp_all +decide [Fin.ext_iff]
+      use ⟨if j.val < i.val then j.val
+           else j.val - 1, by grind⟩
+      generalize_proofs at *; grind
+  rw [← List.toFinset_card_of_nodup]
+  · rw [h_filter_eq,
+      Finset.card_image_of_injective _
+        (fun x y hxy => by
+          simpa [Fin.ext_iff] using
+            List.nodup_iff_injective_get.mp
+              hnd hxy)]
+  · exact List.Nodup.filter _
+      (hnd.eraseIdx _)
+
+/-- The complement rank equals `L.length - 1 - rank`. -/
+private lemma complement_rank_eq (L : List ℕ) (hnd : L.Nodup) (i : Fin L.length) :
+    ((L.eraseIdx i).filter (· ≥ L[i])).length =
+      L.length - 1 - (rank L i).val := by
+  have h_split :
+    ((L.eraseIdx i).filter (· ≥ L[i])).length +
+      ((L.eraseIdx i).filter (· < L[i])).length =
+      L.length - 1 := by
+    have : ∀ l : List ℕ,
+        (l.filter (· ≥ L[i])).length +
+          (l.filter (· < L[i])).length =
+          l.length := by
+      intro l; induction l
+        <;> simp +decide [*]; grind
+    convert this (L.eraseIdx i) using 1
+    simp +decide [List.length_eraseIdx]
+  exact eq_tsub_of_add_eq
+    (by linarith [rank_eq_filter_length L hnd i])
+
+/-- The rank function is injective on nodup lists. -/
+private lemma rank_injective (L : List ℕ) (hnd : L.Nodup) :
+    Function.Injective (rank L) := by
+  intro i j hij
+  by_cases h1 : L[i] < L[j]
+  · -- L[i] < L[j]: rank i ⊂ rank j, contradiction
+    have h_subset : Finset.filter (fun x => L[x] < L[i]) (Finset.univ.erase i) ⊂
+        Finset.filter (fun x => L[x] < L[j]) (Finset.univ.erase j) := by
+      constructor
+      · grind
+      · simp_all +decide [Finset.subset_iff]
+        exact ⟨i, by aesop⟩
+    have := Finset.card_lt_card h_subset
+    simp_all +decide [rank]
+  · by_cases h2 : L[j] < L[i]
+    · -- L[j] < L[i]: rank j ⊂ rank i, contradiction
+      have h_subset : Finset.filter (fun x => L[x] < L[i]) (Finset.univ.erase i) ⊇
+          Finset.image id (Finset.filter (fun x => L[x] < L[j]) (Finset.univ.erase j)) ∪ {j} := by
+        grind
+      have := Finset.card_mono h_subset
+      simp_all +decide
+      simp [rank, Fin.ext_iff] at hij; omega
+    · -- L[i] = L[j]: use nodup injectivity
+      exact List.nodup_iff_injective_get.mp hnd <|
+        le_antisymm (le_of_not_gt h2) (le_of_not_gt h1)
+
+/-- The rank function as an equivalence on `Fin L.length` for nodup lists. -/
+private noncomputable def rankEquiv (L : List ℕ) (hnd : L.Nodup) : Fin L.length ≃ Fin L.length :=
+  Equiv.ofBijective (rank L) (Finite.injective_iff_bijective.mp (rank_injective L hnd))
+
+/-- Reindexing partition sizes by rank for nodup lists.
+
+Uses `Finset.sum_equiv` with the rank equivalence for a clean
+bijective reindexing. -/
 lemma nodup_partition_sum
     (L : List ℕ) (hnd : L.Nodup) (f : ℕ → ℚ) :
     (∑ i : Fin L.length,
@@ -621,136 +724,16 @@ lemma nodup_partition_sum
     ∑ k : Fin L.length,
       (f k.val +
         f (L.length - 1 - k.val)) := by
-  -- Step 1: rank(i) = |{j ≠ i | L[j] < L[i]}|
-  have h_rank : ∀ i : Fin L.length,
-      ((L.eraseIdx i).filter
-        (· < L[i])).length =
-        (Finset.filter (fun x => L[x] < L[i])
-          (Finset.univ.erase i)).card := by
-    intro i
-    have h_filter_eq :
-      List.toFinset
-        (List.filter (fun x => x < L[i])
-          (L.eraseIdx i)) =
-      Finset.image (fun x => L[x])
-        (Finset.filter (fun x => L[x] < L[i])
-          (Finset.univ.erase i)) := by
-      ext; simp [Finset.mem_image]
-      constructor
-      · intro h
-        obtain ⟨k, hk⟩ :=
-          List.mem_iff_get.mp h.1
-        use ⟨if k.val < i.val then k.val
-             else k.val + 1, by grind⟩
-        generalize_proofs at *; grind
-      · rintro ⟨j, ⟨hj₁, hj₂⟩, rfl⟩
-        rw [List.mem_iff_get]
-        simp_all +decide [Fin.ext_iff]
-        use ⟨if j.val < i.val then j.val
-             else j.val - 1, by grind⟩
-        generalize_proofs at *; grind
-    rw [← List.toFinset_card_of_nodup]
-    · rw [h_filter_eq,
-        Finset.card_image_of_injective _
-          (fun x y hxy => by
-            simpa [Fin.ext_iff] using
-              List.nodup_iff_injective_get.mp
-                hnd hxy)]
-    · exact List.Nodup.filter _
-        (hnd.eraseIdx _)
-  -- Step 2: complement rank
-  have h_complement_rank :
-      ∀ i : Fin L.length,
-      ((L.eraseIdx i).filter
-        (· ≥ L[i])).length =
-        L.length - 1 -
-          (Finset.filter
-            (fun x => L[x] < L[i])
-            (Finset.univ.erase i)).card := by
-    intro i
-    have h_split :
-      ((L.eraseIdx i).filter
-        (· ≥ L[i])).length +
-        ((L.eraseIdx i).filter
-          (· < L[i])).length =
-        L.length - 1 := by
-      have : ∀ l : List ℕ,
-          (l.filter (· ≥ L[i])).length +
-            (l.filter (· < L[i])).length =
-            l.length := by
-        intro l; induction l
-          <;> simp +decide [*]; grind
-      convert this (L.eraseIdx i) using 1
-      simp +decide [List.length_eraseIdx]
-    exact eq_tsub_of_add_eq
-      (by linarith [h_rank i])
-  -- Step 3: rank is a bijection, so reindex
-  have h_bijection :
-    Finset.image
-      (fun i : Fin L.length =>
-        (Finset.filter (fun x => L[x] < L[i])
-          (Finset.univ.erase i)).card)
-      (Finset.univ : Finset (Fin L.length)) =
-    Finset.range L.length := by
-    refine Finset.eq_of_subset_of_card_le
-      (Finset.image_subset_iff.mpr ?_) ?_
-      <;> simp_all +decide
-    · grind
-    · rw [Finset.card_image_of_injective]
-        <;> norm_num [Function.Injective]
-      intro i j h; contrapose! h
-      simp_all +decide [Finset.filter_erase]
-      cases lt_or_gt_of_ne
-        (show L[i] ≠ L[j] from fun h' =>
-          h <| Fin.ext <| by
-            have :=
-              List.nodup_iff_injective_get.mp
-                hnd h'
-            aesop) <;> simp_all +decide
-      · refine ne_of_lt
-          (Finset.card_lt_card ?_)
-        simp_all +decide
-          [Finset.ssubset_def,
-           Finset.subset_iff]
-        exact ⟨fun x hx =>
-          lt_trans hx ‹_›,
-          i, ‹_›, le_rfl⟩
-      · refine ne_of_gt
-          (Finset.card_lt_card ?_)
-        simp_all +decide
-          [Finset.ssubset_def,
-           Finset.subset_iff]
-        exact ⟨fun x hx =>
-          lt_trans hx ‹_›,
-          j, ‹_›, le_rfl⟩
-  have h_reindex :
-    ∑ i : Fin L.length,
-      (f ((Finset.filter
-            (fun x => L[x] < L[i])
-            (Finset.univ.erase i)).card) +
-       f (L.length - 1 -
-            (Finset.filter
-              (fun x => L[x] < L[i])
-              (Finset.univ.erase i)).card)) =
-    ∑ k ∈ Finset.range L.length,
-      (f k + f (L.length - 1 - k)) := by
-    rw [← h_bijection, Finset.sum_image]
-    intro i hi j hj hij
-    have := Finset.card_image_iff.mp
-      (by aesop :
-        Finset.card
-          (Finset.image
-            (fun i : Fin L.length =>
-              # (Finset.filter
-                (fun x : Fin L.length =>
-                  L[x] < L[i])
-                (Finset.erase
-                  Finset.univ i)))
-            Finset.univ) =
-          Finset.card Finset.univ)
-    aesop
-  simp_all +decide only [Fin.getElem_fin,
-  ge_iff_le, sum_range]
+  -- Rewrite LHS summand in terms of rank, then reindex
+  have h_eq : ∀ i : Fin L.length,
+      f ((L.eraseIdx i).filter (· < L[i])).length +
+       f ((L.eraseIdx i).filter (· ≥ L[i])).length =
+      f (rank L i).val + f (L.length - 1 - (rank L i).val) := by
+    intro i; rw [rank_eq_filter_length L hnd i, complement_rank_eq L hnd i]
+  simp_rw [h_eq]
+  exact Finset.sum_equiv (rankEquiv L hnd)
+    (fun _ => by simp)
+    (fun _ _ => rfl)
 
 /-!
 ### Finiteness of expected cost
@@ -759,9 +742,7 @@ lemma nodup_partition_sum
 lemma expected_cost_quicksort_ne_top
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] (L : List ℕ) :
-    expected_cost
-      (inst.toPMF
-        (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L).run) ≠ ⊤ := by
+    𝔼_runtime[@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L] ≠ ⊤ := by
   induction' n : L.length
     using Nat.strong_induction_on
     with n ih generalizing L
@@ -789,9 +770,7 @@ theorem Expected_Complexity_Quicksort
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) :
-    (expected_cost
-      (inst.toPMF
-        (@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L).run)).toReal =
+    (𝔼_runtime[@QuickSort (TimeMT ℕ M) _ instRandMonadTimeMT instMonadCostTimeMT L]).toReal =
     (expected_qs_cost L.length : ℚ) := by
   induction' n : L.length
     using Nat.strong_induction_on
