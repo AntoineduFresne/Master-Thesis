@@ -1,3 +1,8 @@
+/-
+Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Antoine du Fresne von Hohenesche
+-/
 import Mathlib.Probability.ProbabilityMassFunction.Basic
 import Mathlib.Probability.ProbabilityMassFunction.Monad
 import Mathlib.Probability.ProbabilityMassFunction.Constructions
@@ -7,14 +12,15 @@ import Mathlib.Data.Fintype.Basic
 import Mathlib.Data.Fin.Basic
 import Mathlib.Tactic
 
-/-
-  Framework for analysis of randomized algorithm.
-  ARA = "Analysis of Randomized Algorithms"
-  Author: Antoine du Fresne von Hohenesche
-  Date: March 2026
--/
-
 /-!
+# ARA — Analysis of Randomized Algorithms
+
+A framework for analyzing randomized algorithms in Lean 4, designed so
+that one algorithm definition serves both as an executable program and
+as the object of formal correctness and complexity proofs.
+
+## Design
+
 We use a shallow embedding setting "Giry Monad":
 
 We utilize the `PMF` type (Probability Mass Function) which

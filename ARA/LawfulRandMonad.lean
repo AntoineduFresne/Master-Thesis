@@ -1,3 +1,8 @@
+/-
+Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Antoine du Fresne von Hohenesche
+-/
 import ARA.Tactics
 
 /-!
@@ -26,7 +31,7 @@ for lists are provided as convenience functions.
 namespace ARA
 
 /-!
-### `RandMonad`: primitive entropy source
+### `RandMonad`: primitive "entropy" source
 -/
 
 /-- A monad with access to uniform random generation over `Fin n`.
