@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.ExpectedCost
+import Mathlib.NumberTheory.Harmonic.Defs
 
 /-!
 # QuickSort
@@ -406,17 +407,13 @@ lemma Correctness_QuickSort_Timed_PMF :
 -- ----------------------------------------
 
 /-!
-### Closed-form cost function using `Finset.sum`
+### Closed-form cost function
 
-The expected cost formula uses `Finset.sum` for the harmonic
-number, following Mathlib idioms. This provides direct access
-to Mathlib's summation lemmas for future asymptotic analysis.
+We reuse Mathlib's harmonic number
+`harmonic n = ∑ i ∈ Finset.range n, (↑(i + 1))⁻¹`
+(`Mathlib.NumberTheory.Harmonic.Defs`) together with its `@[simp]` lemmas
+`harmonic_zero` and `harmonic_succ`, rather than redefining it here.
 -/
-
-/-- The `n`-th harmonic number `H(n) = Σ_{k=1}^{n} 1/k`,
-expressed using `Finset.sum`. -/
-def harmonic (n : ℕ) : ℚ :=
-  ∑ i ∈ Finset.range n, (1 : ℚ) / (i + 1)
 
 /-- The exact expected number of comparisons for
 QuickSort on a list of `n` distinct elements:
@@ -431,11 +428,6 @@ def expected_qs_cost (n : ℕ) : ℚ :=
 @[simp] lemma expected_qs_cost_one :
     expected_qs_cost 1 = 0 := by
   simp [expected_qs_cost, harmonic]; norm_num
-
-/-- Harmonic step: `H(n+1) = H(n) + 1/(n+1)`. -/
-lemma harmonic_succ (n : ℕ) :
-    harmonic (n + 1) = harmonic n + 1 / ((n : ℚ) + 1) := by
-  simp [harmonic, Finset.sum_range_succ]
 
 /-- Helper: extracts the summation into a closed form. -/
 lemma expected_qs_sum_helper (n : ℕ) :

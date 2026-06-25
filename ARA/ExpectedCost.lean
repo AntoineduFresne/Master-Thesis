@@ -158,17 +158,8 @@ lemma expected_cost_toPMF_bind
       (inst.toPMF m.run) >>= fun tm1 =>
         (inst.toPMF (f tm1.ret).run) >>= fun tm2 =>
           PMF.pure ⟨tm2.ret, tm1.time + tm2.time⟩ := by
-    convert inst.toPMF_bind _ _ using 1
-    congr! 1; ext ⟨a, t1⟩; simp +decide
-    convert inst.toPMF_map _ _ using 1
-    any_goals exact (f a).run
-    rotate_left; exact TimeM ℕ β
-    exact fun tm => ⟨tm.ret, t1 + tm.time⟩
-    constructor <;> intro h
-      <;> simp_all +decide [PMF.ext_iff]
-    · grind +suggestions
-    · convert h _ using 1
-      convert h _ |> Eq.symm using 1
+    simp only [TimeMT.run_bind, inst.toPMF_bind, inst.toPMF_pure]
+    rfl
   convert expected_cost_bind (inst.toPMF m.run)
     (fun tm1 =>
       (inst.toPMF (f tm1.ret).run) >>= fun tm2 =>
@@ -191,12 +182,8 @@ lemma expected_cost_toPMF_bind
     {α : Type} (a : α) :
     expected_cost
       (inst.toPMF (pure a : TimeMT ℕ M α).run) = 0 := by
-  convert inst.toPMF_pure a
-  constructor <;> intro h <;> simp_all +decide
-  · exact inst.toPMF_pure a
-  · convert expected_cost_pure_val a 0
-    · convert inst.toPMF_pure _
-    · norm_num
+  rw [TimeMT.run_pure, inst.toPMF_pure]
+  exact expected_cost_pure_zero a
 
 /-- When the first computation is a `lift m` (zero cost),
 the expected cost of the bind is the weighted sum over the
