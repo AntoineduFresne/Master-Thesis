@@ -32,6 +32,10 @@ serves as:
 * `Expected_Complexity_Quicksort` — Quantifies the exact expected
   cost over any `LawfulRandMonad`: sorting a list of `n` distinct
   elements requires exactly `2(n+1)H(n) - 4n` comparisons.
+* `Quicksort_Cost_Upper_Bound` — For arbitrary lists (possibly with
+  duplicates), bounds the expected cost by `C(n,2)`, tight on
+  all-equal inputs. Its `ℝ≥0∞` core also supplies the finiteness
+  fact needed by the exact-formula proof.
 
 ## Notation
 
@@ -128,7 +132,7 @@ partition-and-recurse step at a given pivot index.
 -/
 
 /-- Branch: partition around pivot `L[i]` and
-recurse with `QuickSort`. Used for both correctness
+recurse with `Quicksort`. Used for both correctness
 and complexity proofs. -/
 private noncomputable abbrev qs_branch
     (M : Type → Type) [Monad M] [RandMonad M] [MonadCost ℕ M]
@@ -277,17 +281,6 @@ lemma Correctness_Quicksort_PMF :
 
 /-! ### TimeMT erasure for the unified Quicksort -/
 
-omit [LinearOrder α] in
-@[simp]
-lemma TimeMT_randIdx_run
-    {M} [Monad M] [RandMonad M]
-    (L : List α) (h : 0 < L.length) :
-    (randIdx L h :
-      TimeMT ℕ M (Fin L.length)).run =
-    (TimeMT.lift
-      (randIdx L h :
-        M (Fin L.length))).run := rfl
-
 /-- Erasing time from the timed Quicksort gives the untimed Quicksort.
 This follows from the unified definition: the `MonadCost.tick` in
 `TimeMT` erases to `pure ()`, matching the no-op `MonadCost` instance.
@@ -339,7 +332,7 @@ We reuse Mathlib's harmonic number
 -/
 
 /-- The exact expected number of comparisons for
-QuickSort on a list of `n` distinct elements:
+Quicksort on a list of `n` distinct elements:
 `2(n+1)H(n) − 4n`. -/
 def expected_qs_cost (n : ℕ) : ℚ :=
   2 * (n + 1) * harmonic n - 4 * n
@@ -367,7 +360,7 @@ lemma expected_qs_sum_helper (n : ℕ) :
     have h_nz : (n : ℚ) + 1 ≠ 0 := by positivity
     field_simp; ring
 
-/-- The QuickSort recurrence:
+/-- The Quicksort recurrence:
 `C(n+1) = n + (2/(n+1)) ∑_{i<n+1} C(i)`. -/
 lemma expected_qs_recurrence (n : ℕ) :
     (n : ℚ) +
@@ -518,109 +511,6 @@ lemma expected_cost_quicksort_step
   exact expected_cost_qs_branch L i
 
 /-!
-### Finiteness of expected cost
-
-(The rank-reindexing lemma `nodup_partition_sum` used below is
-provided by `ARA.Algorithms.Partition`.)
--/
-
-lemma expected_cost_quicksort_ne_top
-    {M} [Monad M] [LawfulMonad M]
-    [inst : LawfulRandMonad M] (L : List α) :
-    𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≠ ⊤ := by
-  induction' n : L.length
-    using Nat.strong_induction_on
-    with n ih generalizing L
-  rcases L with (_ | ⟨head, tail⟩)
-  -- Base case: empty list
-  · simp [expected_cost_quicksort_nil]
-  -- Inductive case: use step decomposition
-  · rw [expected_cost_quicksort_step]
-    simp_all +decide
-    rw [ENNReal.mul_eq_top]; norm_num
-    grind +revert
-
-/-!
-### The main theorem
-
-**Note**: The formula `2(n+1)H(n) − 4n` requires
-`L.Nodup` (distinct elements). For lists with duplicates,
-the expected cost differs.
--/
-
-/-- The expected cost of `Quicksort` (in timed mode) on a list of
-`n` distinct elements is exactly `2(n+1)H(n) − 4n`
-comparisons. -/
-theorem Expected_Complexity_Quicksort
-    {M} [Monad M] [LawfulMonad M]
-    [inst : LawfulRandMonad M]
-    (L : List α) (hnd : L.Nodup) :
-    𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] =
-    (expected_qs_cost L.length : ℚ) := by
-  induction' n : L.length
-    using Nat.strong_induction_on
-    with n ih generalizing L
-  cases' L with head tail
-    <;> simp_all +decide
-      [expected_cost_quicksort_step]
-  · subst n
-    norm_num [expected_cost_quicksort_nil]
-  · rw [ENNReal.toReal_sum]
-    · rw [Finset.sum_congr rfl fun i hi => ?_]
-      rotate_left
-      use fun i =>
-        (tail.length : ℝ) +
-          expected_qs_cost
-            ((List.filter
-              (fun x =>
-                decide (x < (head :: tail)[i]))
-              (List.eraseIdx
-                (head :: tail) i)).length) +
-          expected_qs_cost
-            ((List.filter
-              (fun x =>
-                decide
-                  ((head :: tail)[i] ≤ x))
-              (List.eraseIdx
-                (head :: tail) i)).length)
-      · rw [ENNReal.toReal_add,
-          ENNReal.toReal_add]
-          <;> norm_num
-            [expected_cost_quicksort_ne_top]
-        grind
-      · have := nodup_partition_sum
-          (head :: tail)
-          (by aesop)
-          (fun k => expected_qs_cost k)
-        simp_all +decide
-          [Finset.sum_add_distrib]
-        have := expected_qs_recurrence
-          (List.length tail)
-        simp_all +decide
-          [Finset.sum_range, Nat.sub_sub]
-        rw [← this]; norm_cast
-        simp_all +decide [add_assoc]
-        ring_nf
-        rw [← n]
-        norm_num [Nat.succ_eq_add_one,
-          add_comm, add_left_comm, add_assoc]
-        ring_nf; field_simp
-        rw [mul_two,
-          ← Finset.sum_bij
-            (fun x _ => Fin.rev x)]
-        · norm_num [add_comm,
-            add_left_comm, add_assoc]
-          ring
-        · exact fun _ _ => Finset.mem_univ _
-        · aesop
-        · exact fun x _ =>
-            ⟨Fin.rev x, Finset.mem_univ _,
-              Fin.rev_rev x⟩
-        · grind
-    · simp +decide [ENNReal.add_eq_top]
-      grind +suggestions
-
-/-!
 ## Complexity for general (possibly non-distinct) lists
 
 The closed-form `2(n+1)H(n) − 4n` requires `L.Nodup` because duplicates
@@ -654,26 +544,20 @@ private lemma choose_two_add_le (a b : ℕ) :
     rw [hb, hab]; omega
 
 set_option maxHeartbeats 400000 in
-/-- For an arbitrary list (possibly with duplicates), the expected cost
-of `Quicksort` is bounded by `L.length.choose 2`. This bound is tight on
-the all-equal list `[a, a, …, a]`.
+/-- **`ℝ≥0∞` core of the upper bound.** For an arbitrary list (possibly with
+duplicates), the expected cost of `Quicksort` is bounded by
+`L.length.choose 2`. This bound is tight on the all-equal list `[a, a, …, a]`.
 
 The proof is by strong induction on `L.length`. The inductive step uses
 `expected_cost_quicksort_step` to expand into a uniform average over
 pivot choices, the IH to bound each recursive call, and `choose_two_add_le`
 to combine the two subproblem bounds. -/
-theorem Quicksort_Cost_Upper_Bound
+theorem Quicksort_Cost_Upper_Bound_ennreal
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
-    𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] ≤ L.length.choose 2 := by
-  -- Step 1: reduce to an inequality in `ENNReal`.
-  suffices h : 𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≤
-      ((L.length.choose 2 : ℕ) : ENNReal) by
-    have hne : ((L.length.choose 2 : ℕ) : ENNReal) ≠ ⊤ :=
-      ENNReal.natCast_ne_top _
-    have := ENNReal.toReal_mono hne h
-    simpa using this
-  -- Step 2: strong induction on `L.length`.
+    𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≤
+      ((L.length.choose 2 : ℕ) : ENNReal) := by
+  -- Strong induction on `L.length`, universally over lists of that length.
   suffices h_strong : ∀ n (L : List α), L.length = n →
       𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≤ ((n.choose 2 : ℕ) : ENNReal) by
     exact h_strong L.length L rfl
@@ -768,12 +652,113 @@ theorem Quicksort_Cost_Upper_Bound
         refine le_trans (Finset.sum_le_sum fun i _ => h_summand i) (le_of_eq ?_)
         rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
           nsmul_eq_mul]
-      -- Multiply both sides by `(L.length)⁻¹` and cancel.
-      have hne_zero : ((head :: tail).length : ENNReal) ≠ 0 := by
-        simp
-      have hne_top : ((head :: tail).length : ENNReal) ≠ ⊤ :=
-        ENNReal.natCast_ne_top _
-      refine le_trans (mul_le_mul' le_rfl h_sum_le) ?_
-      rw [← mul_assoc, ENNReal.inv_mul_cancel hne_zero hne_top, one_mul]
+      -- Average the `n` equal bounds: `n⁻¹ * (n * c) ≤ c`.
+      exact uniform_avg_le (by simp) h_sum_le
+
+/-- For an arbitrary list (possibly with duplicates), the expected cost of
+`Quicksort` is at most `C(n,2)` comparisons. Real-valued corollary of
+`Quicksort_Cost_Upper_Bound_ennreal`. -/
+theorem Quicksort_Cost_Upper_Bound
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    (L : List α) :
+    𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] ≤ L.length.choose 2 := by
+  have := ENNReal.toReal_mono (ENNReal.natCast_ne_top _)
+    (Quicksort_Cost_Upper_Bound_ennreal (M := M) L)
+  simpa using this
+
+/-!
+### Finiteness of expected cost
+
+Finiteness is a free corollary of the `C(n,2)` upper bound — no
+separate induction is needed. It feeds the `toReal` steps of the
+exact-formula theorem below.
+-/
+
+lemma expected_cost_quicksort_ne_top
+    {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M] (L : List α) :
+    𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≠ ⊤ :=
+  ne_top_of_le_ne_top (ENNReal.natCast_ne_top _)
+    (Quicksort_Cost_Upper_Bound_ennreal L)
+
+/-!
+### The main theorem
+
+**Note**: The formula `2(n+1)H(n) − 4n` requires
+`L.Nodup` (distinct elements). For lists with duplicates,
+the expected cost differs.
+-/
+
+/-- The expected cost of `Quicksort` (in timed mode) on a list of
+`n` distinct elements is exactly `2(n+1)H(n) − 4n`
+comparisons. -/
+theorem Expected_Complexity_Quicksort
+    {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M]
+    (L : List α) (hnd : L.Nodup) :
+    𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] =
+    (expected_qs_cost L.length : ℚ) := by
+  induction' n : L.length
+    using Nat.strong_induction_on
+    with n ih generalizing L
+  cases' L with head tail
+    <;> simp_all +decide
+      [expected_cost_quicksort_step]
+  · subst n
+    norm_num [expected_cost_quicksort_nil]
+  · rw [ENNReal.toReal_sum]
+    · rw [Finset.sum_congr rfl fun i hi => ?_]
+      rotate_left
+      use fun i =>
+        (tail.length : ℝ) +
+          expected_qs_cost
+            ((List.filter
+              (fun x =>
+                decide (x < (head :: tail)[i]))
+              (List.eraseIdx
+                (head :: tail) i)).length) +
+          expected_qs_cost
+            ((List.filter
+              (fun x =>
+                decide
+                  ((head :: tail)[i] ≤ x))
+              (List.eraseIdx
+                (head :: tail) i)).length)
+      · rw [ENNReal.toReal_add,
+          ENNReal.toReal_add]
+          <;> norm_num
+            [expected_cost_quicksort_ne_top]
+        grind
+      · have := nodup_partition_sum
+          (head :: tail)
+          (by aesop)
+          (fun k => expected_qs_cost k)
+        simp_all +decide
+          [Finset.sum_add_distrib]
+        have := expected_qs_recurrence
+          (List.length tail)
+        simp_all +decide
+          [Finset.sum_range, Nat.sub_sub]
+        rw [← this]; norm_cast
+        simp_all +decide [add_assoc]
+        ring_nf
+        rw [← n]
+        norm_num [Nat.succ_eq_add_one,
+          add_comm, add_left_comm, add_assoc]
+        ring_nf; field_simp
+        rw [mul_two,
+          ← Finset.sum_bij
+            (fun x _ => Fin.rev x)]
+        · norm_num [add_comm,
+            add_left_comm, add_assoc]
+          ring
+        · exact fun _ _ => Finset.mem_univ _
+        · aesop
+        · exact fun x _ =>
+            ⟨Fin.rev x, Finset.mem_univ _,
+              Fin.rev_rev x⟩
+        · grind
+    · simp +decide [ENNReal.add_eq_top]
+      grind +suggestions
 
 end ARA

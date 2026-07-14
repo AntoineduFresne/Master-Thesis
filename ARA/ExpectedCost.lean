@@ -43,6 +43,14 @@ instance instRandMonadTimeMT {M} [Monad M] [RandMonad M] :
     RandMonad (TimeMT ℕ M) where
   randFin n := TimeMT.lift (RandMonad.randFin n)
 
+/-- In `TimeMT`, `randIdx` is a lifted `randIdx` of the base monad.
+Exposes the `TimeMT.lift` for erasure/bridge lemma application. -/
+@[simp] lemma TimeMT_randIdx_run
+    {M} [Monad M] [RandMonad M] {α : Type*}
+    (L : List α) (h : 0 < L.length) :
+    (randIdx L h : TimeMT ℕ M (Fin L.length)).run =
+    (TimeMT.lift (randIdx L h : M (Fin L.length))).run := rfl
+
 /-!
 ## Core definition
 -/
@@ -85,6 +93,20 @@ lemma expected_cost_uniform_bind {n : ℕ} [NeZero n] {β : Type}
     (n : ENNReal)⁻¹ * ∑ i : Fin n, expected_cost (f i) := by
   rw [expected_cost_bind]
   simp +decide [Finset.mul_sum _ _ _, PMF.uniformOfFintype_apply, mul_comm]
+
+/-- Averaging bound: if a total of `n` branch costs is at most `n * c`,
+then the uniform average over the `n` branches is at most `c`.
+This is the standard closing step of a uniform-pivot cost analysis.
+
+Stated with `le_trans` in mind rather than `calc`: unifying against a
+concrete sum `S` is a cheap metavariable assignment. -/
+lemma uniform_avg_le {n : ℕ} (hn : n ≠ 0) {S c : ENNReal}
+    (h : S ≤ n * c) :
+    (n : ENNReal)⁻¹ * S ≤ c := by
+  refine le_trans (mul_le_mul' le_rfl h) ?_
+  rw [← mul_assoc,
+    ENNReal.inv_mul_cancel (Nat.cast_ne_zero.mpr hn) (ENNReal.natCast_ne_top n),
+    one_mul]
 
 /-!
 ## Bridge lemmas: `toPMF`-composed helpers
@@ -291,11 +313,11 @@ of a timed computation can be written concisely.
 ### Usage with polymorphic algorithms
 
 When the algorithm `f` is polymorphic in its monad (the typical case in
-this framework, e.g. `QuickSort`), Lean cannot infer which monad to
+this framework, e.g. `Quicksort`), Lean cannot infer which monad to
 instantiate from context. Use a type ascription:
 
 ```
-𝔼ℝ_runtime[(QuickSort L : TimeMT ℕ M _)] = expected_qs_cost L.length
+𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] = expected_qs_cost L.length
 ```
 
 The instances `instRandMonadTimeMT` and `instMonadCostTimeMT` are picked

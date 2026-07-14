@@ -149,6 +149,30 @@ lemma perm_filter_partition
     ((Perm.cons _ hf).trans
       (perm_getElem_cons_eraseIdx L i).symm)
 
+/-- The sorted list splits around any pivot as
+`sorted(< pivot) ++ [pivot] ++ sorted(≥ pivot)`: two sorted
+permutations of the same list are equal. -/
+lemma mergeSort_partition (L : List α) (i : Fin L.length) :
+    L.mergeSort (· ≤ ·) =
+      ((L.eraseIdx i).filter (· < L[i])).mergeSort (· ≤ ·) ++ [L[i]] ++
+        ((L.eraseIdx i).filter (· ≥ L[i])).mergeSort (· ≤ ·) := by
+  -- Two sorted permutations of the same list are equal.
+  apply eq_of_sortedLE_perm sortedLE_mergeSort
+  · -- The concatenation is sorted: everything left of the pivot is
+    -- `< pivot`, everything right is `≥ pivot`.
+    apply sorted_concat_pivot sortedLE_mergeSort sortedLE_mergeSort
+    · intro x hx
+      rw [mem_mergeSort] at hx
+      simpa using of_mem_filter hx
+    · intro x hx
+      rw [mem_mergeSort] at hx
+      simpa using of_mem_filter hx
+  · -- Both sides are permutations of `L` (pivot + partition of the rest).
+    exact (mergeSort_perm L _).trans
+      ((perm_filter_partition L i).symm.trans
+        ((((mergeSort_perm _ _).symm.append (Perm.refl [L[i]])).append
+          (mergeSort_perm _ _).symm)))
+
 /-!
 ### Partition size lemma for distinct lists
 
@@ -290,5 +314,34 @@ lemma nodup_partition_sum
   nodup_partition_sum₂ L hnd fun a b => f a + f b
 
 end LinearOrder
+
+/-! ### Pivot-rank arithmetic -/
+
+/-- Arithmetic core of max-side recursion bounds: recursing into the
+larger side of a rank-`r` pivot costs at most `max r (n-1-r)`, and
+summed over all ranks this is at most `3n²/4` (stated multiplied out:
+`4·Σ ≤ 3n²`). Used for Quickselect's linear bound. -/
+lemma sum_max_le : ∀ n : ℕ,
+    4 * ∑ r ∈ Finset.range n, max r (n - 1 - r) ≤ 3 * n ^ 2
+  | 0 => by simp
+  | 1 => by simp
+  | (m + 2) => by
+      -- Peel the first and last summands: each contributes `m + 1`, and
+      -- the middle re-indexes to the `m`-sum shifted by one.
+      have hrec : ∑ r ∈ Finset.range (m + 2), max r (m + 1 - r) =
+          (∑ r ∈ Finset.range m, max r (m - 1 - r)) + (3 * m + 2) := by
+        rw [Finset.sum_range_succ, Finset.sum_range_succ']
+        have h1 : ∀ r ∈ Finset.range m,
+            max (r + 1) (m + 1 - (r + 1)) = max r (m - 1 - r) + 1 := by
+          intro r hr
+          have := Finset.mem_range.mp hr
+          omega
+        rw [Finset.sum_congr rfl h1, Finset.sum_add_distrib]
+        simp only [Finset.sum_const, Finset.card_range, smul_eq_mul, mul_one]
+        omega
+      have ih := sum_max_le m
+      have hsq : (m + 2) ^ 2 = m ^ 2 + 4 * m + 4 := by ring
+      show 4 * ∑ r ∈ Finset.range (m + 2), max r (m + 1 - r) ≤ 3 * (m + 2) ^ 2
+      omega
 
 end ARA
