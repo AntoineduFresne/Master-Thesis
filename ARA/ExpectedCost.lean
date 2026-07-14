@@ -37,6 +37,12 @@ namespace ARA
 open Cslib.Algorithms.Lean
 open ENNReal
 
+/-- RandMonad lifts through `TimeMT` via `monadLift`, so any
+randomized algorithm can be run in timed mode. -/
+instance instRandMonadTimeMT {M} [Monad M] [RandMonad M] :
+    RandMonad (TimeMT ℕ M) where
+  randFin n := TimeMT.lift (RandMonad.randFin n)
+
 /-!
 ## Core definition
 -/

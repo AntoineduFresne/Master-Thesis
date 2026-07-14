@@ -78,7 +78,7 @@ class LawfulRandMonad
 /-- Derived: `toPMF` maps `randIdx` to the uniform distribution. -/
 lemma LawfulRandMonad.toPMF_randIdx
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    (L : List ℕ) (hne : 0 < L.length) :
+    {α : Type*} (L : List α) (hne : 0 < L.length) :
     inst.toPMF (randIdx L hne) =
       (have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
        PMF.uniformOfFintype (Fin L.length)) := by
@@ -96,8 +96,14 @@ lemma LawfulRandMonad.toPMF_map
   simp [LawfulRandMonad.toPMF_pure, map_eq_bind_pure_comp]
 
 /-!
-### Canonical instance: `PMF` itself
+### Canonical instances
 -/
+
+/-- `IO` has real computable (pseudo-)randomness. -/
+instance : RandMonad IO where
+  randFin n := do
+    let i ← IO.rand 0 (n - 1)
+    return ⟨i % n, Nat.mod_lt i (Nat.pos_of_ne_zero (NeZero.ne n))⟩
 
 /-- `PMF` is trivially a `LawfulRandMonad` via the identity. -/
 noncomputable instance : RandMonad PMF where

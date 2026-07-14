@@ -4,16 +4,17 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.ExpectedCost
+import ARA.Algorithms.Partition
 import Mathlib.NumberTheory.Harmonic.Defs
 
 /-!
-# QuickSort
+# Quicksort
 
-This module implements a modular version of QuickSort.
+This module implements a modular version of Quicksort.
 
 ## Architecture
 
-A single `QuickSort` definition is parameterized by both `RandMonad`
+A single `Quicksort` definition is parameterized by both `RandMonad`
 (for pivot selection) and `MonadCost ℕ` (for cost tracking). By
 instantiating with different `MonadCost` instances, the same code
 serves as:
@@ -38,10 +39,10 @@ The expected runtime of a timed computation is written using the
 `𝔼_runtime[·]` (or `𝔼ℝ_runtime[·]` for a real value) notation defined in
 `ARA.ExpectedCost`. For example:
 
-  `𝔼ℝ_runtime[(QuickSort L : TimeMT ℕ M _)]`
+  `𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)]`
 
-reads as "the expected runtime of QuickSort on L, as a real number".
-The type ascription is needed because `QuickSort` is monad-polymorphic;
+reads as "the expected runtime of Quicksort on L, as a real number".
+The type ascription is needed because `Quicksort` is monad-polymorphic;
 the `instRandMonadTimeMT` / `instMonadCostTimeMT` instances are then
 picked up automatically.
 -/
@@ -52,6 +53,8 @@ open ARA
 open Cslib.Algorithms.Lean
 open List
 
+variable {α : Type} [LinearOrder α]
+
 /-!
 ## Algorithm definition
 
@@ -60,11 +63,11 @@ The `MonadCost.tick` call is a no-op when `M` doesn't track cost,
 and accumulates cost when `M = TimeMT ℕ M'`.
 -/
 
-/-- The main QuickSort function, polymorphic in the random monad `M`
+/-- The main Quicksort function, polymorphic in the random monad `M`
 and the cost monad `MonadCost ℕ M`. -/
-def QuickSort
+def Quicksort
     {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
-    List ℕ → M (List ℕ)
+    List α → M (List α)
   | [] => return []
   | L@(_::_) => do
       let idx ← randIdx L (by grind)
@@ -73,8 +76,8 @@ def QuickSort
       let L1 := rest.filter (· < pivot)
       let L2 := rest.filter (· ≥ pivot)
       MonadCost.tick rest.length
-      let S1 ← QuickSort L1
-      let S2 ← QuickSort L2
+      let S1 ← Quicksort L1
+      let S2 ← Quicksort L2
       return (S1 ++ [pivot] ++ S2)
   termination_by L => L.length
   decreasing_by all_goals grind
@@ -83,121 +86,39 @@ def QuickSort
 -- Different instances of "randomness"
 -- ----------------------------------------
 
--- IO: real computable (pseudo-)randomness
-instance : RandMonad IO where
-  randFin n := do
-    let i ← IO.rand 0 (n - 1)
-    return ⟨i % n, Nat.mod_lt i (Nat.pos_of_ne_zero (NeZero.ne n))⟩
+-- IO version (executable, untimed; `RandMonad IO` comes from
+-- `ARA.LawfulRandMonad`)
+def Quicksort_IO : List ℕ → IO (List ℕ) := Quicksort
 
--- IO version (executable, untimed)
-def QuickSort_IO : List ℕ → IO (List ℕ) := QuickSort
-
-#eval QuickSort_IO [8,4,1,2]
+#eval Quicksort_IO [8,4,1,2]
 
 -- PMF version (noncomputable specification)
-noncomputable def QuickSort_PMF :
-    List ℕ → PMF (List ℕ) := QuickSort
+noncomputable def Quicksort_PMF :
+    List ℕ → PMF (List ℕ) := Quicksort
 
 -- ----------------------------------------
 -- Monad transformer version (timed)
 -- ----------------------------------------
 
-/-- RandMonad lifts through `TimeMT` via `monadLift`. -/
-instance instRandMonadTimeMT {M} [Monad M] [RandMonad M] :
-    RandMonad (TimeMT ℕ M) where
-  randFin n := TimeMT.lift (RandMonad.randFin n)
+-- IO timed version (executable; `RandMonad (TimeMT ℕ M)` comes from
+-- `ARA.ExpectedCost`)
+def Quicksort_IO_Timed : List ℕ → TimeMT ℕ IO (List ℕ) := Quicksort
 
--- IO timed version (executable)
-def QuickSort_IO_Timed : List ℕ → TimeMT ℕ IO (List ℕ) := QuickSort
-
-#eval (QuickSort_IO_Timed [5, 4, 2, 1, 3, 6, 2, 1, 24, 6]).run
+#eval (Quicksort_IO_Timed [5, 4, 2, 1, 3, 6, 2, 1, 24, 6]).run
 
 -- PMF timed version (noncomputable specification)
-noncomputable def QuickSort_PMF_Timed :
-    List ℕ → TimeMT ℕ PMF (List ℕ) := QuickSort
+noncomputable def Quicksort_PMF_Timed :
+    List ℕ → TimeMT ℕ PMF (List ℕ) := Quicksort
 
 -- ----------------------------------------
 -- Generic Correctness proof
 -- ----------------------------------------
 
-/-! ### Helper lemmas -/
+/-! ### Helper lemmas
 
-/-- Two sorted ℕ-permutations are equal. -/
-lemma eq_of_sortedLE_perm
-    {l1 l2 : List ℕ}
-    (h1 : l1.SortedLE) (h2 : l2.SortedLE)
-    (hp : l1.Perm l2) : l1 = l2 :=
-  hp.eq_of_pairwise
-    (fun _ _ _ _ hab hba =>
-      Nat.le_antisymm hab hba)
-    (sortedLE_iff_pairwise.mp h1)
-    (sortedLE_iff_pairwise.mp h2)
-
-/-- Concatenation `S1 ++ [p] ++ S2` is sorted when
-`∀ x ∈ S1, x < p` and `∀ x ∈ S2, p ≤ x` and both
-sublists are sorted. -/
-lemma sorted_concat_pivot
-    {S1 S2 : List ℕ} {p : ℕ}
-    (h1 : S1.SortedLE) (h2 : S2.SortedLE)
-    (hb1 : ∀ x ∈ S1, x < p)
-    (hb2 : ∀ x ∈ S2, p ≤ x) :
-    (S1 ++ [p] ++ S2).SortedLE := by
-  rw [sortedLE_iff_pairwise]
-  apply pairwise_append.mpr
-  refine ⟨?_, sortedLE_iff_pairwise.mp h2,
-    fun x hx y hy => by grind⟩
-  rw [← sortedLE_iff_pairwise,
-    sortedLE_iff_pairwise]
-  grind
-
-/-- `eraseIdx` gives back a permutation. -/
-lemma perm_getElem_cons_eraseIdx
-    (L : List ℕ) (i : Fin L.length) :
-    L.Perm (L[i] :: L.eraseIdx i) := by
-  induction' i with i ih
-  induction' L with hd tl ih generalizing i
-  · aesop
-  · rcases i with (_ | i) <;>
-      simp_all +decide [List.eraseIdx]
-    exact List.Perm.trans
-      (List.Perm.cons _
-        (ih _ <| by simpa using
-          ‹i + 1 < List.length (hd :: tl)›))
-      (List.Perm.swap ..)
-
-/-- Filter-partition around a pivot permutes the
-original list. -/
-lemma perm_filter_partition
-    (L : List ℕ) (i : Fin L.length) :
-    ((L.eraseIdx i).filter
-        (fun x => decide (x < L[i])) ++
-      [L[i]] ++
-      (L.eraseIdx i).filter
-        (fun x => decide (x ≥ L[i]))).Perm L := by
-  have hc :
-    (L.eraseIdx i).filter
-      (fun x => !(decide (x < L[i]))) =
-    (L.eraseIdx i).filter
-      (fun x => decide (x ≥ L[i])) := by grind
-  have hf := filter_append_perm
-    (fun x => decide (x < L[i])) (L.eraseIdx i)
-  rw [hc] at hf
-  have hmid :
-    ((L.eraseIdx i).filter
-        (fun x => decide (x < L[i])) ++
-      [L[i]] ++
-      (L.eraseIdx i).filter
-        (fun x => decide (x ≥ L[i]))).Perm
-    (L[i] ::
-      ((L.eraseIdx i).filter
-          (fun x => decide (x < L[i])) ++
-        (L.eraseIdx i).filter
-          (fun x =>
-            decide (x ≥ L[i])))) := by
-    simp only [append_assoc]; grind
-  exact hmid.trans
-    ((Perm.cons _ hf).trans
-      (perm_getElem_cons_eraseIdx L i).symm)
+The generic partition helpers (`eq_of_sortedLE_perm`,
+`sorted_concat_pivot`, `perm_filter_partition`, `nodup_partition_sum₂`)
+live in `ARA.Algorithms.Partition` and are shared with `Quickselect`. -/
 
 /-!
 ### Abbreviations
@@ -211,42 +132,42 @@ recurse with `QuickSort`. Used for both correctness
 and complexity proofs. -/
 private noncomputable abbrev qs_branch
     (M : Type → Type) [Monad M] [RandMonad M] [MonadCost ℕ M]
-    (L : List ℕ) (i : Fin L.length) :
-    M (List ℕ) := do
+    (L : List α) (i : Fin L.length) :
+    M (List α) := do
   let rest := L.eraseIdx i
   let pivot := L[i]
   MonadCost.tick rest.length
-  let S1 ← QuickSort (rest.filter (· < pivot))
-  let S2 ← QuickSort (rest.filter (· ≥ pivot))
+  let S1 ← Quicksort (rest.filter (· < pivot))
+  let S2 ← Quicksort (rest.filter (· ≥ pivot))
   return (S1 ++ [pivot] ++ S2)
 
 /-!
 ### Structural decomposition
 
-`QuickSort` on a nonempty list is exactly
+`Quicksort` on a nonempty list is exactly
 `randIdx >>= qs_branch`.
 -/
 
-/-- `QuickSort L` on a nonempty list decomposes as
+/-- `Quicksort L` on a nonempty list decomposes as
 `randIdx L >>= qs_branch M L`. -/
 private lemma quicksort_eq_bind
     {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
-    (head : ℕ) (tail : List ℕ) :
-    (QuickSort (head :: tail) : M (List ℕ)) =
+    (head : α) (tail : List α) :
+    (Quicksort (head :: tail) : M (List α)) =
     randIdx (head :: tail) (by grind) >>=
       fun idx => qs_branch M (head :: tail) idx := by
-  rw [QuickSort.eq_2 head tail]
+  rw [Quicksort.eq_2 head tail]
 
-/-- Timed decomposition: in `TimeMT ℕ M`, `QuickSort` decomposes
+/-- Timed decomposition: in `TimeMT ℕ M`, `Quicksort` decomposes
 as `TimeMT.lift (randIdx ...) >>= qs_branch`. This exposes the
 `TimeMT.lift` for bridge lemma application. -/
 private lemma quicksort_timed_eq_bind
     {M} [Monad M] [RandMonad M]
-    (head : ℕ) (tail : List ℕ) :
-    (QuickSort (head :: tail) : TimeMT ℕ M (List ℕ)) =
+    (head : α) (tail : List α) :
+    (Quicksort (head :: tail) : TimeMT ℕ M (List α)) =
     TimeMT.lift (randIdx (head :: tail) : M _) >>=
       fun idx => qs_branch (TimeMT ℕ M) (head :: tail) idx := by
-  rw [QuickSort.eq_2 (M := TimeMT ℕ M) head tail]
+  rw [Quicksort.eq_2 (M := TimeMT ℕ M) head tail]
   rfl
 
 /-!
@@ -256,21 +177,21 @@ For the correctness proof, we work with the no-op `MonadCost`
 instance. The tick becomes `pure ()` and is invisible.
 -/
 
-/-- For any `LawfulRandMonad`, `QuickSort L` (with no-op cost
+/-- For any `LawfulRandMonad`, `Quicksort L` (with no-op cost
 tracking) produces a single deterministic output that is sorted
 and a permutation of `L`. -/
 lemma Correctness_Quicksort
     {M} [Monad M] [LawfulMonad M]
     [LawfulRandMonad M] :
-    ∀ L : List ℕ, ∃ Output : List ℕ,
+    ∀ L : List α, ∃ Output : List α,
       LawfulRandMonad.toPMF
-        (@QuickSort M _ _ instMonadCostDefault L) =
+        (@Quicksort _ _ M _ _ instMonadCostDefault L) =
         pure Output ∧
       Output.SortedLE ∧ Output.Perm L := by
-  apply QuickSort.induct
+  apply Quicksort.induct
   -- Base case
   · exact ⟨[],
-      by simp [QuickSort,
+      by simp [Quicksort,
         LawfulRandMonad.toPMF_pure],
       by simp [List.sortedLE_iff_pairwise],
       by simp⟩
@@ -281,7 +202,7 @@ lemma Correctness_Quicksort
     have h_step :
         ∀ i : Fin L.length, ∃ Out,
           LawfulRandMonad.toPMF
-            (@qs_branch M _ _ instMonadCostDefault L i) =
+            (@qs_branch _ _ M _ _ instMonadCostDefault L i) =
             pure Out ∧
           Out.SortedLE ∧ Out.Perm L := by
       intro i
@@ -310,18 +231,18 @@ lemma Correctness_Quicksort
     have : Nonempty (Fin L.length) :=
       ⟨⟨0, by grind⟩⟩
     calc LawfulRandMonad.toPMF
-          (@QuickSort M _ _ instMonadCostDefault L)
+          (@Quicksort _ _ M _ _ instMonadCostDefault L)
         = LawfulRandMonad.toPMF
             (randIdx L (by grind) >>=
               fun idx =>
-                @qs_branch M _ _ instMonadCostDefault L idx) := by
+                @qs_branch _ _ M _ _ instMonadCostDefault L idx) := by
           unfold qs_branch
-          rw [@QuickSort.eq_2 M _ _ instMonadCostDefault head tail]
+          rw [@Quicksort.eq_2 _ _ M _ _ instMonadCostDefault head tail]
       _ = (PMF.uniformOfFintype
             (Fin L.length)).bind
             (fun idx =>
               LawfulRandMonad.toPMF
-                (@qs_branch M _ _ instMonadCostDefault L idx)) := by
+                (@qs_branch _ _ M _ _ instMonadCostDefault L idx)) := by
           rw [LawfulRandMonad.toPMF_bind,
             LawfulRandMonad.toPMF_randIdx]
           simp_all only [length_cons,
@@ -338,68 +259,70 @@ lemma Correctness_Quicksort
       _ = pure Output := PMF.bind_const _ _
 
 -- ----------------------------------------
--- Free Proof: Untimed QuickSort_PMF
+-- Free Proof: Untimed Quicksort_PMF
 -- ----------------------------------------
 
 lemma Correctness_Quicksort_PMF :
     ∀ L : List ℕ, ∃ Output : List ℕ,
-      QuickSort_PMF L = pure Output ∧
+      Quicksort_PMF L = pure Output ∧
       Output.SortedLE ∧ Output.Perm L := by
   intro L
   obtain ⟨Out, hEq, hS, hP⟩ :=
-    @Correctness_Quicksort PMF _ _ _ L
+    Correctness_Quicksort (M := PMF) L
   exact ⟨Out, hEq, hS, hP⟩
 
 -- ----------------------------------------
--- Free Proof: Timed QuickSort_PMF_Timed
+-- Free Proof: Timed Quicksort_PMF_Timed
 -- ----------------------------------------
 
-/-! ### TimeMT erasure for the unified QuickSort -/
+/-! ### TimeMT erasure for the unified Quicksort -/
 
-@[simp] lemma TimeMT_randIdx_run
+omit [LinearOrder α] in
+@[simp]
+lemma TimeMT_randIdx_run
     {M} [Monad M] [RandMonad M]
-    (L : List ℕ) (h : 0 < L.length) :
+    (L : List α) (h : 0 < L.length) :
     (randIdx L h :
       TimeMT ℕ M (Fin L.length)).run =
     (TimeMT.lift
       (randIdx L h :
         M (Fin L.length))).run := rfl
 
-/-- Erasing time from the timed QuickSort gives the untimed QuickSort.
+/-- Erasing time from the timed Quicksort gives the untimed Quicksort.
 This follows from the unified definition: the `MonadCost.tick` in
 `TimeMT` erases to `pure ()`, matching the no-op `MonadCost` instance.
 
-Uses **functional induction** on `QuickSort`. -/
-lemma QuickSort_erasure
+Uses **functional induction** on `Quicksort`. -/
+lemma Quicksort_erasure
     {M} [Monad M] [LawfulMonad M] [RandMonad M]
-    (L : List ℕ) :
+    (L : List α) :
     TimeM.ret <$>
-      (QuickSort L : TimeMT ℕ M (List ℕ)).run =
-      (QuickSort L : M (List ℕ)) := by
-  induction L using QuickSort.induct
+      (Quicksort L : TimeMT ℕ M (List α)).run =
+      (Quicksort L : M (List α)) := by
+  induction L using Quicksort.induct
   · -- Base case
-    rw [QuickSort.eq_1 (M := TimeMT ℕ M), QuickSort.eq_1 (M := M)]
+    rw [Quicksort.eq_1 (M := TimeMT ℕ M), Quicksort.eq_1 (M := M)]
     simp
   · -- Inductive case
     next head tail ih1 ih2 =>
-    rw [QuickSort.eq_2 (M := TimeMT ℕ M) head tail,
-        QuickSort.eq_2 (M := M) head tail]
+    rw [Quicksort.eq_2 (M := TimeMT ℕ M) head tail,
+        Quicksort.eq_2 (M := M) head tail]
     simp only [TimeMT_erase_bind, TimeMT_randIdx_run, TimeMT_erase_lift,
       MonadCost.tick_timeMT, TimeMT_erase_tick, MonadCost.tick_default, pure_bind]
     simp only [ih1, ih2, TimeMT_erase_pure]
 
 /-- Timed PMF correctness for free. -/
-lemma Correctness_QuickSort_Timed_PMF :
+lemma Correctness_Quicksort_Timed_PMF :
     ∀ L : List ℕ, ∃ Output : List ℕ,
-      TimeM.ret <$> (QuickSort_PMF_Timed L).run =
+      TimeM.ret <$> (Quicksort_PMF_Timed L).run =
         pure Output ∧
       Output.SortedLE ∧ Output.Perm L := by
   intro L
   obtain ⟨Out, hEq, hSort, hPerm⟩ :=
     Correctness_Quicksort_PMF L
   use Out
-  unfold QuickSort_PMF_Timed
-  rw [QuickSort_erasure]
+  unfold Quicksort_PMF_Timed
+  rw [Quicksort_erasure]
   exact ⟨hEq, hSort, hPerm⟩
 
 -- ----------------------------------------
@@ -505,35 +428,35 @@ Uses the `𝔼_runtime[·]` notation for readability.
 private lemma expected_cost_qs_branch
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
-    (L : List ℕ) (i : Fin L.length) :
+    (L : List α) (i : Fin L.length) :
     let pivot := L[i]
     let rest := L.eraseIdx i
     let L1 := rest.filter (· < pivot)
     let L2 := rest.filter (· ≥ pivot)
     𝔼_runtime[qs_branch (TimeMT ℕ M) L i] =
     (rest.length : ENNReal) +
-      𝔼_runtime[(QuickSort L1 : TimeMT ℕ M _)] +
-      𝔼_runtime[(QuickSort L2 : TimeMT ℕ M _)] := by
+      𝔼_runtime[(Quicksort L1 : TimeMT ℕ M _)] +
+      𝔼_runtime[(Quicksort L2 : TimeMT ℕ M _)] := by
   intro pivot rest L1 L2
   -- Peel `tick` and the trailing `pure` automatically.
   show expected_cost (inst.toPMF
     (TimeMT.tick rest.length >>=
-      fun _ => (QuickSort L1 : TimeMT ℕ M _) >>=
-        fun S1 => (QuickSort L2 : TimeMT ℕ M _) >>=
+      fun _ => (Quicksort L1 : TimeMT ℕ M _) >>=
+        fun S1 => (Quicksort L2 : TimeMT ℕ M _) >>=
           fun S2 => pure
             (S1 ++ [pivot] ++ S2)).run) = _
   cost_step
   -- Decompose the outer recursive bind, then collapse the inner
   -- continuation `(QS L2 >>= pure)` to `E[QS L2]`.
   rw [expected_cost_toPMF_bind]
-  have h_inner : ∀ tm : TimeM ℕ (List ℕ),
+  have h_inner : ∀ tm : TimeM ℕ (List α),
       expected_cost
         (inst.toPMF
-          ((QuickSort L2 : TimeMT ℕ M _) >>= fun S2 =>
+          ((Quicksort L2 : TimeMT ℕ M _) >>= fun S2 =>
             (pure (tm.ret ++ [pivot] ++ S2) :
-              TimeMT ℕ M (List ℕ))).run) =
+              TimeMT ℕ M (List α))).run) =
       expected_cost
-        (inst.toPMF (QuickSort L2 : TimeMT ℕ M _).run) := by
+        (inst.toPMF (Quicksort L2 : TimeMT ℕ M _).run) := by
     intro tm
     rw [expected_cost_toPMF_bind]
     cost_step
@@ -546,14 +469,14 @@ private lemma expected_cost_qs_branch
 
 lemma expected_cost_quicksort_nil
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] :
-    𝔼_runtime[(QuickSort [] : TimeMT ℕ M (List ℕ))] = 0 := by
-  rw [QuickSort.eq_1]; cost_step
+    𝔼_runtime[(Quicksort [] : TimeMT ℕ M (List α))] = 0 := by
+  rw [Quicksort.eq_1]; cost_step
 
 /-!
 ### Monadic unfolding: inductive step
 -/
 
-/-- After applying `toPMF` to `.run` of `QuickSort`
+/-- After applying `toPMF` to `.run` of `Quicksort`
 (in `TimeMT`) on a nonempty list, the expected cost is the
 uniform average:
 `E[cost] = (1/n) * Σ_i (|rest_i| + E[L1_i] + E[L2_i])`
@@ -561,9 +484,9 @@ uniform average:
 lemma expected_cost_quicksort_step
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
-    (head : ℕ) (tail : List ℕ) :
+    (head : α) (tail : List α) :
     let L := head :: tail
-    𝔼_runtime[(QuickSort L : TimeMT ℕ M _)] =
+    𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] =
     (L.length : ENNReal)⁻¹ *
       ∑ i : Fin L.length,
         let pivot := L[i]
@@ -571,8 +494,8 @@ lemma expected_cost_quicksort_step
         let L1 := rest.filter (· < pivot)
         let L2 := rest.filter (· ≥ pivot)
         ((rest.length : ENNReal) +
-          𝔼_runtime[(QuickSort L1 : TimeMT ℕ M _)] +
-          𝔼_runtime[(QuickSort L2 : TimeMT ℕ M _)]) := by
+          𝔼_runtime[(Quicksort L1 : TimeMT ℕ M _)] +
+          𝔼_runtime[(Quicksort L2 : TimeMT ℕ M _)]) := by
   intro L
   -- Step 1: decompose as lift(randIdx) >>= qs_branch
   conv_lhs =>
@@ -595,143 +518,16 @@ lemma expected_cost_quicksort_step
   exact expected_cost_qs_branch L i
 
 /-!
-### Partition size lemma for distinct lists
-
-When the list `L` has no duplicates, the rank function
-`i ↦ |{j ≠ i : L[j] < L[i]}|` is a bijection on `Fin L.length`.
-This lets us reindex any sum over pivot choices by rank.
-
-The proof uses `Finset.sum_equiv` with an equivalence constructed
-from the injective rank function on a finite type.
--/
-
-/-- The rank of element `i` in a nodup list: number of elements
-strictly less than `L[i]`, excluding position `i`. -/
-private noncomputable def rank (L : List ℕ) (i : Fin L.length) : Fin L.length :=
-  ⟨((Finset.univ.erase i).filter (fun j => L[j] < L[i])).card,
-   by
-    calc ((Finset.univ.erase i).filter (fun j => L[j] < L[i])).card
-        ≤ (Finset.univ.erase i).card := Finset.card_filter_le _ _
-      _ = L.length - 1 := by simp [Finset.card_erase_of_mem]
-      _ < L.length := Nat.sub_lt (Fin.pos i) Nat.one_pos⟩
-
-/-- The rank function equals the filter-length on the erased list. -/
-private lemma rank_eq_filter_length (L : List ℕ) (hnd : L.Nodup) (i : Fin L.length) :
-    ((L.eraseIdx i).filter (· < L[i])).length = (rank L i).val := by
-  unfold rank
-  have h_filter_eq :
-    List.toFinset
-      (List.filter (fun x => x < L[i])
-        (L.eraseIdx i)) =
-    Finset.image (fun x => L[x])
-      (Finset.filter (fun x => L[x] < L[i])
-        (Finset.univ.erase i)) := by
-    ext; simp [Finset.mem_image]
-    constructor
-    · intro h
-      obtain ⟨k, hk⟩ :=
-        List.mem_iff_get.mp h.1
-      use ⟨if k.val < i.val then k.val
-           else k.val + 1, by grind⟩
-      generalize_proofs at *; grind
-    · rintro ⟨j, ⟨hj₁, hj₂⟩, rfl⟩
-      rw [List.mem_iff_get]
-      simp_all +decide [Fin.ext_iff]
-      use ⟨if j.val < i.val then j.val
-           else j.val - 1, by grind⟩
-      generalize_proofs at *; grind
-  rw [← List.toFinset_card_of_nodup]
-  · rw [h_filter_eq,
-      Finset.card_image_of_injective _
-        (fun x y hxy => by
-          simpa [Fin.ext_iff] using
-            List.nodup_iff_injective_get.mp
-              hnd hxy)]
-  · exact List.Nodup.filter _
-      (hnd.eraseIdx _)
-
-/-- The complement rank equals `L.length - 1 - rank`. -/
-private lemma complement_rank_eq (L : List ℕ) (hnd : L.Nodup) (i : Fin L.length) :
-    ((L.eraseIdx i).filter (· ≥ L[i])).length =
-      L.length - 1 - (rank L i).val := by
-  have h_split :
-    ((L.eraseIdx i).filter (· ≥ L[i])).length +
-      ((L.eraseIdx i).filter (· < L[i])).length =
-      L.length - 1 := by
-    have : ∀ l : List ℕ,
-        (l.filter (· ≥ L[i])).length +
-          (l.filter (· < L[i])).length =
-          l.length := by
-      intro l; induction l
-        <;> simp +decide [*]; grind
-    convert this (L.eraseIdx i) using 1
-    simp +decide [List.length_eraseIdx]
-  exact eq_tsub_of_add_eq
-    (by linarith [rank_eq_filter_length L hnd i])
-
-/-- The rank function is injective on nodup lists. -/
-private lemma rank_injective (L : List ℕ) (hnd : L.Nodup) :
-    Function.Injective (rank L) := by
-  intro i j hij
-  by_cases h1 : L[i] < L[j]
-  · -- L[i] < L[j]: rank i ⊂ rank j, contradiction
-    have h_subset : Finset.filter (fun x => L[x] < L[i]) (Finset.univ.erase i) ⊂
-        Finset.filter (fun x => L[x] < L[j]) (Finset.univ.erase j) := by
-      constructor
-      · grind
-      · simp_all +decide [Finset.subset_iff]
-        exact ⟨i, by aesop⟩
-    have := Finset.card_lt_card h_subset
-    simp_all +decide [rank]
-  · by_cases h2 : L[j] < L[i]
-    · -- L[j] < L[i]: rank j ⊂ rank i, contradiction
-      have h_subset : Finset.filter (fun x => L[x] < L[i]) (Finset.univ.erase i) ⊇
-          Finset.image id (Finset.filter (fun x => L[x] < L[j]) (Finset.univ.erase j)) ∪ {j} := by
-        grind
-      have := Finset.card_mono h_subset
-      simp_all +decide
-      simp [rank, Fin.ext_iff] at hij; omega
-    · -- L[i] = L[j]: use nodup injectivity
-      exact List.nodup_iff_injective_get.mp hnd <|
-        le_antisymm (le_of_not_gt h2) (le_of_not_gt h1)
-
-/-- The rank function as an equivalence on `Fin L.length` for nodup lists. -/
-private noncomputable def rankEquiv (L : List ℕ) (hnd : L.Nodup) : Fin L.length ≃ Fin L.length :=
-  Equiv.ofBijective (rank L) (Finite.injective_iff_bijective.mp (rank_injective L hnd))
-
-/-- Reindexing partition sizes by rank for nodup lists.
-
-Uses `Finset.sum_equiv` with the rank equivalence for a clean
-bijective reindexing. -/
-lemma nodup_partition_sum
-    (L : List ℕ) (hnd : L.Nodup) (f : ℕ → ℚ) :
-    (∑ i : Fin L.length,
-      (f ((L.eraseIdx i).filter
-          (· < L[i])).length +
-       f ((L.eraseIdx i).filter
-          (· ≥ L[i])).length)) =
-    ∑ k : Fin L.length,
-      (f k.val +
-        f (L.length - 1 - k.val)) := by
-  -- Rewrite LHS summand in terms of rank, then reindex
-  have h_eq : ∀ i : Fin L.length,
-      f ((L.eraseIdx i).filter (· < L[i])).length +
-       f ((L.eraseIdx i).filter (· ≥ L[i])).length =
-      f (rank L i).val + f (L.length - 1 - (rank L i).val) := by
-    intro i; rw [rank_eq_filter_length L hnd i, complement_rank_eq L hnd i]
-  simp_rw [h_eq]
-  exact Finset.sum_equiv (rankEquiv L hnd)
-    (fun _ => by simp)
-    (fun _ _ => rfl)
-
-/-!
 ### Finiteness of expected cost
+
+(The rank-reindexing lemma `nodup_partition_sum` used below is
+provided by `ARA.Algorithms.Partition`.)
 -/
 
 lemma expected_cost_quicksort_ne_top
     {M} [Monad M] [LawfulMonad M]
-    [inst : LawfulRandMonad M] (L : List ℕ) :
-    𝔼_runtime[(QuickSort L : TimeMT ℕ M _)] ≠ ⊤ := by
+    [inst : LawfulRandMonad M] (L : List α) :
+    𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≠ ⊤ := by
   induction' n : L.length
     using Nat.strong_induction_on
     with n ih generalizing L
@@ -752,14 +548,14 @@ lemma expected_cost_quicksort_ne_top
 the expected cost differs.
 -/
 
-/-- The expected cost of `QuickSort` (in timed mode) on a list of
+/-- The expected cost of `Quicksort` (in timed mode) on a list of
 `n` distinct elements is exactly `2(n+1)H(n) − 4n`
 comparisons. -/
 theorem Expected_Complexity_Quicksort
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
-    (L : List ℕ) (hnd : L.Nodup) :
-    𝔼ℝ_runtime[(QuickSort L : TimeMT ℕ M _)] =
+    (L : List α) (hnd : L.Nodup) :
+    𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] =
     (expected_qs_cost L.length : ℚ) := by
   induction' n : L.length
     using Nat.strong_induction_on
@@ -838,25 +634,6 @@ so the recurrence degenerates to `T(n) = (n-1) + T(n-1)` and yields
 across all inputs and pivot sequences, so the expected cost on any list
 is bounded by `C(n,2)`. -/
 
-/-- Partition lemma: filtering a list by `(· < p)` and `(· ≥ p)`
-gives complementary sub-lists. -/
-private lemma length_filter_lt_ge (l : List ℕ) (p : ℕ) :
-    (l.filter (· < p)).length + (l.filter (· ≥ p)).length = l.length := by
-  induction l with
-  | nil => simp
-  | cons hd tl ih =>
-    by_cases h : hd < p
-    · rw [List.filter_cons_of_pos (by simpa using h),
-        List.filter_cons_of_neg (by simp; omega)]
-      show (tl.filter (· < p)).length + 1 +
-        (tl.filter (· ≥ p)).length = tl.length + 1
-      linarith [ih]
-    · rw [List.filter_cons_of_neg (by simpa using h),
-        List.filter_cons_of_pos (by simp; omega)]
-      show (tl.filter (· < p)).length +
-        ((tl.filter (· ≥ p)).length + 1) = tl.length + 1
-      linarith [ih]
-
 /-- Discrete convexity of `Nat.choose · 2`: along the line `a + b = k`,
 the sum `a.choose 2 + b.choose 2` is maximized at the corners and equals
 `k.choose 2 = (a + b).choose 2`.
@@ -876,8 +653,9 @@ private lemma choose_two_add_le (a b : ℕ) :
         Nat.choose_succ_succ, Nat.choose_one_right]; linarith
     rw [hb, hab]; omega
 
+set_option maxHeartbeats 400000 in
 /-- For an arbitrary list (possibly with duplicates), the expected cost
-of `QuickSort` is bounded by `L.length.choose 2`. This bound is tight on
+of `Quicksort` is bounded by `L.length.choose 2`. This bound is tight on
 the all-equal list `[a, a, …, a]`.
 
 The proof is by strong induction on `L.length`. The inductive step uses
@@ -886,18 +664,18 @@ pivot choices, the IH to bound each recursive call, and `choose_two_add_le`
 to combine the two subproblem bounds. -/
 theorem Quicksort_Cost_Upper_Bound
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
-    (L : List ℕ) :
-    𝔼ℝ_runtime[(QuickSort L : TimeMT ℕ M _)] ≤ L.length.choose 2 := by
+    (L : List α) :
+    𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] ≤ L.length.choose 2 := by
   -- Step 1: reduce to an inequality in `ENNReal`.
-  suffices h : 𝔼_runtime[(QuickSort L : TimeMT ℕ M _)] ≤
+  suffices h : 𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≤
       ((L.length.choose 2 : ℕ) : ENNReal) by
     have hne : ((L.length.choose 2 : ℕ) : ENNReal) ≠ ⊤ :=
       ENNReal.natCast_ne_top _
     have := ENNReal.toReal_mono hne h
     simpa using this
   -- Step 2: strong induction on `L.length`.
-  suffices h_strong : ∀ n (L : List ℕ), L.length = n →
-      𝔼_runtime[(QuickSort L : TimeMT ℕ M _)] ≤ ((n.choose 2 : ℕ) : ENNReal) by
+  suffices h_strong : ∀ n (L : List α), L.length = n →
+      𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≤ ((n.choose 2 : ℕ) : ENNReal) by
     exact h_strong L.length L rfl
   intro n
   induction n using Nat.strong_induction_on with
@@ -915,10 +693,10 @@ theorem Quicksort_Cost_Upper_Bound
       -- Bound each summand by `(n.choose 2 : ENNReal)`.
       have h_summand : ∀ i : Fin (head :: tail).length,
           (((head :: tail).eraseIdx i).length : ENNReal) +
-            𝔼_runtime[(QuickSort
+            𝔼_runtime[(Quicksort
               (((head :: tail).eraseIdx i).filter
                 (· < (head :: tail)[i])) : TimeMT ℕ M _)] +
-            𝔼_runtime[(QuickSort
+            𝔼_runtime[(Quicksort
               (((head :: tail).eraseIdx i).filter
                 (· ≥ (head :: tail)[i])) : TimeMT ℕ M _)] ≤
           ((n.choose 2 : ℕ) : ENNReal) := by
@@ -960,8 +738,8 @@ theorem Quicksort_Cost_Upper_Bound
           rw [Nat.choose_one_right]
         -- Combine: rest.length + IH₁ + IH₂ ≤ tail.length + tail.length.choose 2.
         calc (rest.length : ENNReal) +
-              𝔼_runtime[(QuickSort L1 : TimeMT ℕ M _)] +
-              𝔼_runtime[(QuickSort L2 : TimeMT ℕ M _)]
+              𝔼_runtime[(Quicksort L1 : TimeMT ℕ M _)] +
+              𝔼_runtime[(Quicksort L2 : TimeMT ℕ M _)]
             ≤ (rest.length : ENNReal) +
                 ((L1.length.choose 2 : ℕ) : ENNReal) +
                 ((L2.length.choose 2 : ℕ) : ENNReal) := by gcongr
@@ -980,40 +758,22 @@ theorem Quicksort_Cost_Upper_Bound
       have h_sum_le :
           ∑ i : Fin (head :: tail).length,
             ((((head :: tail).eraseIdx i).length : ENNReal) +
-              𝔼_runtime[(QuickSort
+              𝔼_runtime[(Quicksort
                 (((head :: tail).eraseIdx i).filter
                   (· < (head :: tail)[i])) : TimeMT ℕ M _)] +
-              𝔼_runtime[(QuickSort
+              𝔼_runtime[(Quicksort
                 (((head :: tail).eraseIdx i).filter
                   (· ≥ (head :: tail)[i])) : TimeMT ℕ M _)]) ≤
           ((head :: tail).length : ENNReal) * ((n.choose 2 : ℕ) : ENNReal) := by
-        calc _ ≤ ∑ _ : Fin (head :: tail).length, ((n.choose 2 : ℕ) : ENNReal) :=
-                Finset.sum_le_sum (fun i _ => h_summand i)
-          _ = ((head :: tail).length : ENNReal) * ((n.choose 2 : ℕ) : ENNReal) := by
-                rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
-                  nsmul_eq_mul]
+        refine le_trans (Finset.sum_le_sum fun i _ => h_summand i) (le_of_eq ?_)
+        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin,
+          nsmul_eq_mul]
       -- Multiply both sides by `(L.length)⁻¹` and cancel.
       have hne_zero : ((head :: tail).length : ENNReal) ≠ 0 := by
         simp
       have hne_top : ((head :: tail).length : ENNReal) ≠ ⊤ :=
         ENNReal.natCast_ne_top _
-      calc ((head :: tail).length : ENNReal)⁻¹ *
-              ∑ i : Fin (head :: tail).length,
-                ((((head :: tail).eraseIdx i).length : ENNReal) +
-                  𝔼_runtime[(QuickSort
-                    (((head :: tail).eraseIdx i).filter
-                      (· < (head :: tail)[i])) : TimeMT ℕ M _)] +
-                  𝔼_runtime[(QuickSort
-                    (((head :: tail).eraseIdx i).filter
-                      (· ≥ (head :: tail)[i])) : TimeMT ℕ M _)])
-            ≤ ((head :: tail).length : ENNReal)⁻¹ *
-                (((head :: tail).length : ENNReal) *
-                  ((n.choose 2 : ℕ) : ENNReal)) := by gcongr
-          _ = (((head :: tail).length : ENNReal)⁻¹ *
-                ((head :: tail).length : ENNReal)) *
-                ((n.choose 2 : ℕ) : ENNReal) := by rw [mul_assoc]
-          _ = 1 * ((n.choose 2 : ℕ) : ENNReal) := by
-                rw [ENNReal.inv_mul_cancel hne_zero hne_top]
-          _ = ((n.choose 2 : ℕ) : ENNReal) := one_mul _
+      refine le_trans (mul_le_mul' le_rfl h_sum_le) ?_
+      rw [← mul_assoc, ENNReal.inv_mul_cancel hne_zero hne_top, one_mul]
 
 end ARA
