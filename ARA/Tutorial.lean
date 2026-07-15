@@ -10,9 +10,9 @@ import ARA.Algorithms.Partition
 /-!
 # Tutorial — verify your first randomized algorithm
 
-This file is a **template**: copy it, replace the toy algorithm with
+This file is a template: copy it, replace the toy algorithm with
 yours, and follow the numbered steps. Everything that is not marked
-"**the mathematics**" is boilerplate that the framework automates.
+"the mathematics" is boilerplate that the framework automates.
 
 ## The recipe
 
@@ -31,16 +31,17 @@ yours, and follow the numbered steps. Everything that is not marked
 5. **Correctness** — `induction … using yourAlgo.induct`, expose the
    pivot, collapse with `toPMF_randIdx_bind_dirac`, finish with
    `dirac_finish`.
-6. **Expected cost** — branch cost by `cost_step`, step lemma by
-   `expected_cost_uniform_step`, then solve the recurrence along
-   `yourAlgo.induct`.
 
-For Monte-Carlo algorithms (output genuinely random, e.g. Karger),
+Note: For Monte-Carlo algorithms (output genuinely random, e.g. Karger),
 replace step 5's collapse by the distributional primitives
 `support_toPMF_randIdx_bind` / `le_toPMF_randIdx_bind` and state
 correctness as a support fact plus a success-probability bound.
 
-## The running example
+6. **Expected cost** — branch cost by `cost_step`, step lemma by
+   `expected_cost_uniform_step`, then solve the recurrence along
+   `yourAlgo.induct`.
+
+## Example
 
 `RandMax`: scan a list in *random* order, one comparison per round,
 returning the maximum. Output is deterministic (Las Vegas), cost is
@@ -128,9 +129,9 @@ private lemma randMax_timed_eq_bind
 /-!
 ## Step 4 — the specification and its transport lemma
 
-**This is the mathematics.** The spec is what the algorithm should
-compute; the transport lemma says how the spec interacts with *one
-branch* of the recursion. Everything else in the file is machinery.
+This is the mathematics. The spec is what the algorithm should
+compute; the transport lemma says how the spec interacts with one
+branch of the recursion. Everything else in the file is machinery.
 -/
 
 /-- Specification: the maximum of a list (with `default` for `[]`). -/
