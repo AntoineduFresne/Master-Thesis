@@ -257,6 +257,23 @@ of the bind is the expected cost of `f a`. -/
       expected_cost (inst.toPMF (f a).run) := by
   simp +zetaDelta at *
 
+/-- Re-labelling the returned value (keeping the clock) costs nothing:
+`E[f <$> m] = E[m]`. `TimeMT`'s `Functor` maps only the `.ret` field,
+so the time marginal is untouched. -/
+@[expected_cost_simp] lemma expected_cost_toPMF_map
+    {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M]
+    {α β : Type} (f : α → β) (m : TimeMT ℕ M α) :
+    expected_cost (inst.toPMF ((f <$> m).run)) =
+      expected_cost (inst.toPMF m.run) := by
+  rw [TimeMT.run_map, inst.toPMF_map]
+  show expected_cost ((inst.toPMF m.run).map _) = _
+  rw [PMF.map, ← pmf_bind_eq, expected_cost_bind]
+  unfold expected_cost
+  exact tsum_congr fun tm => by
+    rcases tm with ⟨a, t⟩
+    simp [Function.comp, pmf_pure_eq]
+
 /-- Pure post-processing costs nothing: `E[m >>= (pure ∘ g)] = E[m]`.
 Lets `cost_step` erase the trailing `return (f x)` of a branch. -/
 @[expected_cost_simp] lemma expected_cost_toPMF_bind_pure
@@ -466,6 +483,22 @@ lemma expected_cost_uniform_step
     (TimeMT.lift (randIdx L hL : M _) >>= f).run) = _
   cost_step
   rw [inst.toPMF_randIdx, tsum_fintype]
+  simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
+  rw [← Finset.mul_sum]
+
+/-- `randFin` variant of `expected_cost_uniform_step`, for algorithms
+that draw from `Fin n` directly (e.g. reservoir sampling's
+`1/(seen+1)` coin). -/
+lemma expected_cost_uniform_step_fin
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {β : Type} (n : ℕ) [NeZero n] (f : Fin n → TimeMT ℕ M β) :
+    𝔼_runtime[TimeMT.lift (RandMonad.randFin n : M _) >>= f] =
+    (n : ENNReal)⁻¹ * ∑ i : Fin n, 𝔼_runtime[f i] := by
+  have : Nonempty (Fin n) := ⟨⟨0, Nat.pos_of_ne_zero (NeZero.ne n)⟩⟩
+  show expected_cost (inst.toPMF
+    (TimeMT.lift (RandMonad.randFin n : M _) >>= f).run) = _
+  cost_step
+  rw [inst.toPMF_randFin, tsum_fintype]
   simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
   rw [← Finset.mul_sum]
 

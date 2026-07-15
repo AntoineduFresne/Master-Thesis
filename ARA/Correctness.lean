@@ -52,21 +52,10 @@ generic primitives are:
 
 namespace ARA
 
-/-!
-### `Monad`-vs-`PMF` syntactic bridges
-
-`do`-notation produces `>>=`/`pure`, while Mathlib's `PMF` lemmas are
-stated for `PMF.bind`/`PMF.pure`. The two are definitionally equal;
-these rfl-bridges let `simp`/`rw` cross the gap syntactically.
--/
-
-@[pmf_simp_attr, dirac_simp]
-lemma pmf_bind_eq {α β : Type u} (p : PMF α) (f : α → PMF β) :
-    p >>= f = p.bind f := rfl
-
-@[pmf_simp_attr, dirac_simp]
-lemma pmf_pure_eq {α : Type*} (a : α) :
-    (pure a : PMF α) = PMF.pure a := rfl
+-- The `>>=`/`pure`/`<$>`-vs-`PMF.bind`/`PMF.pure`/`PMF.map` bridges
+-- (`pmf_bind_eq`, `pmf_pure_eq`, `pmf_map_eq`) live in `ARA.Tactics`;
+-- register them for `dirac_step` too.
+attribute [dirac_simp] pmf_bind_eq pmf_pure_eq pmf_map_eq
 
 /-! ### Dirac correctness -/
 

@@ -184,6 +184,27 @@ macro "pmf_norm" : tactic =>
     LAYER C: Reusable Derived Lemmas
     ================================================================ -/
 
+/-!
+#### `Monad`-vs-`PMF` syntactic bridges
+
+`do`-notation produces `>>=`/`pure`/`<$>`, while Mathlib's `PMF` lemmas
+are stated for `PMF.bind`/`PMF.pure`/`PMF.map`. The two are
+definitionally equal; these rfl-bridges let `simp`/`rw` cross the gap
+syntactically.
+-/
+
+@[pmf_simp_attr]
+lemma pmf_bind_eq {α β : Type u} (p : PMF α) (f : α → PMF β) :
+    p >>= f = p.bind f := rfl
+
+@[pmf_simp_attr]
+lemma pmf_pure_eq {α : Type*} (a : α) :
+    (Pure.pure a : PMF α) = PMF.pure a := rfl
+
+@[pmf_simp_attr]
+lemma pmf_map_eq {α β : Type u} (f : α → β) (p : PMF α) :
+    f <$> p = p.map f := rfl
+
 /-- uniformOfFintype (Fin 1) = pure 0, useful as a base case -/
 lemma pmf_uniformOfFintype_fin_one :
     PMF.uniformOfFintype (Fin 1) = PMF.pure (0 : Fin 1) := by
