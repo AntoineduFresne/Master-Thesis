@@ -11,14 +11,13 @@ import ARA.MonadCost
 
 This module packages the generic, algorithm-independent part of a
 correctness proof, so that verifying a new uniform-pivot algorithm
-reduces to its *mathematical content*: how the specification interacts
+reduces to its mathematical content: how the specification interacts
 with one branch of the algorithm.
 
 ## Dirac correctness (Las Vegas algorithms)
 
-An algorithm is **Dirac-correct** when its output distribution is a
-point mass at the specification value — the output never depends on
-the coin flips (`Quicksort`, `Quickselect`). The recipe for proving
+An algorithm is Dirac-correct when its output distribution is a
+point mass at the specification value. The recipe for proving
 `toPMF (myAlgo args) = PMF.pure (spec args)`:
 
 1. **Spec-transport lemmas** (the mathematics): for each branch, prove
@@ -38,7 +37,7 @@ the coin flips (`Quicksort`, `Quickselect`). The recipe for proving
 ## Distributional correctness (Monte Carlo algorithms)
 
 When the output is genuinely random (e.g. `Karger`), correctness is a
-property of the distribution — typically a support statement
+property of the distribution: typically a support statement
 (one-sided error) plus a success-probability bound. The analogous
 generic primitives are:
 
