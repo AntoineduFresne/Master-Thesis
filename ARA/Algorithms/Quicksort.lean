@@ -40,16 +40,18 @@ serves as:
 
 ## Notation
 
-The expected runtime of a timed computation is written using the
-`𝔼_runtime[·]` (or `𝔼ℝ_runtime[·]` for a real value) notation defined in
-`ARA.ExpectedCost`. For example:
+The expected runtime of a timed computation is written with the
+`𝔼_runtime[e | M]` (or `𝔼ℝ_runtime[e | M]` for a real value) notation
+from `ARA.ExpectedCost`. For example:
 
-  `𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)]`
+  `𝔼ℝ_runtime[Quicksort L | M]`
 
-reads as "the expected runtime of Quicksort on L, as a real number".
-The type ascription is needed because `Quicksort` is monad-polymorphic;
-the `instRandMonadTimeMT` / `instMonadCostTimeMT` instances are then
-picked up automatically.
+reads as "the expected runtime of Quicksort on `L`, run over the random
+monad `M`, as a real number". The `| M` fixes the monad the polymorphic
+`Quicksort` is instantiated at (timed via `TimeMT ℕ M`); the
+`instRandMonadTimeMT` / `instMonadCostTimeMT` instances are picked up
+automatically. Statements phrase the pivot partition with
+`pivotLT L i` / `pivotGE L i` from `ARA.Algorithms.Partition`.
 -/
 
 namespace ARA
@@ -320,8 +322,8 @@ private lemma expected_cost_qs_branch
     let L2 := rest.filter (· ≥ pivot)
     𝔼_runtime[qs_branch (TimeMT ℕ M) L i] =
     (rest.length : ENNReal) +
-      𝔼_runtime[(Quicksort L1 : TimeMT ℕ M _)] +
-      𝔼_runtime[(Quicksort L2 : TimeMT ℕ M _)] := by
+      𝔼_runtime[Quicksort L1 | M] +
+      𝔼_runtime[Quicksort L2 | M] := by
   intro pivot rest L1 L2
   -- Peel `tick` and the trailing `pure` automatically.
   show expected_cost (inst.toPMF
@@ -351,7 +353,7 @@ private lemma expected_cost_qs_branch
 /-- The empty list costs nothing. -/
 lemma expected_cost_quicksort_nil
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] :
-    𝔼_runtime[(Quicksort [] : TimeMT ℕ M (List α))] = 0 := by
+    𝔼_runtime[Quicksort ([] : List α) | M] = 0 := by
   rw [Quicksort.eq_1]; cost_step
 
 /-- The expected cost of `Quicksort` on a nonempty list is the uniform
@@ -361,16 +363,12 @@ lemma expected_cost_quicksort_step
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (head : α) (tail : List α) :
-    𝔼_runtime[(Quicksort (head :: tail) : TimeMT ℕ M _)] =
+    𝔼_runtime[Quicksort (head :: tail) | M] =
     ((head :: tail).length : ENNReal)⁻¹ *
       ∑ i : Fin (head :: tail).length,
         ((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[(Quicksort
-            (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) :
-            TimeMT ℕ M _)] +
-          𝔼_runtime[(Quicksort
-            (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])) :
-            TimeMT ℕ M _)]) := by
+          𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
+          𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]) := by
   rw [quicksort_timed_eq_bind head tail, expected_cost_uniform_step]
   congr 1
   exact Finset.sum_congr rfl fun i _ => expected_cost_qs_branch (head :: tail) i
@@ -415,7 +413,7 @@ with duplicates), the expected cost of `Quicksort` is bounded by
 theorem Quicksort_Cost_Upper_Bound_ennreal
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
-    𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≤
+    𝔼_runtime[Quicksort L | M] ≤
       ((L.length.choose 2 : ℕ) : ENNReal) := by
   induction L using Quicksort.induct with
   | case1 =>
@@ -427,22 +425,18 @@ theorem Quicksort_Cost_Upper_Bound_ennreal
     -- convexity of `C(·,2)` bounds their joint cost by `C(tail.length, 2)`.
     have hbound : ∀ i : Fin (head :: tail).length,
         ((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[(Quicksort
-            (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) :
-            TimeMT ℕ M _)] +
-          𝔼_runtime[(Quicksort
-            (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])) :
-            TimeMT ℕ M _)]) ≤
+          𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
+          𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]) ≤
         ((tail.length : ENNReal) + ((tail.length.choose 2 : ℕ) : ENNReal)) := by
       intro i
       have hrest := length_eraseIdx_cons head tail i
-      have hsplit : (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length +
-          (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length =
+      have hsplit : (pivotLT (head :: tail) i).length +
+          (pivotGE (head :: tail) i).length =
           tail.length := by
         rw [length_filter_lt_ge]
         exact hrest
-      have hchoose : ((((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length).choose 2 +
-          ((((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length).choose 2 ≤
+      have hchoose : ((pivotLT (head :: tail) i).length).choose 2 +
+          ((pivotGE (head :: tail) i).length).choose 2 ≤
           tail.length.choose 2 := by
         rw [← hsplit]
         exact choose_two_add_le _ _
@@ -471,7 +465,7 @@ theorem Quicksort_Cost_Upper_Bound_ennreal
 theorem Quicksort_Cost_Upper_Bound
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
-    𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] ≤ L.length.choose 2 := by
+    𝔼ℝ_runtime[Quicksort L | M] ≤ L.length.choose 2 := by
   have := ENNReal.toReal_mono (ENNReal.natCast_ne_top _)
     (Quicksort_Cost_Upper_Bound_ennreal (M := M) L)
   simpa using this
@@ -482,7 +476,7 @@ exact-formula theorem below. -/
 lemma expected_cost_quicksort_ne_top
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] (L : List α) :
-    𝔼_runtime[(Quicksort L : TimeMT ℕ M _)] ≠ ⊤ :=
+    𝔼_runtime[Quicksort L | M] ≠ ⊤ :=
   ne_top_of_le_ne_top (ENNReal.natCast_ne_top _)
     (Quicksort_Cost_Upper_Bound_ennreal L)
 
@@ -531,7 +525,7 @@ theorem Expected_Complexity_Quicksort
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (hnd : L.Nodup) :
-    𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] =
+    𝔼ℝ_runtime[Quicksort L | M] =
     (expected_qs_cost L.length : ℚ) := by
   revert hnd
   induction L using Quicksort.induct with
@@ -546,12 +540,8 @@ theorem Expected_Complexity_Quicksort
     -- distributes through the average.
     have hne : ∀ i : Fin (head :: tail).length,
         ((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[(Quicksort
-            (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) :
-            TimeMT ℕ M _)] +
-          𝔼_runtime[(Quicksort
-            (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])) :
-            TimeMT ℕ M _)]) ≠ ⊤ := fun i =>
+          𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
+          𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]) ≠ ⊤ := fun i =>
       ENNReal.add_ne_top.mpr
         ⟨ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top _,
           expected_cost_quicksort_ne_top _⟩,
@@ -560,17 +550,13 @@ theorem Expected_Complexity_Quicksort
     -- Rewrite each summand with the IH (in `ℝ`).
     have hterm : ∀ i : Fin (head :: tail).length,
         (((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[(Quicksort
-            (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) :
-            TimeMT ℕ M _)] +
-          𝔼_runtime[(Quicksort
-            (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])) :
-            TimeMT ℕ M _)]).toReal) =
+          𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
+          𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]).toReal) =
         (tail.length : ℝ) +
           ((expected_qs_cost
-            ((((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length) : ℚ) : ℝ) +
+            ((pivotLT (head :: tail) i).length) : ℚ) : ℝ) +
           ((expected_qs_cost
-            ((((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length) : ℚ) : ℝ) := by
+            ((pivotGE (head :: tail) i).length) : ℚ) : ℝ) := by
       intro i
       rw [ENNReal.toReal_add
           (ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top _,
@@ -619,7 +605,7 @@ theorem Expected_Complexity_Quicksort
 expected runtime of the instrumented algorithm interpreted in `PMF`,
 one tick per pivot comparison. -/
 noncomputable def quicksortComparisons (L : List α) : ENNReal :=
-  𝔼_runtime[(Quicksort L : TimeMT ℕ PMF _)]
+  𝔼_runtime[Quicksort L | PMF]
 
 /-- **Expected cost is at most quadratic** on arbitrary lists
 (possibly with duplicates). -/

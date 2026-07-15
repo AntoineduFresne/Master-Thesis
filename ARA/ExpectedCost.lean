@@ -257,6 +257,18 @@ of the bind is the expected cost of `f a`. -/
       expected_cost (inst.toPMF (f a).run) := by
   simp +zetaDelta at *
 
+/-- Pure post-processing costs nothing: `E[m >>= (pure ∘ g)] = E[m]`.
+Lets `cost_step` erase the trailing `return (f x)` of a branch. -/
+@[expected_cost_simp] lemma expected_cost_toPMF_bind_pure
+    {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M]
+    {α β : Type} (m : TimeMT ℕ M α) (g : α → β) :
+    expected_cost
+      (inst.toPMF (m >>= fun a => (pure (g a) : TimeMT ℕ M β)).run) =
+      expected_cost (inst.toPMF m.run) := by
+  rw [expected_cost_toPMF_bind]
+  simp only [expected_cost_toPMF_pure, mul_zero, tsum_zero, add_zero]
+
 /-!
 ## Generic `TimeMT` erasure lemmas
 
@@ -357,6 +369,18 @@ scoped notation "𝔼_runtime[" m "]" => expected_cost (TimedPMF m)
 as `ℝ`. Use type ascription `(f L : TimeMT ℕ M _)` when `f` is polymorphic. -/
 scoped macro "𝔼ℝ_runtime[" m:term "]" : term =>
   `((expected_cost (TimedPMF $m)).toReal)
+
+/-- `𝔼_runtime[e | M]` — expected runtime (`ℝ≥0∞`) of the
+monad-polymorphic algorithm `e`, instantiated at the random monad `M`
+and timed via `TimeMT ℕ M`. Sugar for the type ascription
+`𝔼_runtime[(e : TimeMT ℕ M _)]`; both elaborate to the same term. -/
+scoped macro "𝔼_runtime[" e:term " | " M:term "]" : term =>
+  `(expected_cost (TimedPMF ($e : TimeMT ℕ $M _)))
+
+/-- `𝔼ℝ_runtime[e | M]` — real-valued expected runtime of the
+monad-polymorphic algorithm `e` at the random monad `M`. -/
+scoped macro "𝔼ℝ_runtime[" e:term " | " M:term "]" : term =>
+  `((expected_cost (TimedPMF ($e : TimeMT ℕ $M _))).toReal)
 
 /-!
 ### Arithmetic cleanups in `expected_cost_simp`

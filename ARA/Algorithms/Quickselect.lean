@@ -343,13 +343,11 @@ private lemma expected_cost_qsel_branch
     𝔼_runtime[qsel_branch (TimeMT ℕ M) L k i] =
     ((L.eraseIdx i).length : ENNReal) +
       (if k < ((L.eraseIdx i).filter (· < L[i])).length then
-        𝔼_runtime[(Quickselect ((L.eraseIdx i).filter (· < L[i])) k :
-          TimeMT ℕ M α)]
+        𝔼_runtime[Quickselect ((L.eraseIdx i).filter (· < L[i])) k | M]
       else if k = ((L.eraseIdx i).filter (· < L[i])).length then 0
       else
-        𝔼_runtime[(Quickselect ((L.eraseIdx i).filter (· ≥ L[i]))
-          (k - ((L.eraseIdx i).filter (· < L[i])).length - 1) :
-          TimeMT ℕ M α)]) := by
+        𝔼_runtime[Quickselect ((L.eraseIdx i).filter (· ≥ L[i]))
+          (k - ((L.eraseIdx i).filter (· < L[i])).length - 1) | M]) := by
   show expected_cost (inst.toPMF
     ((TimeMT.tick (L.eraseIdx i).length >>= fun _ =>
       if k < ((L.eraseIdx i).filter (· < L[i])).length then
@@ -373,20 +371,16 @@ private lemma expected_cost_quickselect_step
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (head : α) (tail : List α) (k : ℕ) :
-    𝔼_runtime[(Quickselect (head :: tail) k : TimeMT ℕ M α)] =
+    𝔼_runtime[Quickselect (head :: tail) k | M] =
     ((head :: tail).length : ENNReal)⁻¹ *
       ∑ i : Fin (head :: tail).length,
         ((((head :: tail).eraseIdx i).length : ENNReal) +
-          (if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) k :
-              TimeMT ℕ M α)]
-          else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+          (if k < (pivotLT (head :: tail) i).length then
+            𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
+          else if k = (pivotLT (head :: tail) i).length then 0
           else
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i]))
-              (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
-              TimeMT ℕ M α)])) := by
+            𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
+              (k - (pivotLT (head :: tail) i).length - 1) | M])) := by
   rw [quickselect_timed_eq_bind head tail k, expected_cost_uniform_step]
   congr 1
   exact Finset.sum_congr rfl fun i _ => expected_cost_qsel_branch (head :: tail) k i
@@ -394,7 +388,7 @@ private lemma expected_cost_quickselect_step
 /-- The empty list costs nothing (for any rank). -/
 lemma expected_cost_quickselect_nil
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (k : ℕ) :
-    𝔼_runtime[(Quickselect ([] : List α) k : TimeMT ℕ M α)] = 0 := by
+    𝔼_runtime[Quickselect ([] : List α) k | M] = 0 := by
   rw [Quickselect.eq_1, expected_cost_toPMF_pure]
 
 /-!
@@ -413,7 +407,7 @@ is bounded by `L.length.choose 2`. Tight on all-equal inputs. -/
 theorem Quickselect_Cost_Upper_Bound_ennreal
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) :
-    𝔼_runtime[(Quickselect L k : TimeMT ℕ M α)] ≤
+    𝔼_runtime[Quickselect L k | M] ≤
       ((L.length.choose 2 : ℕ) : ENNReal) := by
   induction L, k using Quickselect.induct with
   | case1 k =>
@@ -425,16 +419,12 @@ theorem Quickselect_Cost_Upper_Bound_ennreal
     -- elements, so `C(·,2)`-monotonicity bounds it by `C(tail.length, 2)`.
     have hbound : ∀ i : Fin (head :: tail).length,
         ((((head :: tail).eraseIdx i).length : ENNReal) +
-          (if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) k :
-              TimeMT ℕ M α)]
-          else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+          (if k < (pivotLT (head :: tail) i).length then
+            𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
+          else if k = (pivotLT (head :: tail) i).length then 0
           else
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i]))
-              (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
-              TimeMT ℕ M α)])) ≤
+            𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
+              (k - (pivotLT (head :: tail) i).length - 1) | M])) ≤
         ((tail.length : ENNReal) + ((tail.length.choose 2 : ℕ) : ENNReal)) := by
       intro i
       refine add_le_add (le_of_eq (by rw [length_eraseIdx_cons])) ?_
@@ -461,7 +451,7 @@ Real-valued corollary of `Quickselect_Cost_Upper_Bound_ennreal`. -/
 theorem Quickselect_Cost_Upper_Bound
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) :
-    𝔼ℝ_runtime[(Quickselect L k : TimeMT ℕ M α)] ≤ L.length.choose 2 := by
+    𝔼ℝ_runtime[Quickselect L k | M] ≤ L.length.choose 2 := by
   have := ENNReal.toReal_mono (ENNReal.natCast_ne_top _)
     (Quickselect_Cost_Upper_Bound_ennreal (M := M) L k)
   simpa using this
@@ -472,7 +462,7 @@ exact-formula theorem below. -/
 lemma expected_cost_quickselect_ne_top
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) :
-    𝔼_runtime[(Quickselect L k : TimeMT ℕ M α)] ≠ ⊤ :=
+    𝔼_runtime[Quickselect L k | M] ≠ ⊤ :=
   ne_top_of_le_ne_top (ENNReal.natCast_ne_top _)
     (Quickselect_Cost_Upper_Bound_ennreal L k)
 
@@ -487,7 +477,7 @@ theorem Expected_Complexity_Quickselect
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (k : ℕ) (hnd : L.Nodup) :
-    𝔼_runtime[(Quickselect L k : TimeMT ℕ M α)] ≤
+    𝔼_runtime[Quickselect L k | M] ≤
       4 * (L.length : ENNReal) := by
   revert hnd
   induction L, k using Quickselect.induct with
@@ -502,20 +492,16 @@ theorem Expected_Complexity_Quickselect
     -- whichever side is recursed into has at most `max` elements.
     have hbound : ∀ i : Fin (head :: tail).length,
         ((((head :: tail).eraseIdx i).length : ENNReal) +
-          (if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) k :
-              TimeMT ℕ M α)]
-          else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+          (if k < (pivotLT (head :: tail) i).length then
+            𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
+          else if k = (pivotLT (head :: tail) i).length then 0
           else
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i]))
-              (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
-              TimeMT ℕ M α)])) ≤
+            𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
+              (k - (pivotLT (head :: tail) i).length - 1) | M])) ≤
         ((tail.length : ENNReal) +
           4 * ((max
-            ((((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length)
-            ((((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length) : ℕ) :
+            ((pivotLT (head :: tail) i).length)
+            ((pivotGE (head :: tail) i).length) : ℕ) :
             ENNReal)) := by
       intro i
       refine add_le_add (le_of_eq (by rw [length_eraseIdx_cons])) ?_
@@ -533,8 +519,8 @@ theorem Expected_Complexity_Quickselect
     have hsum : (∑ i : Fin (head :: tail).length,
         ((tail.length : ENNReal) +
           4 * ((max
-            ((((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length)
-            ((((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length) : ℕ) :
+            ((pivotLT (head :: tail) i).length)
+            ((pivotGE (head :: tail) i).length) : ℕ) :
             ENNReal))) =
         ∑ r : Fin (head :: tail).length,
           ((tail.length : ENNReal) +
@@ -742,7 +728,7 @@ expectation. -/
 theorem Expected_Complexity_Quickselect_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) (k : ℕ) (hnd : L.Nodup) (hk : k < L.length) :
-    𝔼ℝ_runtime[(Quickselect L k : TimeMT ℕ M α)] =
+    𝔼ℝ_runtime[Quickselect L k | M] =
       (expected_qsel_cost L.length k : ℚ) := by
   revert hnd hk
   induction L, k using Quickselect.induct with
@@ -757,16 +743,12 @@ theorem Expected_Complexity_Quickselect_exact
     -- Every branch is finite (from the `C(n,2)` bound), so `toReal`
     -- distributes through the average.
     have hite : ∀ i : Fin (head :: tail).length,
-        (if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
-          𝔼_runtime[(Quickselect
-            (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) k :
-            TimeMT ℕ M α)]
-        else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+        (if k < (pivotLT (head :: tail) i).length then
+          𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
+        else if k = (pivotLT (head :: tail) i).length then 0
         else
-          𝔼_runtime[(Quickselect
-            (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i]))
-            (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
-            TimeMT ℕ M α)]) ≠ ⊤ := by
+          𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
+            (k - (pivotLT (head :: tail) i).length - 1) | M]) ≠ ⊤ := by
       intro i
       split_ifs
       · exact expected_cost_quickselect_ne_top _ _
@@ -779,29 +761,25 @@ theorem Expected_Complexity_Quickselect_exact
     -- stays in range because the two filters partition `rest`.
     have hterm : ∀ i : Fin (head :: tail).length,
         (((((head :: tail).eraseIdx i).length : ENNReal) +
-          (if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) k :
-              TimeMT ℕ M α)]
-          else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+          (if k < (pivotLT (head :: tail) i).length then
+            𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
+          else if k = (pivotLT (head :: tail) i).length then 0
           else
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i]))
-              (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
-              TimeMT ℕ M α)])).toReal) =
+            𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
+              (k - (pivotLT (head :: tail) i).length - 1) | M])).toReal) =
         (tail.length : ℝ) +
-          ((if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
+          ((if k < (pivotLT (head :: tail) i).length then
             expected_qsel_cost
-              ((((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length) k
-          else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+              ((pivotLT (head :: tail) i).length) k
+          else if k = (pivotLT (head :: tail) i).length then 0
           else
             expected_qsel_cost
-              ((((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length)
-              (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
+              ((pivotGE (head :: tail) i).length)
+              (k - (pivotLT (head :: tail) i).length - 1) :
             ℚ) : ℝ) := by
       intro i
-      have hlen : (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length +
-          (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length =
+      have hlen : (pivotLT (head :: tail) i).length +
+          (pivotGE (head :: tail) i).length =
           tail.length := by
         rw [length_filter_lt_ge ((head :: tail).eraseIdx i) (head :: tail)[i]]
         exact length_eraseIdx_cons head tail i
@@ -811,7 +789,8 @@ theorem Expected_Complexity_Quickselect_exact
       split_ifs with h1 h2
       · exact ih1 i ((hnd.eraseIdx _).filter _) h1
       · simp
-      · exact ih2 i ((hnd.eraseIdx _).filter _) (by omega)
+      · exact ih2 i ((hnd.eraseIdx _).filter _)
+          (by simp only [pivotLT, pivotGE] at *; omega)
     rw [Finset.sum_congr rfl fun i _ => hterm i]
     -- Reindex by rank (`|lt_i| = rank i`, `|ge_i| = n−1−rank i`).
     rw [nodup_partition_sum₂ (head :: tail) hnd
@@ -851,7 +830,7 @@ theorem Expected_Complexity_Quickselect_exact
 the expected runtime of the instrumented algorithm interpreted in
 `PMF`, one tick per pivot comparison. -/
 noncomputable def quickselectComparisons (L : List α) (k : ℕ) : ENNReal :=
-  𝔼_runtime[(Quickselect L k : TimeMT ℕ PMF α)]
+  𝔼_runtime[Quickselect L k | PMF]
 
 /-- **Expected cost is linear.** Selecting from a list of `n` distinct
 elements takes at most `4 n` comparisons in expectation. -/

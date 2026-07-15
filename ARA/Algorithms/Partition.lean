@@ -99,6 +99,16 @@ section LinearOrder
 
 variable [LinearOrder α]
 
+/-- The `< pivot` side when partitioning `L` around the pivot `L[i]`.
+Reducible, so statements written with `pivotLT` unify definitionally
+with the raw `filter`/`eraseIdx` form an algorithm unfolds to. -/
+abbrev pivotLT (L : List α) (i : Fin L.length) : List α :=
+  (L.eraseIdx i).filter (· < L[i])
+
+/-- The `≥ pivot` side when partitioning `L` around the pivot `L[i]`. -/
+abbrev pivotGE (L : List α) (i : Fin L.length) : List α :=
+  (L.eraseIdx i).filter (· ≥ L[i])
+
 /-- Filtering a list by `(· < p)` and `(· ≥ p)` gives complementary
 sub-lists. -/
 lemma length_filter_lt_ge (l : List α) (p : α) :
@@ -117,6 +127,12 @@ lemma length_filter_lt_ge (l : List α) (p : α) :
       show (tl.filter (· < p)).length +
         ((tl.filter (· ≥ p)).length + 1) = tl.length + 1
       omega
+
+/-- The two pivot sides partition the remainder: their lengths sum to
+`|L| − 1`. -/
+lemma pivot_split_length (L : List α) (i : Fin L.length) :
+    (pivotLT L i).length + (pivotGE L i).length = (L.eraseIdx i).length :=
+  length_filter_lt_ge _ _
 
 /-- Filter-partition around a pivot permutes the
 original list. -/
