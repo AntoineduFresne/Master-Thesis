@@ -299,20 +299,6 @@ lemma nodup_partition_sum₂ {β : Type*} [AddCommMonoid β]
     (fun _ => by simp)
     (fun _ _ => rfl)
 
-/-- Reindexing partition sizes by rank for nodup lists (additive form
-used by Quicksort's exact-cost recurrence). -/
-lemma nodup_partition_sum
-    (L : List α) (hnd : L.Nodup) (f : ℕ → ℚ) :
-    (∑ i : Fin L.length,
-      (f ((L.eraseIdx i).filter
-          (· < L[i])).length +
-       f ((L.eraseIdx i).filter
-          (· ≥ L[i])).length)) =
-    ∑ k : Fin L.length,
-      (f k.val +
-        f (L.length - 1 - k.val)) :=
-  nodup_partition_sum₂ L hnd fun a b => f a + f b
-
 end LinearOrder
 
 /-! ### Pivot-rank arithmetic -/

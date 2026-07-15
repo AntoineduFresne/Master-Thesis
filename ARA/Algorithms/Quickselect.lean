@@ -25,28 +25,20 @@ specification (`M = PMF`), and as timed algorithm (`M = TimeMT ℕ M'`).
   distribution is the Dirac mass at the true order statistic
   `orderStat L k`; the answer never depends on the random pivots.
   No hypotheses on `L` or `k` are required.
+* `Quickselect_Cost_Upper_Bound` — for arbitrary lists (possibly
+  with duplicates) and any rank, the expected cost is at most `C(n,2)`,
+  tight on all-equal inputs.
 * `Expected_Complexity_Quickselect` — with one tick per pivot
   comparison, the expected cost on a list of `n` distinct elements
   is at most `4 n`: a linear bound, in contrast to QuickSort's
   `Θ(n log n)`.
-* `Quickselect_Cost_Upper_Bound` — for arbitrary lists (possibly
-  with duplicates) and any rank, the expected cost is at most `C(n,2)`,
-  tight on all-equal inputs.
-* `Expected_Complexity_Quickselect_min` — the exact expected cost
-  of selecting the minimum (`k = 0`) from `n` distinct elements:
-  `2n − 2·H(n)` comparisons.
 * `Expected_Complexity_Quickselect_exact` — Knuth's (1971) exact
   expected cost of selecting rank `k` (0-indexed) from `n` distinct
   elements: `2(n + 3 + (n+1)·H(n) − (k+3)·H(k+1) − (n+2−k)·H(n−k))`
   comparisons.
 
-## Proof style
-
-The two upper bounds are stated as inequalities in `ℝ≥0∞`, where no
-summability or finiteness bookkeeping is needed. The exact formula
-descends to `ℝ` via `toReal`; the finiteness facts this requires are
-free corollaries of the `C(n,2)` bound (`expected_cost_quickselect_ne_top`)
-rather than a separate induction.
+All correctness and complexity proofs proceed by functional induction
+on `Quickselect` (`Quickselect.induct`).
 -/
 
 namespace ARA
@@ -230,24 +222,25 @@ private lemma orderStat_gt_branch (L : List α) (i : Fin L.length) {k : ℕ}
 /-- **Correctness.** For any `LawfulRandMonad`, `Quickselect L k`
 (with no-op cost tracking) returns exactly the `k`-th order statistic:
 its output distribution is the Dirac mass at `orderStat L k`,
-independently of the random pivot choices. -/
+independently of the random pivot choices. Proved by functional
+induction on `Quickselect`. -/
 theorem Correctness_Quickselect
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) :
     LawfulRandMonad.toPMF
       (@Quickselect _ _ _ M _ _ instMonadCostDefault L k) =
       PMF.pure (orderStat L k) := by
-  induction' n : L.length using Nat.strong_induction_on with n ih generalizing L k
-  rcases L with (_ | ⟨head, tail⟩)
-  · -- Base case: the empty list returns `default`, matching the
+  induction L, k using Quickselect.induct with
+  | case1 k =>
+    -- Base case: the empty list returns `default`, matching the
     -- out-of-range value of `orderStat`.
     rw [Quickselect.eq_1]
     simp only [LawfulRandMonad.toPMF_pure]
-    have h0 : orderStat ([] : List α) k = default := by simp [orderStat]
-    rw [h0]
+    rw [show orderStat ([] : List α) k = default from by simp [orderStat]]
     rfl
-  · -- Inductive case: every pivot branch produces the same Dirac output,
-    -- so the uniform average collapses to a point mass.
+  | case2 head tail k ih1 ih2 =>
+    -- Every pivot branch produces the same Dirac output, so the
+    -- uniform average collapses to a point mass.
     have h_step : ∀ i : Fin (head :: tail).length,
         LawfulRandMonad.toPMF
           (@qsel_branch _ _ _ M _ _ instMonadCostDefault (head :: tail) k i) =
@@ -259,34 +252,19 @@ theorem Correctness_Quickselect
       split_ifs with h1 h2
       · -- `k` in the `<`-side: recurse (IH) and transport the order
         -- statistic with `orderStat_lt_branch`.
-        rw [ih _ (by grind) _ k rfl, orderStat_lt_branch _ i h1]
+        rw [ih1 i, orderStat_lt_branch _ i h1]
       · -- `k` is the pivot's rank: the branch returns the pivot.
         rw [orderStat_eq_branch _ i h2]
         exact LawfulRandMonad.toPMF_pure _
       · -- `k` in the `≥`-side: recurse with the shifted rank.
-        rw [ih _ (by grind) _ _ rfl, orderStat_gt_branch _ i (by omega)]
+        rw [ih2 i, orderStat_gt_branch _ i (by omega)]
+    -- Expose the uniform pivot choice, interpret it in `PMF`, replace
+    -- every branch by the common Dirac mass, collapse the constant bind.
     have hne : Nonempty (Fin (head :: tail).length) := ⟨⟨0, by grind⟩⟩
-    calc LawfulRandMonad.toPMF
-          (@Quickselect _ _ _ M _ _ instMonadCostDefault (head :: tail) k)
-        -- Expose the uniform pivot choice…
-        = LawfulRandMonad.toPMF
-            (randIdx (head :: tail) (by grind) >>=
-              fun idx =>
-                @qsel_branch _ _ _ M _ _ instMonadCostDefault (head :: tail) k idx) := by
-          rw [quickselect_eq_bind]
-        -- …interpret it in `PMF`…
-      _ = (PMF.uniformOfFintype (Fin (head :: tail).length)).bind
-            (fun idx =>
-              LawfulRandMonad.toPMF
-                (@qsel_branch _ _ _ M _ _ instMonadCostDefault (head :: tail) k idx)) := by
-          rw [LawfulRandMonad.toPMF_bind, LawfulRandMonad.toPMF_randIdx]
-          rfl
-        -- …replace every branch by the common Dirac mass…
-      _ = (PMF.uniformOfFintype (Fin (head :: tail).length)).bind
-            (fun _ => PMF.pure (orderStat (head :: tail) k)) := by
-          congr 1; funext i; exact h_step i
-        -- …and collapse the constant bind.
-      _ = PMF.pure (orderStat (head :: tail) k) := PMF.bind_const _ _
+    rw [quickselect_eq_bind, LawfulRandMonad.toPMF_bind,
+      LawfulRandMonad.toPMF_randIdx]
+    simp only [h_step]
+    exact PMF.bind_const _ _
 
 /-- Correctness at `M = PMF` (where `toPMF` is the identity). -/
 theorem quickselect_correct (L : List α) (k : ℕ) :
@@ -350,15 +328,21 @@ lemma Correctness_Quickselect_Timed_PMF (L : List ℕ) (k : ℕ) :
 ## Complexity
 
 The expected cost obeys
-`E[n] = (n-1) + (1/n) Σ_i E[side_i]`. Three results follow:
+`E[n] = (n-1) + (1/n) Σ_i E[side_i]`. Three results follow, all by
+functional induction on `Quickselect`:
 
-* recursing always into a side of size at most `max(r, n-1-r)` (for
-  pivot rank `r`) gives the linear bound `E ≤ 4n` for distinct lists;
 * bounding the recursion by the whole `rest` gives `E ≤ C(n,2)` for
   arbitrary lists (tight on all-equal inputs), which also yields
   finiteness of the expected cost;
-* for `k = 0` the recursion is exactly the `<`-side, and the recurrence
-  solves to the exact value `2n − 2H(n)` for distinct lists.
+* recursing always into a side of size at most `max(r, n-1-r)` (for
+  pivot rank `r`) gives the linear bound `E ≤ 4n` for distinct lists;
+* for distinct lists the recurrence solves exactly: rank reindexing
+  turns the sum over pivots into Knuth's (1971) bivariate harmonic
+  closed form (`Expected_Complexity_Quickselect_exact`).
+
+The upper bounds are stated in `ℝ≥0∞`, where no summability
+bookkeeping is needed; the exact formula descends to `ℝ` via `toReal`,
+with finiteness supplied by the `C(n,2)` bound.
 -/
 
 /-- The expected cost of `qsel_branch` in `TimeMT` is the tick cost
@@ -435,6 +419,91 @@ lemma expected_cost_quickselect_nil
   rw [Quickselect.eq_1, expected_cost_toPMF_pure]
 
 /-!
+### The `C(n,2)` bound for arbitrary lists
+
+The linear bound below needs distinct elements: on an all-equal list
+the `≥`-side keeps every duplicate, so selecting rank `n-1` degenerates
+to `T(n) = (n-1) + T(n-1) = C(n,2)`. That worst case is itself an upper
+bound for every list and rank, by the same argument as for `Quicksort`.
+Its `ℝ≥0∞` form also provides finiteness of the expected cost for free.
+-/
+
+set_option maxHeartbeats 400000 in
+/-- **`ℝ≥0∞` core of the upper bound.** For an arbitrary list (possibly
+with duplicates) and any rank `k`, the expected cost of `Quickselect`
+is bounded by `L.length.choose 2`. Tight on all-equal inputs. -/
+theorem Quickselect_Cost_Upper_Bound_ennreal
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    (L : List α) (k : ℕ) :
+    𝔼_runtime[(Quickselect L k : TimeMT ℕ M α)] ≤
+      ((L.length.choose 2 : ℕ) : ENNReal) := by
+  induction L, k using Quickselect.induct with
+  | case1 k =>
+    rw [expected_cost_quickselect_nil]
+    exact bot_le
+  | case2 head tail k ih1 ih2 =>
+    rw [expected_cost_quickselect_step head tail k]
+    -- Whichever branch is taken recurses on at most `tail.length`
+    -- elements, so `C(·,2)`-monotonicity bounds it by `C(tail.length, 2)`.
+    have hbound : ∀ i : Fin (head :: tail).length,
+        ((((head :: tail).eraseIdx i).length : ENNReal) +
+          (if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
+            𝔼_runtime[(Quickselect
+              (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) k :
+              TimeMT ℕ M α)]
+          else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+          else
+            𝔼_runtime[(Quickselect
+              (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i]))
+              (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
+              TimeMT ℕ M α)])) ≤
+        ((tail.length : ENNReal) + ((tail.length.choose 2 : ℕ) : ENNReal)) := by
+      intro i
+      have hrest : (((head :: tail).eraseIdx i).length : ENNReal) =
+          (tail.length : ENNReal) := by
+        have hi := i.isLt
+        simp only [List.length_cons] at hi
+        simp [List.length_eraseIdx, Nat.lt_succ_iff.mp hi]
+      refine add_le_add (le_of_eq hrest) ?_
+      split_ifs with h1 h2
+      · exact le_trans (ih1 i) (Nat.cast_le.mpr (Nat.choose_le_choose 2 (by grind)))
+      · exact bot_le
+      · exact le_trans (ih2 i) (Nat.cast_le.mpr (Nat.choose_le_choose 2 (by grind)))
+    -- Pascal: `C(n,2) = tail.length + C(tail.length, 2)`.
+    have hpascal : (head :: tail).length.choose 2 =
+        tail.length + tail.length.choose 2 := by
+      simp only [List.length_cons]
+      rw [Nat.choose_succ_succ, Nat.choose_one_right]
+    -- Average the `n` equal bounds.
+    refine uniform_avg_le (by simp)
+      (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)
+    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
+      hpascal]
+    push_cast
+    exact le_rfl
+
+/-- For an arbitrary list (possibly with duplicates) and any rank, the
+expected cost of `Quickselect` is at most `C(n,2)` comparisons.
+Real-valued corollary of `Quickselect_Cost_Upper_Bound_ennreal`. -/
+theorem Quickselect_Cost_Upper_Bound
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    (L : List α) (k : ℕ) :
+    𝔼ℝ_runtime[(Quickselect L k : TimeMT ℕ M α)] ≤ L.length.choose 2 := by
+  have := ENNReal.toReal_mono (ENNReal.natCast_ne_top _)
+    (Quickselect_Cost_Upper_Bound_ennreal (M := M) L k)
+  simpa using this
+
+/-- Finiteness of the expected cost — a free corollary of the `C(n,2)`
+bound, no separate induction needed. Feeds the `toReal` steps of the
+exact-formula theorem below. -/
+lemma expected_cost_quickselect_ne_top
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    (L : List α) (k : ℕ) :
+    𝔼_runtime[(Quickselect L k : TimeMT ℕ M α)] ≠ ⊤ :=
+  ne_top_of_le_ne_top (ENNReal.natCast_ne_top _)
+    (Quickselect_Cost_Upper_Bound_ennreal L k)
+
+/-!
 ### The linear bound for distinct lists
 -/
 
@@ -449,11 +518,14 @@ theorem Expected_Complexity_Quickselect
     (L : List α) (k : ℕ) (hnd : L.Nodup) :
     𝔼_runtime[(Quickselect L k : TimeMT ℕ M α)] ≤
       4 * (L.length : ENNReal) := by
-  induction' n : L.length using Nat.strong_induction_on with n ih generalizing L k
-  rcases L with (_ | ⟨head, tail⟩)
-  · rw [expected_cost_quickselect_nil]
+  revert hnd
+  induction L, k using Quickselect.induct with
+  | case1 k =>
+    intro _
+    rw [expected_cost_quickselect_nil]
     exact bot_le
-  · subst n
+  | case2 head tail k ih1 ih2 =>
+    intro hnd
     rw [expected_cost_quickselect_step head tail k]
     -- Bound each branch by `tail.length + 4·max(|lt|, |ge|)` using the IH:
     -- whichever side is recursed into has at most `max` elements.
@@ -483,13 +555,13 @@ theorem Expected_Complexity_Quickselect
       refine add_le_add (le_of_eq hrest) ?_
       have hnd' : (((head :: tail).eraseIdx i)).Nodup := hnd.eraseIdx _
       split_ifs with h1 h2
-      · -- `<`-side: IH gives `4·|lt|`, and `|lt| ≤ max`.
-        refine le_trans (ih _ (by grind) _ k (hnd'.filter _) rfl) ?_
+      · -- `<`-side: the IH gives `4·|lt|`, and `|lt| ≤ max`.
+        refine le_trans (ih1 i (hnd'.filter _)) ?_
         exact mul_le_mul' le_rfl (Nat.cast_le.mpr (le_max_left _ _))
       · -- pivot hit: free.
         exact bot_le
-      · -- `≥`-side: IH gives `4·|ge|`, and `|ge| ≤ max`.
-        refine le_trans (ih _ (by grind) _ _ (hnd'.filter _) rfl) ?_
+      · -- `≥`-side: the IH gives `4·|ge|`, and `|ge| ≤ max`.
+        refine le_trans (ih2 i (hnd'.filter _)) ?_
         exact mul_le_mul' le_rfl (Nat.cast_le.mpr (le_max_right _ _))
     -- Reindex the per-pivot bound by rank (`nodup_partition_sum₂`).
     have hsum : (∑ i : Fin (head :: tail).length,
@@ -533,227 +605,6 @@ theorem Expected_Complexity_Quickselect
       ring
 
 /-!
-### The `C(n,2)` bound for arbitrary lists
-
-The `4n` bound needs distinct elements: on an all-equal list the
-`≥`-side keeps every duplicate, so selecting rank `n-1` degenerates to
-`T(n) = (n-1) + T(n-1) = C(n,2)`. That worst case is itself an upper
-bound for every list and rank, by the same argument as for `Quicksort`.
-Its `ℝ≥0∞` form also provides finiteness of the expected cost for free.
--/
-
-set_option maxHeartbeats 400000 in
-/-- **`ℝ≥0∞` core of the upper bound.** For an arbitrary list (possibly
-with duplicates) and any rank `k`, the expected cost of `Quickselect`
-is bounded by `L.length.choose 2`. Tight on all-equal inputs. -/
-theorem Quickselect_Cost_Upper_Bound_ennreal
-    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
-    (L : List α) (k : ℕ) :
-    𝔼_runtime[(Quickselect L k : TimeMT ℕ M α)] ≤
-      ((L.length.choose 2 : ℕ) : ENNReal) := by
-  induction' n : L.length using Nat.strong_induction_on with n ih generalizing L k
-  rcases L with (_ | ⟨head, tail⟩)
-  · rw [expected_cost_quickselect_nil]
-    exact bot_le
-  · subst n
-    rw [expected_cost_quickselect_step head tail k]
-    -- Whichever branch is taken recurses on at most `tail.length`
-    -- elements, so `C(·,2)`-monotonicity bounds it by `C(tail.length, 2)`.
-    have hbound : ∀ i : Fin (head :: tail).length,
-        ((((head :: tail).eraseIdx i).length : ENNReal) +
-          (if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) k :
-              TimeMT ℕ M α)]
-          else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
-          else
-            𝔼_runtime[(Quickselect
-              (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i]))
-              (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
-              TimeMT ℕ M α)])) ≤
-        ((tail.length : ENNReal) + ((tail.length.choose 2 : ℕ) : ENNReal)) := by
-      intro i
-      have hrest : (((head :: tail).eraseIdx i).length : ENNReal) =
-          (tail.length : ENNReal) := by
-        have hi := i.isLt
-        simp only [List.length_cons] at hi
-        simp [List.length_eraseIdx, Nat.lt_succ_iff.mp hi]
-      refine add_le_add (le_of_eq hrest) ?_
-      split_ifs with h1 h2
-      · refine le_trans (ih _ (by grind) _ k rfl) ?_
-        exact Nat.cast_le.mpr (Nat.choose_le_choose 2 (by grind))
-      · exact bot_le
-      · refine le_trans (ih _ (by grind) _ _ rfl) ?_
-        exact Nat.cast_le.mpr (Nat.choose_le_choose 2 (by grind))
-    -- Pascal: `C(n,2) = tail.length + C(tail.length, 2)`.
-    have hpascal : (head :: tail).length.choose 2 =
-        tail.length + tail.length.choose 2 := by
-      simp only [List.length_cons]
-      rw [Nat.choose_succ_succ, Nat.choose_one_right]
-    -- Average the `n` equal bounds.
-    refine uniform_avg_le (by simp)
-      (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)
-    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
-      hpascal]
-    push_cast
-    exact le_rfl
-
-/-- For an arbitrary list (possibly with duplicates) and any rank, the
-expected cost of `Quickselect` is at most `C(n,2)` comparisons.
-Real-valued corollary of `Quickselect_Cost_Upper_Bound_ennreal`. -/
-theorem Quickselect_Cost_Upper_Bound
-    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
-    (L : List α) (k : ℕ) :
-    𝔼ℝ_runtime[(Quickselect L k : TimeMT ℕ M α)] ≤ L.length.choose 2 := by
-  have := ENNReal.toReal_mono (ENNReal.natCast_ne_top _)
-    (Quickselect_Cost_Upper_Bound_ennreal (M := M) L k)
-  simpa using this
-
-/-- Finiteness of the expected cost — a free corollary of the `C(n,2)`
-bound, no separate induction needed. Feeds the `toReal` steps of the
-exact-formula theorem below. -/
-lemma expected_cost_quickselect_ne_top
-    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
-    (L : List α) (k : ℕ) :
-    𝔼_runtime[(Quickselect L k : TimeMT ℕ M α)] ≠ ⊤ :=
-  ne_top_of_le_ne_top (ENNReal.natCast_ne_top _)
-    (Quickselect_Cost_Upper_Bound_ennreal L k)
-
-/-!
-### The exact expected cost of minimum-selection
-
-For `k = 0` the algorithm always recurses into the `<`-side (or stops
-when it is empty), so the recurrence collapses to one variable:
-`f(n) = (n-1) + (1/n) Σ_{r<n} f(r)`, whose solution is exactly
-`f(n) = 2n − 2H(n)`. The general-`k` closed form (Knuth 1971) is the
-bivariate harmonic expression proved in the next section.
--/
-
-/-- The exact expected number of comparisons for selecting the minimum
-from `n` distinct elements: `2n − 2H(n)`. -/
-def expected_qsel_min_cost (n : ℕ) : ℚ :=
-  2 * n - 2 * harmonic n
-
-@[simp] lemma expected_qsel_min_cost_zero :
-    expected_qsel_min_cost 0 = 0 := by
-  simp [expected_qsel_min_cost]
-
-/-- Summation identity for the recurrence:
-`Σ_{r<n} f(r) = n·f(n) − n(n−1)`. -/
-lemma expected_qsel_min_sum_helper (n : ℕ) :
-    ∑ r ∈ Finset.range n, expected_qsel_min_cost r =
-      n * expected_qsel_min_cost n - n * (n - 1) := by
-  induction n with
-  | zero => simp
-  | succ n ih =>
-    rw [Finset.sum_range_succ, ih]
-    unfold expected_qsel_min_cost
-    rw [harmonic_succ]
-    have hn1 : ((n : ℚ) + 1) ≠ 0 := by positivity
-    push_cast
-    field_simp
-    ring
-
-/-- Specialization of the step lemma to `k = 0`: the `≥`-branch is
-unreachable, and when the `<`-side is empty the branch stops — but
-recursing on `[]` also costs `0`, so the case split disappears. -/
-private lemma expected_cost_quickselect_min_step
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    (head : α) (tail : List α) :
-    𝔼_runtime[(Quickselect (head :: tail) 0 : TimeMT ℕ M α)] =
-    ((head :: tail).length : ENNReal)⁻¹ *
-      ∑ i : Fin (head :: tail).length,
-        ((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[(Quickselect
-            (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) 0 :
-            TimeMT ℕ M α)]) := by
-  rw [expected_cost_quickselect_step head tail 0]
-  congr 1
-  refine Finset.sum_congr rfl fun i _ => ?_
-  congr 1
-  rcases Nat.eq_zero_or_pos
-      ((((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length) with h0 | h0
-  · -- `<`-side empty: the branch stops at the pivot (cost 0), which
-    -- coincides with the cost of recursing on `[]`.
-    have hnil : ((head :: tail).eraseIdx i).filter (· < (head :: tail)[i]) = [] :=
-      List.eq_nil_of_length_eq_zero h0
-    rw [if_neg (by omega), if_pos (by omega), hnil,
-      expected_cost_quickselect_nil]
-  · -- `<`-side nonempty: rank 0 lies inside it.
-    rw [if_pos h0]
-
-set_option maxHeartbeats 400000 in
-/-- **Exact expected complexity of minimum-selection.** Selecting the
-minimum (`k = 0`) of a list of `n` distinct elements costs exactly
-`2n − 2H(n)` comparisons in expectation. -/
-theorem Expected_Complexity_Quickselect_min
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    (L : List α) (hnd : L.Nodup) :
-    𝔼ℝ_runtime[(Quickselect L 0 : TimeMT ℕ M α)] =
-      (expected_qsel_min_cost L.length : ℚ) := by
-  induction' n : L.length using Nat.strong_induction_on with n ih generalizing L
-  rcases L with (_ | ⟨head, tail⟩)
-  · -- Base case: cost `0` and `f(0) = 0`.
-    rw [expected_cost_quickselect_nil]
-    simp only [List.length_nil] at n
-    subst n
-    simp [expected_qsel_min_cost]
-  · subst n
-    rw [expected_cost_quickselect_min_step head tail]
-    -- Each summand is finite (from the `C(n,2)` bound), so `toReal`
-    -- distributes through the average.
-    have hne : ∀ i : Fin (head :: tail).length,
-        ((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[(Quickselect
-            (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) 0 :
-            TimeMT ℕ M α)]) ≠ ⊤ := fun i =>
-      ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top _,
-        expected_cost_quickselect_ne_top _ _⟩
-    rw [ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_natCast,
-      ENNReal.toReal_sum (fun i _ => hne i)]
-    -- Rewrite each summand with the IH (in `ℝ`).
-    have hrest_nat : ∀ i : Fin (head :: tail).length,
-        (((head :: tail).eraseIdx i).length) = tail.length := by
-      intro i
-      have hi := i.isLt
-      simp only [List.length_cons] at hi
-      simp [List.length_eraseIdx, Nat.lt_succ_iff.mp hi]
-    have hterm : ∀ i : Fin (head :: tail).length,
-        (((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[(Quickselect
-            (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) 0 :
-            TimeMT ℕ M α)]).toReal) =
-        (tail.length : ℝ) +
-          ((expected_qsel_min_cost
-            ((((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length) : ℚ) : ℝ) := by
-      intro i
-      rw [ENNReal.toReal_add (ENNReal.natCast_ne_top _)
-        (expected_cost_quickselect_ne_top _ _), ENNReal.toReal_natCast,
-        hrest_nat i]
-      congr 1
-      exact ih _ (by grind) _ ((hnd.eraseIdx _).filter _) rfl
-    rw [Finset.sum_congr rfl fun i _ => hterm i]
-    -- Reindex by rank (`|lt_i| = rank i` for nodup lists).
-    rw [nodup_partition_sum₂ (head :: tail) hnd
-      (fun a _ => (tail.length : ℝ) + ((expected_qsel_min_cost a : ℚ) : ℝ))]
-    rw [Fin.sum_univ_eq_sum_range
-      (fun r => (tail.length : ℝ) + ((expected_qsel_min_cost r : ℚ) : ℝ))]
-    simp only [List.length_cons]
-    -- Separate the constant part and apply the summation identity.
-    rw [Finset.sum_add_distrib, Finset.sum_const, Finset.card_range,
-      nsmul_eq_mul,
-      show (∑ r ∈ Finset.range (tail.length + 1),
-          ((expected_qsel_min_cost r : ℚ) : ℝ)) =
-        ((∑ r ∈ Finset.range (tail.length + 1),
-          expected_qsel_min_cost r : ℚ) : ℝ) from by push_cast; rfl,
-      expected_qsel_min_sum_helper]
-    -- Close with field arithmetic in `ℝ`.
-    have hn1 : ((tail.length : ℝ) + 1) ≠ 0 := by positivity
-    push_cast
-    field_simp
-    ring
-
-/-!
 ### The exact expected cost for arbitrary rank (Knuth 1971)
 
 For general `k` the recursion enters the `<`-side (size `r`, rank `k`)
@@ -779,11 +630,11 @@ def expected_qsel_cost (n k : ℕ) : ℚ :=
       - (k + 3) * harmonic (k + 1)
       - (n + 2 - k) * harmonic (n - k))
 
-/-- At `k = 0`, Knuth's formula collapses to the minimum-selection
-cost `2n − 2·H(n)`. -/
+/-- At `k = 0`, Knuth's formula collapses to the classic
+minimum-selection cost `2n − 2·H(n)`. -/
 lemma expected_qsel_cost_zero (n : ℕ) :
-    expected_qsel_cost n 0 = expected_qsel_min_cost n := by
-  unfold expected_qsel_cost expected_qsel_min_cost
+    expected_qsel_cost n 0 = 2 * n - 2 * harmonic n := by
+  unfold expected_qsel_cost
   rw [Nat.sub_zero, harmonic_succ 0, harmonic_zero]
   push_cast
   ring
@@ -928,12 +779,15 @@ theorem Expected_Complexity_Quickselect_exact
     (L : List α) (k : ℕ) (hnd : L.Nodup) (hk : k < L.length) :
     𝔼ℝ_runtime[(Quickselect L k : TimeMT ℕ M α)] =
       (expected_qsel_cost L.length k : ℚ) := by
-  induction' n : L.length using Nat.strong_induction_on with n ih generalizing L k
-  rcases L with (_ | ⟨head, tail⟩)
-  · -- Base case is vacuous: no rank is below length `0`.
+  revert hnd hk
+  induction L, k using Quickselect.induct with
+  | case1 k =>
+    -- Vacuous: no rank is below length `0`.
+    intro _ hk
     simp only [List.length_nil] at hk
     omega
-  · subst n
+  | case2 head tail k ih1 ih2 =>
+    intro hnd hk
     rw [expected_cost_quickselect_step head tail k]
     -- Every branch is finite (from the `C(n,2)` bound), so `toReal`
     -- distributes through the average.
@@ -997,9 +851,9 @@ theorem Expected_Complexity_Quickselect_exact
         ENNReal.toReal_natCast, hrest_nat i]
       congr 1
       split_ifs with h1 h2
-      · exact ih _ (by grind) _ _ ((hnd.eraseIdx _).filter _) h1 rfl
+      · exact ih1 i ((hnd.eraseIdx _).filter _) h1
       · simp
-      · exact ih _ (by grind) _ _ ((hnd.eraseIdx _).filter _) (by omega) rfl
+      · exact ih2 i ((hnd.eraseIdx _).filter _) (by omega)
     rw [Finset.sum_congr rfl fun i _ => hterm i]
     -- Reindex by rank (`|lt_i| = rank i`, `|ge_i| = n−1−rank i`).
     rw [nodup_partition_sum₂ (head :: tail) hnd
