@@ -37,7 +37,7 @@ namespace ARA
 
 open Cslib.Algorithms.Lean
 
-variable {α : Type} [DecidableEq α]
+variable {α : Type} [h : DecidableEq α]
 
 /-! ## Algorithm -/
 
@@ -139,6 +139,7 @@ private lemma toPMF_reservoirAux
     rw [← mul_assoc, ENNReal.inv_mul_cancel (by simp) (ENNReal.natCast_ne_top _),
       one_mul]
 
+omit h
 private lemma pmf_map_some_apply (p : PMF α) (a : α) :
     (p.map some) (some a) = p a := by
   rw [PMF.map_apply]
@@ -149,6 +150,7 @@ private lemma pmf_map_some_none (p : PMF α) : (p.map some) none = 0 := by
   rw [PMF.map_apply]
   simp
 
+include h
 /-- **Correctness (exact uniformity).** For any `LawfulRandMonad`, each
 element of `L` is returned with probability `count a / |L|`; on a
 distinct list, every element has probability exactly `1/n`. Note the
@@ -172,6 +174,7 @@ theorem Correctness_Reservoir
       · simp only [if_neg h, if_neg fun hh : x = a => h hh.symm]; push_cast; ring
     · push_cast; ring
 
+omit h
 /-- The sampler never returns `none` on a nonempty list. -/
 theorem reservoir_none
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -182,6 +185,7 @@ theorem reservoir_none
   | cons x xs =>
     rw [reservoir.eq_2, LawfulRandMonad.toPMF_map, pmf_map_eq, pmf_map_some_none]
 
+include h
 /-- On a list of distinct elements, every member is returned with
 probability exactly `1/n`. -/
 theorem reservoir_uniform_of_nodup
@@ -190,7 +194,7 @@ theorem reservoir_uniform_of_nodup
     inst.toPMF (@reservoir α M _ _ instMonadCostDefault L) (some a) =
       ((L.length : ENNReal))⁻¹ := by
   rw [Correctness_Reservoir, List.count_eq_one_of_mem hnd ha]
-  simp [ENNReal.div_eq_inv_mul]
+  simp
 
 -- ----------------------------------------
 -- Generic Complexity Proof
@@ -205,6 +209,7 @@ One coin flip and one tick per stream element: the pass costs exactly
 with a constant recurrence.
 -/
 
+omit [DecidableEq α]
 private lemma expected_cost_reservoirAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (xs : List α) (seen : ℕ) (cur : α) :
@@ -256,6 +261,8 @@ theorem Expected_Complexity_Reservoir
 ## Named corollaries at `M = PMF`
 -/
 
+
+include h
 /-- Uniformity at `M = PMF` (where `toPMF` is the identity). -/
 theorem reservoir_uniform (L : List α) (a : α) :
     (reservoir L : PMF (Option α)) (some a) =
