@@ -28,6 +28,15 @@ variable {α : Type*}
 
 /-! ### Pure list structure (no order) -/
 
+/-- Erasing a valid index from `head :: tail` leaves `tail.length`
+elements — the `rest` of every uniform-pivot step lemma. -/
+lemma length_eraseIdx_cons (head : α) (tail : List α)
+    (i : Fin (head :: tail).length) :
+    ((head :: tail).eraseIdx i).length = tail.length := by
+  have hi := i.isLt
+  simp only [List.length_cons] at hi
+  simp [List.length_eraseIdx, Nat.lt_succ_iff.mp hi]
+
 /-- `eraseIdx` gives back a permutation. -/
 lemma perm_getElem_cons_eraseIdx
     (L : List α) (i : Fin L.length) :

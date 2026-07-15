@@ -411,4 +411,47 @@ with `expected_cost_simp`, then cleans up arithmetic/`PMF` weights via
 scoped macro "runtime_simp" : tactic =>
   `(tactic| (simp only [expected_cost_simp, pmf_simp_attr]; try norm_num))
 
+/-!
+## Uniform-pivot recipes
+
+The two lemmas below package the algorithm-independent steps of a
+uniform-pivot cost analysis, so that a new algorithm's *step lemma* is
+one `rw` plus its branch decomposition:
+
+```
+lemma expected_cost_myAlgo_step ... :
+    𝔼_runtime[(myAlgo (x :: xs) : TimeMT ℕ M _)] =
+    ((x :: xs).length : ENNReal)⁻¹ * ∑ i, (branch cost i) := by
+  rw [myAlgo_timed_eq_bind, expected_cost_uniform_step]
+  congr 1
+  exact Finset.sum_congr rfl fun i _ => expected_cost_myAlgo_branch ..
+```
+-/
+
+/-- **Uniform-pivot step.** The expected cost of
+`lift (randIdx L) >>= branch` is the uniform average of the branch
+costs: the one-step recurrence `E = (1/n) · Σᵢ E[branch i]`. -/
+lemma expected_cost_uniform_step
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α : Type*} {β : Type} {L : List α} (hL : 0 < L.length)
+    (f : Fin L.length → TimeMT ℕ M β) :
+    𝔼_runtime[TimeMT.lift (randIdx L hL : M _) >>= f] =
+    (L.length : ENNReal)⁻¹ * ∑ i : Fin L.length, 𝔼_runtime[f i] := by
+  have : Nonempty (Fin L.length) := ⟨⟨0, hL⟩⟩
+  show expected_cost (inst.toPMF
+    (TimeMT.lift (randIdx L hL : M _) >>= f).run) = _
+  cost_step
+  rw [inst.toPMF_randIdx, tsum_fintype]
+  simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
+  rw [← Finset.mul_sum]
+
+/-- Distribute `toReal` through a uniform average of finite branch
+costs. Feed the `≠ ⊤` side conditions from the algorithm's ENNReal
+upper bound. -/
+lemma toReal_uniform_avg {n : ℕ} {S : Fin n → ENNReal}
+    (h : ∀ i, S i ≠ ⊤) :
+    ((n : ENNReal)⁻¹ * ∑ i, S i).toReal = (n : ℝ)⁻¹ * ∑ i, (S i).toReal := by
+  rw [ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_natCast,
+    ENNReal.toReal_sum fun i _ => h i]
+
 end ARA

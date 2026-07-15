@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.ExpectedCost
+import ARA.Correctness
 import ARA.Algorithms.Partition
 import Mathlib.NumberTheory.Harmonic.Defs
 
@@ -139,9 +140,8 @@ private noncomputable abbrev qs_branch
   let S2 ← Quicksort (rest.filter (· ≥ pivot))
   return (S1 ++ [pivot] ++ S2)
 
-/-!
-### Structural decomposition
--/
+
+-- ### Structural decomposition
 
 /-- `Quicksort L` on a nonempty list decomposes as
 `randIdx L >>= qs_branch M L`. -/
@@ -218,40 +218,17 @@ lemma Correctness_Quicksort
       · exact (Perm.append
           (Perm.append p1 (.refl _)) p2).trans
           (perm_filter_partition L i)
-    -- All pivots yield the same output (uniqueness
-    -- of sorted permutation), so the PMF is a point mass.
-    obtain ⟨Output, h0, hS, hP⟩ :=
-      h_step ⟨0, by grind⟩
+    -- All pivots yield the same output (uniqueness of the sorted
+    -- permutation), so the uniform pivot choice collapses
+    -- (`toPMF_randIdx_bind_dirac`).
+    obtain ⟨Output, h0, hS, hP⟩ := h_step ⟨0, by grind⟩
     refine ⟨Output, ?_, hS, hP⟩
-    have : Nonempty (Fin L.length) :=
-      ⟨⟨0, by grind⟩⟩
-    calc LawfulRandMonad.toPMF
-          (@Quicksort _ _ M _ _ instMonadCostDefault L)
-        = LawfulRandMonad.toPMF
-            (randIdx L (by grind) >>=
-              fun idx =>
-                @qs_branch _ _ M _ _ instMonadCostDefault L idx) := by
-          unfold qs_branch
-          rw [@Quicksort.eq_2 _ _ M _ _ instMonadCostDefault head tail]
-      _ = (PMF.uniformOfFintype
-            (Fin L.length)).bind
-            (fun idx =>
-              LawfulRandMonad.toPMF
-                (@qs_branch _ _ M _ _ instMonadCostDefault L idx)) := by
-          rw [LawfulRandMonad.toPMF_bind,
-            LawfulRandMonad.toPMF_randIdx]
-          simp_all only [length_cons,
-            Fin.getElem_fin, ge_iff_le,
-            Fin.zero_eta, L]
-          rfl
-      _ = (PMF.uniformOfFintype
-            (Fin L.length)).bind
-            fun _ => pure Output := by
-          congr 1; funext i
-          obtain ⟨Oi, hi, si, pi⟩ := h_step i
-          rwa [eq_of_sortedLE_perm si hS
-            (pi.trans hP.symm)] at hi
-      _ = pure Output := PMF.bind_const _ _
+    show LawfulRandMonad.toPMF
+      (@Quicksort _ _ M _ _ instMonadCostDefault (head :: tail)) = pure Output
+    rw [quicksort_eq_bind, pmf_pure_eq]
+    refine toPMF_randIdx_bind_dirac fun i => ?_
+    obtain ⟨Oi, hi, si, pi⟩ := h_step i
+    rwa [eq_of_sortedLE_perm si hS (pi.trans hP.symm)] at hi
 
 -- ----------------------------------------
 -- Free Proof: Untimed Quicksort_PMF
@@ -275,8 +252,7 @@ lemma Correctness_Quicksort_PMF :
 /-- Erasing time from the timed Quicksort gives the untimed Quicksort.
 This follows from the unified definition: the `MonadCost.tick` in
 `TimeMT` erases to `pure ()`, matching the no-op `MonadCost` instance.
-
-Uses **functional induction** on `Quicksort`. -/
+-/
 lemma Quicksort_erasure
     {M} [Monad M] [LawfulMonad M] [RandMonad M]
     (L : List α) :
@@ -395,18 +371,9 @@ lemma expected_cost_quicksort_step
           𝔼_runtime[(Quicksort
             (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])) :
             TimeMT ℕ M _)]) := by
-  rw [quicksort_timed_eq_bind head tail]
-  -- Separate the uniform pivot choice from the branch costs.
-  show expected_cost (inst.toPMF (TimeMT.lift (randIdx (head :: tail) : M _) >>=
-    fun idx => qs_branch (TimeMT ℕ M) (head :: tail) idx).run) = _
-  cost_step
-  rw [inst.toPMF_randIdx]
-  have hne : Nonempty (Fin (head :: tail).length) := ⟨⟨0, by grind⟩⟩
-  rw [tsum_fintype]
-  simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
-  rw [Finset.mul_sum]
-  congr 1; ext i; congr 1
-  exact expected_cost_qs_branch (head :: tail) i
+  rw [quicksort_timed_eq_bind head tail, expected_cost_uniform_step]
+  congr 1
+  exact Finset.sum_congr rfl fun i _ => expected_cost_qs_branch (head :: tail) i
 
 /-!
 ### The `C(n,2)` bound for arbitrary lists
@@ -442,8 +409,7 @@ private lemma choose_two_add_le (a b : ℕ) :
         Nat.choose_succ_succ, Nat.choose_one_right]; linarith
     rw [hb, hab]; omega
 
-set_option maxHeartbeats 400000 in
-/-- **`ℝ≥0∞` core of the upper bound.** For an arbitrary list (possibly
+/-- For an arbitrary list (possibly
 with duplicates), the expected cost of `Quicksort` is bounded by
 `L.length.choose 2`. Tight on the all-equal list `[a, a, …, a]`. -/
 theorem Quicksort_Cost_Upper_Bound_ennreal
@@ -469,10 +435,7 @@ theorem Quicksort_Cost_Upper_Bound_ennreal
             TimeMT ℕ M _)]) ≤
         ((tail.length : ENNReal) + ((tail.length.choose 2 : ℕ) : ENNReal)) := by
       intro i
-      have hrest : (((head :: tail).eraseIdx i).length) = tail.length := by
-        have hi := i.isLt
-        simp only [List.length_cons] at hi
-        simp [List.length_eraseIdx, Nat.lt_succ_iff.mp hi]
+      have hrest := length_eraseIdx_cons head tail i
       have hsplit : (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length +
           (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length =
           tail.length := by
@@ -561,7 +524,6 @@ lemma expected_qs_sum_helper (n : ℕ) :
     have h_nz : (n : ℚ) + 1 ≠ 0 := by positivity
     field_simp; ring
 
-set_option maxHeartbeats 400000 in
 /-- **Exact expected complexity of Quicksort.** Sorting a list of `n`
 distinct elements costs exactly `2(n+1)H(n) − 4n` comparisons in
 expectation. -/
@@ -594,14 +556,7 @@ theorem Expected_Complexity_Quicksort
         ⟨ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top _,
           expected_cost_quicksort_ne_top _⟩,
         expected_cost_quicksort_ne_top _⟩
-    rw [ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_natCast,
-      ENNReal.toReal_sum (fun i _ => hne i)]
-    have hrest_nat : ∀ i : Fin (head :: tail).length,
-        (((head :: tail).eraseIdx i).length) = tail.length := by
-      intro i
-      have hi := i.isLt
-      simp only [List.length_cons] at hi
-      simp [List.length_eraseIdx, Nat.lt_succ_iff.mp hi]
+    rw [toReal_uniform_avg hne]
     -- Rewrite each summand with the IH (in `ℝ`).
     have hterm : ∀ i : Fin (head :: tail).length,
         (((((head :: tail).eraseIdx i).length : ENNReal) +
@@ -623,7 +578,7 @@ theorem Expected_Complexity_Quicksort
           (expected_cost_quicksort_ne_top _),
         ENNReal.toReal_add (ENNReal.natCast_ne_top _)
           (expected_cost_quicksort_ne_top _),
-        ENNReal.toReal_natCast, hrest_nat i,
+        ENNReal.toReal_natCast, length_eraseIdx_cons head tail i,
         ih1 i ((hnd.eraseIdx _).filter _), ih2 i ((hnd.eraseIdx _).filter _)]
     rw [Finset.sum_congr rfl fun i _ => hterm i]
     -- Reindex by rank (`|L1_i| = rank i` for nodup lists).
@@ -655,5 +610,27 @@ theorem Expected_Complexity_Quicksort
     push_cast
     field_simp
     ring
+
+/-!
+## Named corollaries at `M = PMF`
+-/
+
+/-- Expected number of comparisons performed by `Quicksort L`: the
+expected runtime of the instrumented algorithm interpreted in `PMF`,
+one tick per pivot comparison. -/
+noncomputable def quicksortComparisons (L : List α) : ENNReal :=
+  𝔼_runtime[(Quicksort L : TimeMT ℕ PMF _)]
+
+/-- **Expected cost is at most quadratic** on arbitrary lists
+(possibly with duplicates). -/
+theorem quicksort_expected_cost_quadratic (L : List α) :
+    quicksortComparisons L ≤ ((L.length.choose 2 : ℕ) : ENNReal) :=
+  Quicksort_Cost_Upper_Bound_ennreal L
+
+/-- **Exact expected cost**: sorting `n` distinct elements takes
+exactly `2(n+1)·H(n) − 4n` comparisons in expectation. -/
+theorem quicksort_expected_cost_exact (L : List α) (hnd : L.Nodup) :
+    (quicksortComparisons L).toReal = (expected_qs_cost L.length : ℚ) :=
+  Expected_Complexity_Quicksort (M := PMF) L hnd
 
 end ARA
