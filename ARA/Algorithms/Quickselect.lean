@@ -35,6 +35,10 @@ specification (`M = PMF`), and as timed algorithm (`M = TimeMT ℕ M'`).
 * `Expected_Complexity_Quickselect_min` — the exact expected cost
   of selecting the minimum (`k = 0`) from `n` distinct elements:
   `2n − 2·H(n)` comparisons.
+* `Expected_Complexity_Quickselect_exact` — Knuth's (1971) exact
+  expected cost of selecting rank `k` (0-indexed) from `n` distinct
+  elements: `2(n + 3 + (n+1)·H(n) − (k+3)·H(k+1) − (n+2−k)·H(n−k))`
+  comparisons.
 
 ## Proof style
 
@@ -621,8 +625,8 @@ lemma expected_cost_quickselect_ne_top
 For `k = 0` the algorithm always recurses into the `<`-side (or stops
 when it is empty), so the recurrence collapses to one variable:
 `f(n) = (n-1) + (1/n) Σ_{r<n} f(r)`, whose solution is exactly
-`f(n) = 2n − 2H(n)`. The general-`k` closed form (Knuth 1971) is a
-bivariate harmonic expression and is left as future work.
+`f(n) = 2n − 2H(n)`. The general-`k` closed form (Knuth 1971) is the
+bivariate harmonic expression proved in the next section.
 -/
 
 /-- The exact expected number of comparisons for selecting the minimum
@@ -750,6 +754,284 @@ theorem Expected_Complexity_Quickselect_min
     ring
 
 /-!
+### The exact expected cost for arbitrary rank (Knuth 1971)
+
+For general `k` the recursion enters the `<`-side (size `r`, rank `k`)
+when the pivot rank `r` exceeds `k`, stops at `r = k`, and enters the
+`≥`-side (size `n−1−r`, rank `k−1−r`) when `r < k`, so
+
+`n·C(n,k) = n(n−1) + Σ_{r=k+1}^{n−1} C(r,k) + Σ_{s=0}^{k−1} C(n−k+s, s)`
+
+(the second sum reindexed by `s := k−1−r`). Its solution (Knuth 1971,
+*Mathematical analysis of algorithms*) is the bivariate harmonic
+closed form `expected_qsel_cost` below. Each partial sum telescopes
+against an explicit closed form by a one-variable induction
+(`qsel_sumA`, `qsel_sumB`), phrased via the ℕ-subtraction-free
+reparametrization `qselCost j k = expected_qsel_cost (j + k) k`.
+-/
+
+/-- Knuth's exact expected number of comparisons for selecting rank `k`
+(0-indexed) from `n` distinct elements:
+`2(n + 3 + (n+1)·H(n) − (k+3)·H(k+1) − (n+2−k)·H(n−k))`.
+Specializes to `2n − 2·H(n)` at `k = 0` (`expected_qsel_cost_zero`). -/
+def expected_qsel_cost (n k : ℕ) : ℚ :=
+  2 * (n + 3 + (n + 1) * harmonic n
+      - (k + 3) * harmonic (k + 1)
+      - (n + 2 - k) * harmonic (n - k))
+
+/-- At `k = 0`, Knuth's formula collapses to the minimum-selection
+cost `2n − 2·H(n)`. -/
+lemma expected_qsel_cost_zero (n : ℕ) :
+    expected_qsel_cost n 0 = expected_qsel_min_cost n := by
+  unfold expected_qsel_cost expected_qsel_min_cost
+  rw [Nat.sub_zero, harmonic_succ 0, harmonic_zero]
+  push_cast
+  ring
+
+/-- `j`-parametrized form of `expected_qsel_cost`, avoiding
+ℕ-subtraction: `qselCost j k` is the expected cost for length `j + k`
+and rank `k`. All telescoping runs through this form. -/
+private def qselCost (j k : ℕ) : ℚ :=
+  2 * (j + k + 3 + (j + k + 1) * harmonic (j + k)
+      - (k + 3) * harmonic (k + 1)
+      - (j + 2) * harmonic j)
+
+private lemma expected_qsel_cost_add (j s : ℕ) :
+    expected_qsel_cost (j + s) s = qselCost j s := by
+  unfold expected_qsel_cost qselCost
+  rw [Nat.add_sub_cancel]
+  push_cast
+  ring
+
+/-- Closed form for the `<`-side partial sum `Σ_{t<d} C(k+1+t, k)`:
+the ranks strictly above `k` contribute a telescoping harmonic sum. -/
+private lemma qsel_sumA (k d : ℕ) :
+    ∑ t ∈ Finset.range d, qselCost (t + 1) k =
+      d * (d + 2 * k + 7)
+      + (k + d + 1) * (k + d + 2) * harmonic (k + d)
+      - (k + d) * (k + d + 3) / 2
+      - ((k + 1) * (k + 2) + 2 * d * (k + 3)) * harmonic (k + 1)
+      + (k + 2) + k * (k + 3) / 2
+      - (d + 1) * (d + 4) * harmonic d
+      + d * (d + 7) / 2 := by
+  induction d with
+  | zero =>
+      simp only [Finset.range_zero, Finset.sum_empty, Nat.add_zero, harmonic_zero]
+      rw [harmonic_succ k]
+      have hk : (k : ℚ) + 1 ≠ 0 := by positivity
+      push_cast
+      field_simp
+      ring
+  | succ d ih =>
+      rw [Finset.sum_range_succ, ih]
+      unfold qselCost
+      rw [show d + 1 + k = k + d + 1 from by omega,
+        show k + (d + 1) = k + d + 1 from by omega,
+        harmonic_succ (k + d), harmonic_succ d]
+      have h1 : (k : ℚ) + d + 1 ≠ 0 := by positivity
+      have h2 : (d : ℚ) + 1 ≠ 0 := by positivity
+      push_cast
+      field_simp
+      ring
+
+/-- Closed form for the `≥`-side partial sum `Σ_{s<k} C(j+s, s)`: the
+ranks strictly below `k`, reindexed, contribute a diagonal harmonic
+sum with fixed side-length offset `j`. -/
+private lemma qsel_sumB (j k : ℕ) :
+    ∑ s ∈ Finset.range k, qselCost j s =
+      k * (2 * j + k + 5)
+      + (j + k) * (j + k + 1) * harmonic (j + k)
+      - (j + k) * (j + k + 3) / 2
+      - j * (j + 1) * harmonic j
+      + j * (j + 3) / 2
+      - (k + 1) * (k + 4) * harmonic (k + 1)
+      + (k + 4) + k * (k + 7) / 2
+      - 2 * k * (j + 2) * harmonic j := by
+  induction k with
+  | zero =>
+      simp only [Finset.range_zero, Finset.sum_empty, Nat.add_zero]
+      rw [harmonic_succ 0, harmonic_zero]
+      push_cast
+      ring
+  | succ k ih =>
+      rw [Finset.sum_range_succ, ih]
+      unfold qselCost
+      rw [show j + (k + 1) = j + k + 1 from by omega,
+        harmonic_succ (j + k), harmonic_succ (k + 1)]
+      have h1 : (j : ℚ) + k + 1 ≠ 0 := by positivity
+      have h2 : (k : ℚ) + 2 ≠ 0 := by positivity
+      push_cast
+      field_simp
+      ring
+
+/-- Recurrence satisfaction: summing the branch costs over all `n`
+pivot ranks gives `n·C(n,k) − n(n−1)`, i.e. `expected_qsel_cost`
+solves Quickselect's three-way recurrence. The sum splits at rank `k`
+into the two telescoped partial sums. -/
+private lemma qsel_cost_sum_eq (n k : ℕ) (hk : k < n) :
+    ∑ r ∈ Finset.range n,
+      (if k < r then expected_qsel_cost r k
+       else if k = r then 0
+       else expected_qsel_cost (n - 1 - r) (k - r - 1)) =
+    n * expected_qsel_cost n k - n * (n - 1) := by
+  obtain ⟨d, rfl⟩ : ∃ d, n = k + 1 + d := ⟨n - (k + 1), by omega⟩
+  rw [Finset.range_eq_Ico,
+    ← Finset.sum_Ico_consecutive _ (Nat.zero_le (k + 1)) (by omega : k + 1 ≤ k + 1 + d),
+    ← Finset.range_eq_Ico]
+  -- Ranks below `k` (reflected) and the vanishing `r = k` term.
+  have hB : (∑ r ∈ Finset.range (k + 1),
+      (if k < r then expected_qsel_cost r k
+       else if k = r then 0
+       else expected_qsel_cost (k + 1 + d - 1 - r) (k - r - 1))) =
+      ∑ s ∈ Finset.range k, qselCost (d + 1) s := by
+    rw [Finset.sum_range_succ, if_neg (lt_irrefl k), if_pos rfl, add_zero,
+      ← Finset.sum_range_reflect (fun s => qselCost (d + 1) s) k]
+    refine Finset.sum_congr rfl fun r hr => ?_
+    have hr' : r < k := Finset.mem_range.mp hr
+    rw [if_neg (by omega), if_neg (by omega),
+      show k - r - 1 = k - 1 - r from by omega,
+      show k + 1 + d - 1 - r = d + 1 + (k - 1 - r) from by omega,
+      expected_qsel_cost_add]
+  -- Ranks above `k`.
+  have hA : (∑ r ∈ Finset.Ico (k + 1) (k + 1 + d),
+      (if k < r then expected_qsel_cost r k
+       else if k = r then 0
+       else expected_qsel_cost (k + 1 + d - 1 - r) (k - r - 1))) =
+      ∑ t ∈ Finset.range d, qselCost (t + 1) k := by
+    rw [Finset.sum_Ico_eq_sum_range]
+    simp only [show k + 1 + d - (k + 1) = d from by omega]
+    refine Finset.sum_congr rfl fun t _ => ?_
+    rw [if_pos (by omega : k < k + 1 + t),
+      show k + 1 + t = t + 1 + k from by omega,
+      expected_qsel_cost_add]
+  -- Combine the closed forms; one final harmonic-step rewrite closes it.
+  rw [hB, hA, qsel_sumA k d, qsel_sumB (d + 1) k,
+    show k + 1 + d = d + 1 + k from by omega,
+    expected_qsel_cost_add]
+  unfold qselCost
+  rw [show d + 1 + k = k + d + 1 from by omega,
+    harmonic_succ (k + d), harmonic_succ d]
+  have h1 : (k : ℚ) + d + 1 ≠ 0 := by positivity
+  have h2 : (d : ℚ) + 1 ≠ 0 := by positivity
+  push_cast
+  field_simp
+  ring
+
+set_option maxHeartbeats 400000 in
+/-- **Exact expected complexity of Quickselect** (Knuth 1971's analysis
+of Hoare's FIND). Selecting rank `k` (0-indexed, `k < n`) from a list
+of `n` distinct elements costs exactly
+`2(n + 3 + (n+1)·H(n) − (k+3)·H(k+1) − (n+2−k)·H(n−k))` comparisons in
+expectation. -/
+theorem Expected_Complexity_Quickselect_exact
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (L : List α) (k : ℕ) (hnd : L.Nodup) (hk : k < L.length) :
+    𝔼ℝ_runtime[(Quickselect L k : TimeMT ℕ M α)] =
+      (expected_qsel_cost L.length k : ℚ) := by
+  induction' n : L.length using Nat.strong_induction_on with n ih generalizing L k
+  rcases L with (_ | ⟨head, tail⟩)
+  · -- Base case is vacuous: no rank is below length `0`.
+    simp only [List.length_nil] at hk
+    omega
+  · subst n
+    rw [expected_cost_quickselect_step head tail k]
+    -- Every branch is finite (from the `C(n,2)` bound), so `toReal`
+    -- distributes through the average.
+    have hite : ∀ i : Fin (head :: tail).length,
+        (if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
+          𝔼_runtime[(Quickselect
+            (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) k :
+            TimeMT ℕ M α)]
+        else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+        else
+          𝔼_runtime[(Quickselect
+            (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i]))
+            (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
+            TimeMT ℕ M α)]) ≠ ⊤ := by
+      intro i
+      split_ifs
+      · exact expected_cost_quickselect_ne_top _ _
+      · exact ENNReal.zero_ne_top
+      · exact expected_cost_quickselect_ne_top _ _
+    rw [ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_natCast,
+      ENNReal.toReal_sum (fun i _ =>
+        ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top _, hite i⟩)]
+    have hrest_nat : ∀ i : Fin (head :: tail).length,
+        (((head :: tail).eraseIdx i).length) = tail.length := by
+      intro i
+      have hi := i.isLt
+      simp only [List.length_cons] at hi
+      simp [List.length_eraseIdx, Nat.lt_succ_iff.mp hi]
+    have hknat : k < tail.length + 1 := by simpa using hk
+    -- Rewrite each summand with the IH (in `ℝ`); the `≥`-branch rank
+    -- stays in range because the two filters partition `rest`.
+    have hterm : ∀ i : Fin (head :: tail).length,
+        (((((head :: tail).eraseIdx i).length : ENNReal) +
+          (if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
+            𝔼_runtime[(Quickselect
+              (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])) k :
+              TimeMT ℕ M α)]
+          else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+          else
+            𝔼_runtime[(Quickselect
+              (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i]))
+              (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
+              TimeMT ℕ M α)])).toReal) =
+        (tail.length : ℝ) +
+          ((if k < (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then
+            expected_qsel_cost
+              ((((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length) k
+          else if k = (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length then 0
+          else
+            expected_qsel_cost
+              ((((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length)
+              (k - (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length - 1) :
+            ℚ) : ℝ) := by
+      intro i
+      have hlen : (((head :: tail).eraseIdx i).filter (· < (head :: tail)[i])).length +
+          (((head :: tail).eraseIdx i).filter (· ≥ (head :: tail)[i])).length =
+          tail.length := by
+        rw [length_filter_lt_ge ((head :: tail).eraseIdx i) (head :: tail)[i]]
+        exact hrest_nat i
+      rw [ENNReal.toReal_add (ENNReal.natCast_ne_top _) (hite i),
+        ENNReal.toReal_natCast, hrest_nat i]
+      congr 1
+      split_ifs with h1 h2
+      · exact ih _ (by grind) _ _ ((hnd.eraseIdx _).filter _) h1 rfl
+      · simp
+      · exact ih _ (by grind) _ _ ((hnd.eraseIdx _).filter _) (by omega) rfl
+    rw [Finset.sum_congr rfl fun i _ => hterm i]
+    -- Reindex by rank (`|lt_i| = rank i`, `|ge_i| = n−1−rank i`).
+    rw [nodup_partition_sum₂ (head :: tail) hnd
+      (fun a b => (tail.length : ℝ) +
+        ((if k < a then expected_qsel_cost a k
+          else if k = a then 0
+          else expected_qsel_cost b (k - a - 1) : ℚ) : ℝ))]
+    rw [Fin.sum_univ_eq_sum_range
+      (fun r => (tail.length : ℝ) +
+        ((if k < r then expected_qsel_cost r k
+          else if k = r then 0
+          else expected_qsel_cost ((head :: tail).length - 1 - r) (k - r - 1) : ℚ) : ℝ))]
+    -- Separate the constant part and apply the recurrence identity.
+    rw [Finset.sum_add_distrib, Finset.sum_const, Finset.card_range, nsmul_eq_mul,
+      show (∑ r ∈ Finset.range (head :: tail).length,
+          ((if k < r then expected_qsel_cost r k
+            else if k = r then 0
+            else expected_qsel_cost ((head :: tail).length - 1 - r) (k - r - 1) : ℚ) : ℝ)) =
+        ((∑ r ∈ Finset.range (head :: tail).length,
+          (if k < r then expected_qsel_cost r k
+            else if k = r then 0
+            else expected_qsel_cost ((head :: tail).length - 1 - r) (k - r - 1)) : ℚ) : ℝ)
+        from by push_cast; rfl,
+      qsel_cost_sum_eq (head :: tail).length k hk]
+    -- Close with field arithmetic in `ℝ`.
+    have hn1 : ((tail.length : ℝ) + 1) ≠ 0 := by positivity
+    simp only [List.length_cons]
+    push_cast
+    field_simp
+    ring
+
+/-!
 ## Named corollaries at `M = PMF`
 -/
 
@@ -765,5 +1047,14 @@ theorem quickselect_expected_cost_linear
     (L : List α) (k : ℕ) (hnd : L.Nodup) :
     expectedComparisons L k ≤ 4 * (L.length : ENNReal) :=
   Expected_Complexity_Quickselect L k hnd
+
+/-- **Exact expected cost** (Knuth 1971): selecting rank `k` from `n`
+distinct elements takes exactly
+`2(n + 3 + (n+1)·H(n) − (k+3)·H(k+1) − (n+2−k)·H(n−k))` comparisons
+in expectation. -/
+theorem quickselect_expected_cost_exact
+    (L : List α) (k : ℕ) (hnd : L.Nodup) (hk : k < L.length) :
+    (expectedComparisons L k).toReal = (expected_qsel_cost L.length k : ℚ) :=
+  Expected_Complexity_Quickselect_exact (M := PMF) L k hnd hk
 
 end ARA
