@@ -37,9 +37,6 @@ serves as:
   cost over any `LawfulRandMonad`: sorting a list of `n` distinct
   elements requires exactly `2(n+1)H(n) - 4n` comparisons.
 
-All correctness and complexity proofs proceed by functional induction
-on `Quicksort` (`Quicksort.induct`).
-
 ## Notation
 
 The expected runtime of a timed computation is written using the
@@ -121,12 +118,6 @@ noncomputable def Quicksort_PMF_Timed :
 -- Generic Correctness proof
 -- ----------------------------------------
 
-/-! ### Helper lemmas
-
-The generic partition helpers (`eq_of_sortedLE_perm`,
-`sorted_concat_pivot`, `perm_filter_partition`, `nodup_partition_sum₂`)
-live in `ARA.Algorithms.Partition` and are shared with `Quickselect`. -/
-
 /-!
 ### Abbreviations
 
@@ -150,9 +141,6 @@ private noncomputable abbrev qs_branch
 
 /-!
 ### Structural decomposition
-
-`Quicksort` on a nonempty list is exactly
-`randIdx >>= qs_branch`.
 -/
 
 /-- `Quicksort L` on a nonempty list decomposes as

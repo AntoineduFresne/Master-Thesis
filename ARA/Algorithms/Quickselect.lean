@@ -36,9 +36,6 @@ specification (`M = PMF`), and as timed algorithm (`M = TimeMT ℕ M'`).
   expected cost of selecting rank `k` (0-indexed) from `n` distinct
   elements: `2(n + 3 + (n+1)·H(n) − (k+3)·H(k+1) − (n+2−k)·H(n−k))`
   comparisons.
-
-All correctness and complexity proofs proceed by functional induction
-on `Quickselect` (`Quickselect.induct`).
 -/
 
 namespace ARA
