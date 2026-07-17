@@ -511,4 +511,80 @@ lemma toReal_uniform_avg {n : ℕ} {S : Fin n → ENNReal}
   rw [ENNReal.toReal_mul, ENNReal.toReal_inv, ENNReal.toReal_natCast,
     ENNReal.toReal_sum fun i _ => h i]
 
+/-!
+## Expected values of output functionals
+
+For randomized algorithms whose interesting measure is a *structural*
+functional of the output — the height of a random tree, the size of a
+random cut — rather than a tick count, we provide the bare expectation
+`expVal p g = Σ' a, p a * g a` with the same `bind`/`pure`/uniform
+decomposition API as `expected_cost`.
+-/
+
+/-- Expected value of `g` under `p`. -/
+noncomputable def expVal {α : Type*} (p : PMF α) (g : α → ENNReal) : ENNReal :=
+  ∑' a, p a * g a
+
+@[simp] lemma expVal_pure {α : Type*} (a : α) (g : α → ENNReal) :
+    expVal (PMF.pure a) g = g a := by
+  unfold expVal
+  rw [tsum_eq_single a fun b hb => by
+    rw [PMF.pure_apply, if_neg hb, zero_mul]]
+  rw [PMF.pure_apply, if_pos rfl, one_mul]
+
+/-- Tower rule: the expected value through a bind is the expected
+expected value. -/
+lemma expVal_bind {α β : Type*} (p : PMF α) (f : α → PMF β)
+    (g : β → ENNReal) :
+    expVal (p.bind f) g = expVal p fun a => expVal (f a) g := by
+  unfold expVal
+  simp only [PMF.bind_apply, ← ENNReal.tsum_mul_left, ← ENNReal.tsum_mul_right]
+  rw [ENNReal.tsum_comm]
+  exact tsum_congr fun a => tsum_congr fun b => by ring
+
+lemma expVal_const {α : Type*} (p : PMF α) (c : ENNReal) :
+    expVal p (fun _ => c) = c := by
+  unfold expVal
+  rw [ENNReal.tsum_mul_right, PMF.tsum_coe, one_mul]
+
+lemma expVal_mono {α : Type*} (p : PMF α) {g₁ g₂ : α → ENNReal}
+    (h : ∀ a, g₁ a ≤ g₂ a) : expVal p g₁ ≤ expVal p g₂ :=
+  ENNReal.tsum_le_tsum fun a => mul_le_mul' le_rfl (h a)
+
+lemma expVal_add {α : Type*} (p : PMF α) (g₁ g₂ : α → ENNReal) :
+    expVal p (fun a => g₁ a + g₂ a) = expVal p g₁ + expVal p g₂ := by
+  unfold expVal
+  rw [← ENNReal.tsum_add]
+  exact tsum_congr fun a => mul_add _ _ _
+
+lemma expVal_const_mul {α : Type*} (p : PMF α) (g : α → ENNReal)
+    (c : ENNReal) :
+    expVal p (fun a => c * g a) = c * expVal p g := by
+  unfold expVal
+  rw [← ENNReal.tsum_mul_left]
+  exact tsum_congr fun a => by ring
+
+lemma expVal_mul_right {α : Type*} (p : PMF α) (g : α → ENNReal)
+    (c : ENNReal) :
+    expVal p (fun a => g a * c) = expVal p g * c := by
+  unfold expVal
+  rw [← ENNReal.tsum_mul_right]
+  exact tsum_congr fun a => (mul_assoc _ _ _).symm
+
+/-- **Uniform-pivot step for output functionals**: the expected value
+of `g` over `randIdx >>= branch` is the uniform average of the branch
+expectations — the `expVal` analogue of `expected_cost_uniform_step`. -/
+lemma expVal_toPMF_randIdx_bind
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α : Type*} {β : Type} {L : List α} {hL : 0 < L.length}
+    (f : Fin L.length → M β) (g : β → ENNReal) :
+    expVal (inst.toPMF (randIdx L hL >>= f)) g =
+      (L.length : ENNReal)⁻¹ * ∑ i : Fin L.length, expVal (inst.toPMF (f i)) g := by
+  have : Nonempty (Fin L.length) := ⟨⟨0, hL⟩⟩
+  rw [inst.toPMF_bind, inst.toPMF_randIdx, pmf_bind_eq, expVal_bind]
+  unfold expVal
+  rw [tsum_fintype]
+  simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
+  rw [← Finset.mul_sum]
+
 end ARA

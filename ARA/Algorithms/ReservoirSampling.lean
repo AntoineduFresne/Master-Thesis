@@ -24,8 +24,8 @@ as specification (`M = PMF`), and as timed algorithm
 
 * `Correctness_Reservoir` — **exact uniformity**: each element is
   returned with probability `count a / |L|`. Unlike
-  `Quicksort`/`Quickselect`, the output distribution is *not* a point
-  mass — this exercises the framework's distributional tier, the
+  `Quicksort`/`Quickselect`, the output distribution is not a point
+  mass, this is an example of the framework's distributional tier, the
   headline claim of the `PMF` shallow embedding.
 * `reservoir_none` — the sampler never returns `none` on a nonempty
   list.

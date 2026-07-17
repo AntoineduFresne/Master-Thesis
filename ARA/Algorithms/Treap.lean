@@ -19,24 +19,36 @@ explicit and the output distribution exact.
 
 ## Architecture
 
-`randomBST` is polymorphic in the random monad `M`; it runs in `IO`
-(executable), specifies a distribution in `PMF`, etc. It draws no
-`MonadCost` ticks — for a data structure the analogue of runtime is a
-*structural* measure (the tree height), read off the output.
+Two classically equivalent models, both polymorphic in the random
+monad `M` (they run in `IO`, specify distributions in `PMF`, …):
+
+* `randomBST` — insert the keys in a uniformly random order
+  (`shuffle` + `foldl insert`);
+* `treap` — pick a uniformly random root and recurse on the two sides
+  (the shape distribution of a treap).
+
+Neither draws `MonadCost` ticks: for a data structure the analogue of
+runtime is a *structural* measure of the output (the tree height),
+handled by the `expVal` output-functional API from `ARA.ExpectedCost`.
 
 ## Main results
 
-* `Correctness_Treap` — **every** tree the sampler can output is a
-  valid BST over the (distinct) keys: its in-order traversal is sorted
-  and a permutation of the keys. This holds for every random order, so
-  the in-order traversal is deterministic even though the tree *shape*
-  is random — the framework's distributional-support correctness.
-* `randomBST_height_le` — a deterministic honest bound: the height
-  never exceeds the number of keys.
+* `Correctness_Treap` (insertion model) and `Correctness_TreapRec`
+  (recursive model) — **every** tree the sampler can output is a valid
+  BST over the (distinct) keys: its in-order traversal is sorted and a
+  permutation of the keys. So the traversal is deterministic even
+  though the tree *shape* is random.
+* `randomBST_height_le` — deterministic bound: height ≤ number of keys.
+* `treap_expVal_exp_height` — the exponential-height bound
+  `E[2^height] ≤ C(n+3, 3)` (CLRS-style; the hockey-stick identity
+  makes the induction close with equality).
+* `Expected_Height_Treap` — **the expected height is logarithmic**:
+  `E[height] ≤ 3·log₂(n+3) + 4`, extracted from the exponential bound
+  by the pointwise inequality `h ≤ k + 2^h/2^k` (no Jensen needed).
+  The sharp constant is `≈ 3` in base 2 (Devroye 1986).
 
-The sharp result — that the *expected* height is `Θ(log n)` (Devroye
-1986) — is a substantially harder analysis (it controls the whole
-shape distribution, not just the support) and is left as future work.
+The formal equivalence of the two models (their output distributions
+coincide) is future work.
 -/
 
 namespace ARA
@@ -332,5 +344,317 @@ theorem randomBST_height_le
     _ ≤ Tree.leaf.size + perm.length := Tree.size_foldl_le perm Tree.leaf
     _ = perm.length := by simp [Tree.size]
     _ = keys.length := hp.length_eq
+
+-- ----------------------------------------
+-- The recursive model and the expected height
+-- ----------------------------------------
+
+/-!
+## The recursive model and the expected height
+
+`randomBST` above inserts in a random order. The classically
+equivalent *recursive* characterization picks a uniformly random root
+and recurses on the two sides — the exact shape distribution of a
+treap. The recursive form exposes the pivot structure that the
+framework's partition machinery consumes, which is what makes the
+expected-height analysis tractable. (The formal equivalence of the
+two models is future work.)
+
+The height analysis is the classic exponential-height argument: the
+recurrence `2^H = 2·max(2^{H_l}, 2^{H_r}) ≤ 2·(2^{H_l} + 2^{H_r})`
+solves against the closed form `E[2^H] ≤ C(n+3, 3)` (the hockey-stick
+identity makes the induction close with *equality*), and the pointwise
+inequality `h ≤ k + 2^h/2^k` extracts the logarithm without Jensen.
+-/
+
+/-- Recursive treap: pick a uniformly random root, recurse on the
+strictly-smaller and the `≥` side of the remainder. -/
+def treap {M} [Monad M] [RandMonad M] : List ℕ → M Tree
+  | [] => return Tree.leaf
+  | L@(_ :: _) => do
+      let i ← randIdx L
+      let l ← treap ((L.eraseIdx i).filter (· < L[i]))
+      let r ← treap ((L.eraseIdx i).filter (· ≥ L[i]))
+      return Tree.node l L[i] r
+  termination_by L => L.length
+  decreasing_by all_goals grind
+
+def treap_IO : List ℕ → IO Tree := treap
+
+#eval do IO.println s!"{repr (← treap_IO [3, 1, 4, 1, 5, 9, 2, 6])}"
+
+noncomputable def treap_PMF : List ℕ → PMF Tree := treap
+
+/-- Decomposition of `treap` on a nonempty list (definitional). -/
+private lemma treap_eq_bind {M} [Monad M] [RandMonad M]
+    (x : ℕ) (xs : List ℕ) :
+    (treap (x :: xs) : M Tree) =
+    randIdx (x :: xs) >>= fun i =>
+      treap (pivotLT (x :: xs) i) >>= fun l =>
+        treap (pivotGE (x :: xs) i) >>= fun r =>
+          pure (Tree.node l (x :: xs)[i] r) := by
+  rw [treap.eq_2]
+
+/-! ### The combinatorial core -/
+
+/-- Hockey stick, specialized: `Σ_{r<n} C(r+3, 3) = C(n+3, 4)`. -/
+private lemma sum_choose_three (n : ℕ) :
+    ∑ r ∈ Finset.range n, (r + 3).choose 3 = (n + 3).choose 4 := by
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+    rw [Finset.sum_range_succ, ih,
+      show n + 1 + 3 = (n + 3) + 1 from by omega,
+      Nat.choose_succ_succ (n + 3) 3]
+    show (n + 3).choose 4 + (n + 3).choose 3 =
+      (n + 3).choose 3 + (n + 3).choose 4
+    omega
+
+/-- `4·C(n+3, 4) = n·C(n+3, 3)`. -/
+private lemma four_mul_choose_four (n : ℕ) :
+    4 * (n + 3).choose 4 = n * (n + 3).choose 3 := by
+  have h := Nat.choose_succ_right_eq (n + 3) 3
+  rw [Nat.add_sub_cancel] at h
+  rw [mul_comm 4 _, mul_comm n _]
+  exact h
+
+/-- Per-rank sum for the exponential-height recurrence: the branch
+bounds average back to the bound itself (with equality, in fact). -/
+private lemma sum_exp_height_bound (n : ℕ) :
+    ∑ r ∈ Finset.range n,
+      (2 * ((r + 3).choose 3) + 2 * ((n - 1 - r + 3).choose 3)) ≤
+      n * (n + 3).choose 3 := by
+  rcases n with _ | m
+  · simp
+  · rw [Finset.sum_add_distrib, ← Finset.mul_sum, ← Finset.mul_sum,
+      show (∑ r ∈ Finset.range (m + 1), (m + 1 - 1 - r + 3).choose 3) =
+          ∑ r ∈ Finset.range (m + 1), (r + 3).choose 3 from
+        Finset.sum_range_reflect (fun r => (r + 3).choose 3) (m + 1),
+      sum_choose_three]
+    have h4 := four_mul_choose_four (m + 1)
+    omega
+
+/-- Pointwise: `2^{height(node l p r)} ≤ 2·2^{h_l} + 2·2^{h_r}`. -/
+private lemma two_pow_node_height_le (l r : Tree) (p : ℕ) :
+    (2 : ENNReal) ^ (Tree.node l p r).height ≤
+      2 * 2 ^ l.height + 2 * 2 ^ r.height := by
+  show (2 : ENNReal) ^ (1 + max l.height r.height) ≤ _
+  rw [pow_add, pow_one]
+  rcases max_cases l.height r.height with ⟨hm, _⟩ | ⟨hm, _⟩ <;> rw [hm]
+  · exact le_self_add
+  · exact le_add_self
+
+set_option maxHeartbeats 400000 in
+/-- **Exponential-height bound** (CLRS-style): on distinct keys,
+`E[2^height] ≤ C(n+3, 3)`. -/
+theorem treap_expVal_exp_height
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (L : List ℕ) (hnd : L.Nodup) :
+    expVal (inst.toPMF (treap L)) (fun t => 2 ^ t.height) ≤
+      (((L.length + 3).choose 3 : ℕ) : ENNReal) := by
+  revert hnd
+  induction L using treap.induct with
+  | case1 =>
+    intro _
+    rw [treap.eq_1, inst.toPMF_pure, pmf_pure_eq, expVal_pure]
+    simp [Tree.height]
+  | case2 x xs ih1 ih2 =>
+    intro hnd
+    rw [treap_eq_bind, expVal_toPMF_randIdx_bind]
+    refine uniform_avg_le (by simp) ?_
+    -- Bound each branch by `2·C(|lt|+3,3) + 2·C(|ge|+3,3)` via the IHs.
+    have hbranch : ∀ i : Fin (x :: xs).length,
+        expVal (inst.toPMF
+          (treap (pivotLT (x :: xs) i) >>= fun l =>
+            treap (pivotGE (x :: xs) i) >>= fun r =>
+              pure (Tree.node l (x :: xs)[i] r)))
+          (fun t => 2 ^ t.height) ≤
+        2 * ((((pivotLT (x :: xs) i).length + 3).choose 3 : ℕ) : ENNReal) +
+          2 * ((((pivotGE (x :: xs) i).length + 3).choose 3 : ℕ) : ENNReal) := by
+      intro i
+      have hnd' : ((x :: xs).eraseIdx i).Nodup := hnd.eraseIdx _
+      rw [inst.toPMF_bind, pmf_bind_eq, expVal_bind]
+      -- Inner: integrate out the right subtree.
+      have hinner : ∀ l : Tree,
+          expVal (inst.toPMF
+            (treap (pivotGE (x :: xs) i) >>= fun r =>
+              pure (Tree.node l (x :: xs)[i] r)))
+            (fun t => 2 ^ t.height) ≤
+          2 * 2 ^ l.height +
+            2 * expVal (inst.toPMF (treap (pivotGE (x :: xs) i)))
+              (fun t => 2 ^ t.height) := by
+        intro l
+        rw [inst.toPMF_bind, pmf_bind_eq, expVal_bind]
+        refine le_trans (expVal_mono
+          (g₂ := fun r => 2 * 2 ^ l.height + 2 * 2 ^ r.height) _
+          fun r => ?_) ?_
+        · rw [inst.toPMF_pure, pmf_pure_eq, expVal_pure]
+          exact two_pow_node_height_le l r (x :: xs)[i]
+        · rw [expVal_add, expVal_const, expVal_const_mul]
+      refine le_trans (expVal_mono _ hinner) ?_
+      rw [expVal_add, expVal_const, expVal_const_mul]
+      exact add_le_add
+        (mul_le_mul' le_rfl (ih1 i (hnd'.filter _)))
+        (mul_le_mul' le_rfl (ih2 i (hnd'.filter _)))
+    refine le_trans (Finset.sum_le_sum fun i _ => hbranch i) ?_
+    -- Reindex by pivot rank and close with the ℕ-level identity.
+    rw [nodup_partition_sum₂ (x :: xs) hnd
+      (fun a b => 2 * (((a + 3).choose 3 : ℕ) : ENNReal) +
+        2 * (((b + 3).choose 3 : ℕ) : ENNReal))]
+    rw [Fin.sum_univ_eq_sum_range
+      (fun r => 2 * (((r + 3).choose 3 : ℕ) : ENNReal) +
+        2 * ((((x :: xs).length - 1 - r + 3).choose 3 : ℕ) : ENNReal))]
+    rw [show (∑ r ∈ Finset.range (x :: xs).length,
+        (2 * (((r + 3).choose 3 : ℕ) : ENNReal) +
+          2 * ((((x :: xs).length - 1 - r + 3).choose 3 : ℕ) : ENNReal))) =
+      (((∑ r ∈ Finset.range (x :: xs).length,
+        (2 * ((r + 3).choose 3) + 2 * (((x :: xs).length - 1 - r + 3).choose 3)) : ℕ)) :
+        ENNReal) from by push_cast; rfl]
+    rw [show ((x :: xs).length : ENNReal) *
+          (((((x :: xs).length + 3).choose 3 : ℕ) : ENNReal)) =
+        (((x :: xs).length * (((x :: xs).length + 3).choose 3) : ℕ) : ENNReal) from by
+      push_cast; rfl]
+    exact Nat.cast_le.mpr (sum_exp_height_bound (x :: xs).length)
+
+/-! ### Extracting the logarithm -/
+
+/-- Pointwise Jensen substitute: `h ≤ k + 2^h·2^{-k}` for all `h k`. -/
+private lemma height_le_add_div (h k : ℕ) :
+    (h : ENNReal) ≤ k + 2 ^ h * ((2 : ENNReal) ^ k)⁻¹ := by
+  by_cases hle : h ≤ k
+  · exact le_add_right (by exact_mod_cast hle)
+  · have hpow : (2 : ENNReal) ^ h * ((2 : ENNReal) ^ k)⁻¹ = 2 ^ (h - k) := by
+      rw [show h = (h - k) + k from by omega, pow_add, mul_assoc,
+        ENNReal.mul_inv_cancel (by positivity) (by finiteness), mul_one]
+      congr 1
+      omega
+    rw [hpow]
+    calc (h : ENNReal) = ((k + (h - k) : ℕ) : ENNReal) := by
+          congr 1
+          omega
+      _ ≤ ((k + 2 ^ (h - k) : ℕ) : ENNReal) := by
+          refine Nat.cast_le.mpr (Nat.add_le_add_left ?_ k)
+          exact (Nat.lt_pow_self (by norm_num)).le
+      _ = k + 2 ^ (h - k) := by push_cast; ring
+
+set_option maxHeartbeats 400000 in
+/-- **Expected height of a treap is logarithmic.** On `n` distinct
+keys, `E[height] ≤ 3·log₂(n+3) + 4` (illustrative constants; the
+sharp constant is `≈ 3` in base 2, Devroye 1986). -/
+theorem Expected_Height_Treap
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (L : List ℕ) (hnd : L.Nodup) :
+    expVal (inst.toPMF (treap L)) (fun t => (t.height : ENNReal)) ≤
+      ((3 * Nat.log 2 (L.length + 3) + 4 : ℕ) : ENNReal) := by
+  -- `k` is one more than the log of the exponential-height bound.
+  refine le_trans (expVal_mono _ fun t =>
+    height_le_add_div t.height (Nat.log 2 ((L.length + 3).choose 3) + 1)) ?_
+  rw [expVal_add, expVal_const, expVal_mul_right]
+  -- The exponential-height term contributes at most `1`.
+  have h1 : expVal (inst.toPMF (treap L)) (fun t => 2 ^ t.height) ≤
+      (2 : ENNReal) ^ (Nat.log 2 ((L.length + 3).choose 3) + 1) := by
+    refine le_trans (treap_expVal_exp_height L hnd) (le_trans
+      (Nat.cast_le.mpr (Nat.lt_pow_succ_log_self (b := 2) (by norm_num) _).le) ?_)
+    rw [show ((2 ^ (Nat.log 2 ((L.length + 3).choose 3) + 1) : ℕ) : ENNReal) =
+      (2 : ENNReal) ^ (Nat.log 2 ((L.length + 3).choose 3) + 1) from by
+        push_cast; rfl]
+  have hEY : expVal (inst.toPMF (treap L)) (fun t => 2 ^ t.height) *
+      ((2 : ENNReal) ^ (Nat.log 2 ((L.length + 3).choose 3) + 1))⁻¹ ≤ 1 := by
+    refine le_trans (mul_le_mul' h1 le_rfl) ?_
+    rw [ENNReal.mul_inv_cancel (by positivity) (by finiteness)]
+  refine le_trans (add_le_add le_rfl hEY) ?_
+  -- `k + 1 ≤ 3·log₂(n+3) + 4` by the crude bound `C(n+3,3) ≤ (n+3)³`.
+  have hlog : Nat.log 2 ((L.length + 3).choose 3) + 1 + 1 ≤
+      3 * Nat.log 2 (L.length + 3) + 4 := by
+    have hCpos : (L.length + 3).choose 3 ≠ 0 :=
+      (Nat.choose_pos (by omega)).ne'
+    have hC3 : (L.length + 3).choose 3 <
+        2 ^ (3 * (Nat.log 2 (L.length + 3) + 1)) := by
+      refine lt_of_le_of_lt (Nat.choose_le_pow (L.length + 3) 3) ?_
+      calc (L.length + 3) ^ 3
+          < (2 ^ (Nat.log 2 (L.length + 3) + 1)) ^ 3 :=
+            Nat.pow_lt_pow_left
+              (Nat.lt_pow_succ_log_self (b := 2) (by norm_num) _) (by norm_num)
+        _ = 2 ^ (3 * (Nat.log 2 (L.length + 3) + 1)) := by
+            rw [← pow_mul, mul_comm]
+    have := Nat.log_lt_of_lt_pow hCpos hC3
+    omega
+  refine le_trans (le_of_eq ?_) (Nat.cast_le.mpr hlog)
+  push_cast
+  ring
+
+/-- Expected height at `M = PMF`, in explicit `∑'` form (the original
+target statement, with honest constants). -/
+theorem treap_expected_height_log (keys : List ℕ) (hnd : keys.Nodup) :
+    (∑' t : Tree, (treap keys : PMF Tree) t * (t.height : ENNReal)) ≤
+      ((3 * Nat.log 2 (keys.length + 3) + 4 : ℕ) : ENNReal) :=
+  Expected_Height_Treap (M := PMF) keys hnd
+
+/-! ### Correctness of the recursive model -/
+
+/-- **Correctness (recursive model).** Every tree in the support of
+`treap L` is a valid BST over the distinct keys `L`. -/
+theorem Correctness_TreapRec
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (L : List ℕ) (hnd : L.Nodup) (t : Tree)
+    (ht : t ∈ (inst.toPMF (treap L)).support) :
+    t.inorder.Pairwise (· < ·) ∧ t.inorder.Perm L := by
+  revert hnd t
+  induction L using treap.induct with
+  | case1 =>
+    intro _ t ht
+    rw [treap.eq_1, inst.toPMF_pure, pmf_pure_eq, PMF.support_pure,
+      Set.mem_singleton_iff] at ht
+    subst ht
+    simp [Tree.inorder]
+  | case2 x xs ih1 ih2 =>
+    intro hnd t ht
+    -- Deconstruct the support of `randIdx >>= (bind ∘ bind ∘ pure)`.
+    rw [treap_eq_bind, support_toPMF_randIdx_bind, Set.mem_iUnion] at ht
+    obtain ⟨i, ht⟩ := ht
+    rw [inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht
+    obtain ⟨l, hl, ht⟩ := ht
+    rw [inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht
+    obtain ⟨r, hr, ht⟩ := ht
+    rw [inst.toPMF_pure, pmf_pure_eq, PMF.support_pure,
+      Set.mem_singleton_iff] at ht
+    subst ht
+    have hnd' : ((x :: xs).eraseIdx i).Nodup := hnd.eraseIdx _
+    obtain ⟨hsl, hpl⟩ := ih1 i (hnd'.filter _) l hl
+    obtain ⟨hsr, hpr⟩ := ih2 i (hnd'.filter _) r hr
+    -- The two subtrees hold exactly the `<`- and `≥`-side keys.
+    have hmem_l : ∀ a ∈ l.inorder, a < (x :: xs)[i] := fun a ha => by
+      have hmem := hpl.mem_iff.mp ha
+      simp only [pivotLT, List.mem_filter, decide_eq_true_eq] at hmem
+      exact hmem.2
+    have hpiv_not : (x :: xs)[i] ∉ (x :: xs).eraseIdx i := by
+      have hperm := perm_getElem_cons_eraseIdx (x :: xs) i
+      exact (List.nodup_cons.mp (hperm.nodup_iff.mp hnd)).1
+    have hmem_r : ∀ a ∈ r.inorder, (x :: xs)[i] < a := fun a ha => by
+      have hmem := hpr.mem_iff.mp ha
+      simp only [pivotGE, List.mem_filter, decide_eq_true_eq, ge_iff_le] at hmem
+      rcases lt_or_eq_of_le hmem.2 with h | h
+      · exact h
+      · rw [← h] at hmem
+        exact absurd hmem.1 hpiv_not
+    constructor
+    · -- Sortedness: assemble `left ++ pivot :: right`.
+      show (l.inorder ++ (x :: xs)[i] :: r.inorder).Pairwise (· < ·)
+      rw [List.pairwise_append]
+      refine ⟨hsl, List.pairwise_cons.mpr ⟨hmem_r, hsr⟩, fun a ha b hb => ?_⟩
+      rcases List.mem_cons.mp hb with rfl | hb'
+      · exact hmem_l a ha
+      · exact lt_trans (hmem_l a ha) (hmem_r b hb')
+    · -- Permutation: `left ++ pivot :: right ~ lt ++ pivot :: ge ~ L`.
+      show (l.inorder ++ (x :: xs)[i] :: r.inorder).Perm (x :: xs)
+      have hpart := perm_filter_partition (x :: xs) i
+      rw [List.append_assoc, List.singleton_append] at hpart
+      exact List.Perm.trans (hpl.append (hpr.cons _)) hpart
+
+/-- Correctness of the recursive model at `M = PMF`. -/
+theorem treap_isBST (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
+    (ht : (treap keys : PMF Tree) t ≠ 0) :
+    t.inorder.Pairwise (· < ·) ∧ t.inorder.Perm keys :=
+  Correctness_TreapRec (M := PMF) keys hnd t ht
 
 end ARA
