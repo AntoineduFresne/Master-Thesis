@@ -33,7 +33,7 @@ handled by the `expVal` output-functional API from `ARA.Infrastructure.ExpectedC
 
 ## Main results
 
-* `Correctness_Treap` (insertion model) and `Correctness_TreapRec`
+* `randomBST_correct` (insertion model) and `treap_correct`
   (recursive model) — **every** tree the sampler can output is a valid
   BST over the (distinct) keys: its in-order traversal is sorted and a
   permutation of the keys. So the traversal is deterministic even
@@ -42,7 +42,7 @@ handled by the `expVal` output-functional API from `ARA.Infrastructure.ExpectedC
 * `treap_expVal_exp_height` — the exponential-height bound
   `E[2^height] ≤ C(n+3, 3)` (CLRS-style; the hockey-stick identity
   makes the induction close with equality).
-* `Expected_Height_Treap` — **the expected height is logarithmic**:
+* `treap_expected_height_le` — **the expected height is logarithmic**:
   `E[height] ≤ 3·log₂(n+3) + 4`, extracted from the exponential bound
   by the pointwise inequality `h ≤ k + 2^h/2^k` (no Jensen needed).
   The sharp constant is `≈ 3` in base 2 (Devroye 1986).
@@ -287,7 +287,7 @@ lemma shuffle_perm {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
 /-- **Correctness.** For any `LawfulRandMonad`, every tree the sampler
 can produce from distinct `keys` is a valid BST over them: its in-order
 traversal is sorted and a permutation of `keys`. -/
-theorem Correctness_Treap
+theorem randomBST_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
     (ht : t ∈ (inst.toPMF (randomBST keys)).support) :
@@ -309,10 +309,10 @@ theorem Correctness_Treap
   simp [Tree.inorder]
 
 /-- Correctness at `M = PMF` (where `toPMF` is the identity). -/
-theorem randomBST_isBST (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
+theorem randomBST_correct_pmf (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
     (ht : (randomBST keys : PMF Tree) t ≠ 0) :
     t.inorder.Pairwise (· < ·) ∧ t.inorder.Perm keys :=
-  Correctness_Treap (M := PMF) keys hnd t ht
+  randomBST_correct (M := PMF) keys hnd t ht
 
 -- ----------------------------------------
 -- Structural bound: height
@@ -323,8 +323,9 @@ theorem randomBST_isBST (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
 
 A deterministic, honest bound: the height never exceeds the number of
 keys (a treap on `n` keys has at most `n` nodes, and height ≤ nodes).
-The sharp `Θ(log n)` *expected* height is future work — see the module
-header.
+The `Θ(log n)` *expected* height for the recursive model is proven
+below (`treap_expected_height_le`); for this insertion model it would
+follow from the (future-work) equivalence of the two models.
 -/
 
 /-- **Deterministic height bound.** Every tree the sampler can output
@@ -451,7 +452,7 @@ theorem treap_expVal_exp_height
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) :
     expVal (inst.toPMF (treap L)) (fun t => 2 ^ t.height) ≤
-      (((L.length + 3).choose 3 : ℕ) : ENNReal) := by
+      ((L.length + 3).choose 3 : ENNReal) := by
   revert hnd
   induction L using treap.induct with
   | case1 =>
@@ -499,13 +500,13 @@ theorem treap_expVal_exp_height
     refine le_trans (Finset.sum_le_sum fun i _ => hbranch i) ?_
     -- Reindex by pivot rank and close with the ℕ-level identity.
     rw [nodup_partition_sum₂ (x :: xs) hnd
-      (fun a b => 2 * (((a + 3).choose 3 : ℕ) : ENNReal) +
-        2 * (((b + 3).choose 3 : ℕ) : ENNReal))]
+      (fun a b => 2 * ((a + 3).choose 3 : ENNReal) +
+        2 * ((b + 3).choose 3 : ENNReal))]
     rw [Fin.sum_univ_eq_sum_range
-      (fun r => 2 * (((r + 3).choose 3 : ℕ) : ENNReal) +
+      (fun r => 2 * ((r + 3).choose 3 : ENNReal) +
         2 * ((((x :: xs).length - 1 - r + 3).choose 3 : ℕ) : ENNReal))]
     rw [show (∑ r ∈ Finset.range (x :: xs).length,
-        (2 * (((r + 3).choose 3 : ℕ) : ENNReal) +
+        (2 * ((r + 3).choose 3 : ENNReal) +
           2 * ((((x :: xs).length - 1 - r + 3).choose 3 : ℕ) : ENNReal))) =
       (((∑ r ∈ Finset.range (x :: xs).length,
         (2 * ((r + 3).choose 3) + 2 * (((x :: xs).length - 1 - r + 3).choose 3)) : ℕ)) :
@@ -541,7 +542,7 @@ set_option maxHeartbeats 400000 in
 /-- **Expected height of a treap is logarithmic.** On `n` distinct
 keys, `E[height] ≤ 3·log₂(n+3) + 4` (illustrative constants; the
 sharp constant is `≈ 3` in base 2, Devroye 1986). -/
-theorem Expected_Height_Treap
+theorem treap_expected_height_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) :
     expVal (inst.toPMF (treap L)) (fun t => (t.height : ENNReal)) ≤
@@ -585,16 +586,16 @@ theorem Expected_Height_Treap
 
 /-- Expected height at `M = PMF`, in explicit `∑'` form (the original
 target statement, with honest constants). -/
-theorem treap_expected_height_log (keys : List ℕ) (hnd : keys.Nodup) :
+theorem treap_expected_height_le_pmf (keys : List ℕ) (hnd : keys.Nodup) :
     (∑' t : Tree, (treap keys : PMF Tree) t * (t.height : ENNReal)) ≤
       ((3 * Nat.log 2 (keys.length + 3) + 4 : ℕ) : ENNReal) :=
-  Expected_Height_Treap (M := PMF) keys hnd
+  treap_expected_height_le (M := PMF) keys hnd
 
 /-! ### Correctness of the recursive model -/
 
 /-- **Correctness (recursive model).** Every tree in the support of
 `treap L` is a valid BST over the distinct keys `L`. -/
-theorem Correctness_TreapRec
+theorem treap_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) (t : Tree)
     (ht : t ∈ (inst.toPMF (treap L)).support) :
@@ -652,9 +653,9 @@ theorem Correctness_TreapRec
       exact List.Perm.trans (hpl.append (hpr.cons _)) hpart
 
 /-- Correctness of the recursive model at `M = PMF`. -/
-theorem treap_isBST (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
+theorem treap_correct_pmf (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
     (ht : (treap keys : PMF Tree) t ≠ 0) :
     t.inorder.Pairwise (· < ·) ∧ t.inorder.Perm keys :=
-  Correctness_TreapRec (M := PMF) keys hnd t ht
+  treap_correct (M := PMF) keys hnd t ht
 
 end ARA

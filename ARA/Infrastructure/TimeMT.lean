@@ -41,13 +41,6 @@ protected def bind [Add T] [Monad M]
     let ⟨b, t2⟩ ← (f a).run
     pure ⟨b, t1 + t2⟩⟩
 
-
-  --⟨m.run >>= fun ⟨a, t1⟩ => (f a).run >>= fun ⟨b, t2⟩ => pure ⟨b, t1 + t2⟩⟩
-
-instance [Zero T] [Add T] [Monad M] : Monad (TimeMT T M) where
-  pure := TimeMT.pure
-  bind := TimeMT.bind
-
 /-! ## Lifting and costing -/
 
 def lift [Zero T] [Functor M] (ma : M α) : TimeMT T M α :=
@@ -76,6 +69,9 @@ instance [Zero T] [Add T] [Monad M] : Applicative (TimeMT T M) where
     let ⟨x, t2⟩ ← (mx ()).run
     pure ⟨f x, t1 + t2⟩⟩
 
+/-- The single `Monad` instance, assembled from the granular
+`Functor`/`Pure`/`Bind`/`Applicative` tower above (no diamond: each
+layer reuses the previous one). -/
 instance [Zero T] [Add T] [Monad M] : Monad (TimeMT T M) where
   bind := TimeMT.bind
 

@@ -43,14 +43,14 @@ specification (`M = PMF`), and as timed algorithm (`M = TimeMT ℕ M'`).
 
 ## Main results
 
-* `Correctness_Karger` — over any `LawfulRandMonad`, every value the
+* `karger_correct` — over any `LawfulRandMonad`, every value the
   algorithm can output is at least the true minimum-cut value: Karger
   is a one-sided (Monte Carlo) approximation that never undershoots.
-* `Success_Probability_Karger` — the output equals the minimum-cut
+* `karger_success_prob` — the output equals the minimum-cut
   value with probability at least `2 / (n (n - 1))`, where
   `n = g.verts.card`. Hence `O(n² log n)` independent repetitions
   find a minimum cut with high probability.
-* `Expected_Complexity_Karger` — with one tick per edge scanned
+* `karger_cost_le` — with one tick per edge scanned
   during a contraction pass, the expected cost is at most
   `(n - 2) * m` where `m = g.edges.length`.
 
@@ -631,7 +631,7 @@ private lemma support_contractAux
 /-- **Correctness (one-sided error).** Over any `LawfulRandMonad`,
 every value `Karger` can output is at least the true minimum-cut value:
 the algorithm never undershoots. -/
-theorem Correctness_Karger
+theorem karger_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     ∀ c ∈ (inst.toPMF (@Karger _ _ M _ _ instMonadCostDefault g)).support,
@@ -645,10 +645,10 @@ theorem Correctness_Karger
   exact support_contractAux (g.verts.card - 2) g hwf (by omega) g' hg'
 
 /-- Correctness at `M = PMF`. -/
-theorem karger_never_undershoots (g : MultiGraph α) (hwf : g.WF)
+theorem karger_correct_pmf (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
     ∀ c ∈ (Karger g : PMF ℕ).support, g.minCutValue ≤ c :=
-  Correctness_Karger (M := PMF) g hwf h2
+  karger_correct (M := PMF) g hwf h2
 
 /-! ## Success probability -/
 
@@ -765,7 +765,7 @@ private lemma success_contractAux
 with probability at least `2 / (n (n - 1))`, where `n = g.verts.card`.
 Consequently `O(n² log n)` independent repetitions find a minimum cut
 with high probability. -/
-theorem Success_Probability_Karger
+theorem karger_success_prob
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card : ℝ≥0∞) * ((g.verts.card : ℝ≥0∞) - 1)) ≤
@@ -780,11 +780,11 @@ theorem Success_Probability_Karger
   exact hmain
 
 /-- Success probability at `M = PMF`. -/
-theorem karger_succeeds (g : MultiGraph α) (hwf : g.WF)
+theorem karger_success_prob_pmf (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card : ℝ≥0∞) * ((g.verts.card : ℝ≥0∞) - 1)) ≤
       (Karger g : PMF ℕ) g.minCutValue :=
-  Success_Probability_Karger (M := PMF) g hwf h2
+  karger_success_prob (M := PMF) g hwf h2
 
 /-! ## Complexity
 
@@ -841,10 +841,10 @@ private lemma expected_cost_contractAux
 edge scanned during a contraction pass, running `Karger` on a graph
 with `n` vertices and `m` edges costs at most `(n - 2) * m` in
 expectation — for arbitrary inputs. -/
-theorem Expected_Complexity_Karger
+theorem karger_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) :
-    𝔼_runtime[(Karger g : TimeMT ℕ M ℕ)] ≤
+    𝔼_runtime[Karger g | M] ≤
       ((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
   unfold Karger
   rw [expected_cost_toPMF_bind]
@@ -855,19 +855,19 @@ theorem Expected_Complexity_Karger
 `(n - 2) m` bound. -/
 lemma expected_cost_karger_ne_top
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (g : MultiGraph α) :
-    𝔼_runtime[(Karger g : TimeMT ℕ M ℕ)] ≠ ⊤ :=
+    𝔼_runtime[Karger g | M] ≠ ⊤ :=
   ne_top_of_le_ne_top
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
-    (Expected_Complexity_Karger g)
+    (karger_cost_le g)
 
 /-- Real-valued corollary: the expected cost is at most `(n - 2) * m`. -/
-theorem Karger_Cost_Upper_Bound
+theorem karger_cost_le_real
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (g : MultiGraph α) :
-    𝔼ℝ_runtime[(Karger g : TimeMT ℕ M ℕ)] ≤
+    𝔼ℝ_runtime[Karger g | M] ≤
       ((g.verts.card - 2 : ℕ) : ℝ) * (g.edges.length : ℝ) := by
   have := ENNReal.toReal_mono
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
-    (Expected_Complexity_Karger (M := M) g)
+    (karger_cost_le (M := M) g)
   rw [ENNReal.toReal_mul, ENNReal.toReal_natCast, ENNReal.toReal_natCast] at this
   exact this
 
@@ -901,7 +901,7 @@ private lemma contractAux_erasure
     · rw [dif_neg hm, dif_neg hm]
       simp
 /-- Timed `Karger` erases to untimed `Karger`. -/
-lemma Karger_erasure {M} [Monad M] [LawfulMonad M] [RandMonad M]
+lemma karger_erasure {M} [Monad M] [LawfulMonad M] [RandMonad M]
     (g : MultiGraph α) :
     TimeM.ret <$> (Karger g : TimeMT ℕ M ℕ).run = (Karger g : M ℕ) := by
   unfold Karger

@@ -31,11 +31,10 @@ yours, and follow the numbered steps. Everything that is not marked
 5. **Correctness** — `induction … using yourAlgo.induct`, expose the
    pivot, collapse with `toPMF_randIdx_bind_dirac`, finish with
    `dirac_finish`.
-
-Note: For Monte-Carlo algorithms (output genuinely random, e.g. Karger),
-replace step 5's collapse by the distributional primitives
-`support_toPMF_randIdx_bind` / `le_toPMF_randIdx_bind` and state
-correctness as a support fact plus a success-probability bound.
+   * For Monte-Carlo algorithms (output genuinely random, e.g.
+     `Karger`), replace the collapse by the distributional primitives
+     `support_toPMF_randIdx_bind` / `le_toPMF_randIdx_bind` and state
+     correctness as a support fact plus a success-probability bound.
 
 6. **Expected cost** — branch cost by `cost_step`, step lemma by
    `expected_cost_uniform_step`, then solve the recurrence along
@@ -98,7 +97,9 @@ def RandMax_IO_Timed : List ℕ → TimeMT ℕ IO ℕ := RandMax
 Abstract the deterministic work done at a fixed pivot index; the
 algorithm is then literally `randIdx >>= branch`, which is the shape
 all framework lemmas consume. Both proofs are one rewrite with the
-equation lemma Lean generated from the definition.
+equation lemma Lean generated from the definition (the timed one needs
+a final `rfl`, and drops the `[MonadCost ℕ M]` binder because
+`TimeMT ℕ M` carries its own accumulating cost instance).
 -/
 
 /-- The work at a fixed pivot index `i`. -/
@@ -163,7 +164,7 @@ induction, expose the pivot, collapse, `dirac_finish`.
 
 /-- **Correctness.** For any lawful random monad, `RandMax` returns
 exactly `listMax L` — the pivot choices are invisible. -/
-theorem Correctness_RandMax
+theorem randMax_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
     LawfulRandMonad.toPMF
@@ -181,9 +182,9 @@ theorem Correctness_RandMax
     dirac_finish
 
 /-- Correctness at `M = PMF` (where `toPMF` is the identity). -/
-theorem randMax_correct (L : List α) :
+theorem randMax_correct_pmf (L : List α) :
     (RandMax L : PMF α) = PMF.pure (listMax L) :=
-  Correctness_RandMax (M := PMF) L
+  randMax_correct (M := PMF) L
 
 /-!
 ## Step 6 — expected cost
@@ -227,7 +228,7 @@ private lemma expected_cost_randMax_nil
 
 /-- **Exact expected cost.** `RandMax` performs exactly `n` comparisons
 in expectation (in fact, always): one per round, `n` rounds. -/
-theorem Expected_Complexity_RandMax
+theorem randMax_cost_exact
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
     𝔼_runtime[RandMax L | M] = (L.length : ENNReal) := by
@@ -258,14 +259,14 @@ theorem Expected_Complexity_RandMax
   off the hypotheses; orient your `@[spec_transport]` lemmas
   left-to-right ("branch value = spec") and close stubborn cases
   manually after `dirac_step` + `split_ifs` — see
-  `Correctness_Quickselect`.
+  `quickselect_correct`.
 * Non-uniform recursion (branch size depends on the pivot)? Reindex
   the step-lemma sum by pivot rank with `nodup_partition_sum₂` — see
   the exact cost proofs of `Quicksort` and `Quickselect`.
 * Upper bounds instead of exact formulas? Stay in `ℝ≥0∞` and close
   with `uniform_avg_le`; get finiteness for free from the bound and
   descend to `ℝ` with `toReal_uniform_avg` — see
-  `Quickselect_Cost_Upper_Bound_ennreal`.
+  `quickselect_cost_le_quadratic`.
 * Monte-Carlo correctness? `support_toPMF_randIdx_bind` and
   `le_toPMF_randIdx_bind` in `ARA.Infrastructure.Correctness` — see `Karger`.
 -/

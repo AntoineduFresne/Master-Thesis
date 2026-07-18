@@ -22,14 +22,14 @@ specification, and as timed algorithm.
 
 ## Main results
 
-* `Freivalds_complete` — **no false negatives**: if `A * B = C` the
+* `freivalds_complete` — **no false negatives**: if `A * B = C` the
   test accepts with probability `1`.
-* `Freivalds_sound` — **one-sided error**: if `A * B ≠ C` the test
+* `freivalds_sound` — **one-sided error**: if `A * B ≠ C` the test
   accepts with probability at most `1/2`. This is the framework's
   bounded-error tier (amplify by repetition). Proved over any
   `CommRing` by the pairing argument: flipping the `j`-th bit of a
   witness column pairs each accepting vector with a rejecting one.
-* `Expected_Complexity_Freivalds` — `3n²` ring multiplications
+* `freivalds_cost_exact` — `3n²` ring multiplications
   (three matrix-vector products), against `n³` for naive
   recomputation.
 -/
@@ -175,7 +175,7 @@ private lemma freivaldsCheck_iff (A B C : Matrix (Fin n) (Fin n) R)
 
 /-- **Completeness (no false negatives).** If `A * B = C`, Freivalds
 always accepts, over any `LawfulRandMonad`. -/
-theorem Freivalds_complete
+theorem freivalds_complete
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B = C) :
     inst.toPMF (@freivalds R _ _ n M _ _ instMonadCostDefault A B C)
@@ -253,7 +253,7 @@ private lemma not_check_both (A B C : Matrix (Fin n) (Fin n) R)
 
 /-- **Soundness (one-sided error).** If `A * B ≠ C`, Freivalds accepts
 with probability at most `1/2` — over any commutative ring. -/
-theorem Freivalds_sound
+theorem freivalds_sound
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B ≠ C) :
     inst.toPMF (@freivalds R _ _ n M _ _ instMonadCostDefault A B C)
@@ -357,7 +357,7 @@ private lemma expected_cost_randVec
 /-- **Exact cost.** Freivalds performs exactly `3n²` ring
 multiplications — three matrix-vector products — against the `n³` of
 recomputing `A * B`. -/
-theorem Expected_Complexity_Freivalds
+theorem freivalds_cost_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (A B C : Matrix (Fin n) (Fin n) R) :
     𝔼_runtime[freivalds A B C | M] = ((3 * n * n : ℕ) : ENNReal) := by
@@ -372,15 +372,15 @@ theorem Expected_Complexity_Freivalds
 -/
 
 /-- Completeness at `M = PMF`. -/
-theorem freivalds_complete (A B C : Matrix (Fin n) (Fin n) R)
+theorem freivalds_complete_pmf (A B C : Matrix (Fin n) (Fin n) R)
     (h : A * B = C) :
     (freivalds A B C : PMF Bool) true = 1 :=
-  Freivalds_complete (M := PMF) A B C h
+  freivalds_complete (M := PMF) A B C h
 
 /-- Soundness at `M = PMF`: amplify by repetition. -/
-theorem freivalds_sound (A B C : Matrix (Fin n) (Fin n) R)
+theorem freivalds_sound_pmf (A B C : Matrix (Fin n) (Fin n) R)
     (h : A * B ≠ C) :
     (freivalds A B C : PMF Bool) true ≤ 1 / 2 :=
-  Freivalds_sound (M := PMF) A B C h
+  freivalds_sound (M := PMF) A B C h
 
 end ARA

@@ -24,8 +24,8 @@ is verified exactly once.
 ## Main declarations
 
 * `MonadCost` — the typeclass
-* `MonadCost.instDefault` — blanket no-op instance (low priority)
-* `MonadCost.instTimeMT` — `TimeMT` instance that accumulates cost
+* `instMonadCostDefault` — blanket no-op instance (low priority)
+* `instMonadCostTimeMT` — `TimeMT` instance that accumulates cost
 -/
 
 namespace ARA
@@ -45,10 +45,11 @@ instance (priority := 100) instMonadCostDefault
     {C} {M} [Monad M] : MonadCost C M where
   tick _ := pure ()
 
-/-- `TimeMT` instance: ticking accumulates cost via `TimeMT.tick`.
-Higher priority than the default no-op instance. -/
+/-- `TimeMT` instance: ticking accumulates cost via `TimeMT.tick`,
+for any cost type `T`. Higher priority than the default no-op
+instance. -/
 instance (priority := 1000) instMonadCostTimeMT
-    {M} [Monad M] : MonadCost ℕ (TimeMT ℕ M) where
+    {T : Type} {M} [Monad M] : MonadCost T (TimeMT T M) where
   tick := TimeMT.tick
 
 /-! ### Simp lemmas for MonadCost -/
@@ -58,8 +59,8 @@ instance (priority := 1000) instMonadCostTimeMT
     @MonadCost.tick C M instMonadCostDefault c = pure () := rfl
 
 @[simp] lemma MonadCost.tick_timeMT
-    {M} [Monad M] (c : ℕ) :
-    @MonadCost.tick ℕ (TimeMT ℕ M) instMonadCostTimeMT c =
+    {T : Type} {M} [Monad M] (c : T) :
+    @MonadCost.tick T (TimeMT T M) instMonadCostTimeMT c =
     TimeMT.tick c := rfl
 
 end ARA

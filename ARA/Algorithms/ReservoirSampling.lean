@@ -6,6 +6,7 @@ Authors: Antoine du Fresne von Hohenesche
 import ARA.Infrastructure.ExpectedCost
 import ARA.Infrastructure.Correctness
 
+#check propext
 /-!
 # Reservoir sampling (Algorithm R, k = 1)
 
@@ -22,14 +23,14 @@ as specification (`M = PMF`), and as timed algorithm
 
 ## Main results
 
-* `Correctness_Reservoir` — **exact uniformity**: each element is
+* `reservoir_correct` — **exact uniformity**: each element is
   returned with probability `count a / |L|`. Unlike
   `Quicksort`/`Quickselect`, the output distribution is not a point
   mass, this is an example of the framework's distributional tier, the
   headline claim of the `PMF` shallow embedding.
-* `reservoir_none` — the sampler never returns `none` on a nonempty
+* `reservoir_none_eq_zero` — the sampler never returns `none` on a nonempty
   list.
-* `Expected_Complexity_Reservoir` — one coin per stream element after
+* `reservoir_cost_exact` — one coin per stream element after
   the first: exactly `n − 1` ticks — a single pass.
 -/
 
@@ -155,7 +156,7 @@ include h
 element of `L` is returned with probability `count a / |L|`; on a
 distinct list, every element has probability exactly `1/n`. Note the
 statement is about the *whole distribution*, not a point mass. -/
-theorem Correctness_Reservoir
+theorem reservoir_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) (a : α) :
     inst.toPMF (@reservoir α M _ _ instMonadCostDefault L) (some a) =
@@ -176,7 +177,7 @@ theorem Correctness_Reservoir
 
 omit h
 /-- The sampler never returns `none` on a nonempty list. -/
-theorem reservoir_none
+theorem reservoir_none_eq_zero
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) (hL : L ≠ []) :
     inst.toPMF (@reservoir α M _ _ instMonadCostDefault L) none = 0 := by
@@ -188,12 +189,12 @@ theorem reservoir_none
 include h
 /-- On a list of distinct elements, every member is returned with
 probability exactly `1/n`. -/
-theorem reservoir_uniform_of_nodup
+theorem reservoir_correct_of_nodup
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) (hnd : L.Nodup) (a : α) (ha : a ∈ L) :
     inst.toPMF (@reservoir α M _ _ instMonadCostDefault L) (some a) =
       ((L.length : ENNReal))⁻¹ := by
-  rw [Correctness_Reservoir, List.count_eq_one_of_mem hnd ha]
+  rw [reservoir_correct, List.count_eq_one_of_mem hnd ha]
   simp
 
 -- ----------------------------------------
@@ -245,7 +246,7 @@ private lemma expected_cost_reservoirAux
 
 /-- **Exact cost.** Reservoir sampling makes exactly `n − 1` coin
 flips/ticks on a list of length `n` — a single pass. -/
-theorem Expected_Complexity_Reservoir
+theorem reservoir_cost_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) :
     𝔼_runtime[reservoir L | M] = ((L.length - 1 : ℕ) : ENNReal) := by
@@ -264,9 +265,9 @@ theorem Expected_Complexity_Reservoir
 
 include h
 /-- Uniformity at `M = PMF` (where `toPMF` is the identity). -/
-theorem reservoir_uniform (L : List α) (a : α) :
+theorem reservoir_correct_pmf (L : List α) (a : α) :
     (reservoir L : PMF (Option α)) (some a) =
       (L.count a : ENNReal) / (L.length : ENNReal) :=
-  Correctness_Reservoir (M := PMF) L a
+  reservoir_correct (M := PMF) L a
 
 end ARA

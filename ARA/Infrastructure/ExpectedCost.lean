@@ -126,9 +126,7 @@ lemma toPMF_map_ret_lift
       inst.toPMF m := by
   rw [TimeMT.run_lift, ← Functor.map_map]; simp
 
-/-
-`expected_cost` of a `TimeMT.lift` is `0` (no ticks).
--/
+/-- `expected_cost` of a `TimeMT.lift` is `0` (no ticks). -/
 @[expected_cost_simp] lemma expected_cost_lift
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
@@ -154,10 +152,8 @@ lemma toPMF_map_ret_lift
   convert expected_cost_pure_val () t
   exact inst.toPMF_pure _
 
-/-
-Shifting all time values by a constant `c` shifts the
-expected cost by `c`.
--/
+/-- Shifting all time values by a constant `c` shifts the
+expected cost by `c`. -/
 lemma expected_cost_shift
     {β : Type} (p : PMF (TimeM ℕ β)) (c : ℕ) :
     expected_cost

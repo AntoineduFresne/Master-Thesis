@@ -27,14 +27,14 @@ serves as:
 
 ## Main results
 
-* `Correctness_Quicksort` — Establishes generic correctness over any
+* `quicksort_correct` — Establishes generic correctness over any
   `LawfulRandMonad`: guarantees the algorithm deterministically
   returns a sorted permutation of the input list.
-* `Quicksort_Cost_Upper_Bound` — For arbitrary lists (possibly with
+* `quicksort_cost_le_real` — For arbitrary lists (possibly with
   duplicates), bounds the expected cost by `C(n,2)`, tight on
   all-equal inputs. Its `ℝ≥0∞` core also supplies the finiteness
   fact needed by the exact-formula proof.
-* `Expected_Complexity_Quicksort` — Quantifies the exact expected
+* `quicksort_cost_exact` — Quantifies the exact expected
   cost over any `LawfulRandMonad`: sorting a list of `n` distinct
   elements requires exactly `2(n+1)H(n) - 4n` comparisons.
 
@@ -177,7 +177,7 @@ instance. The tick becomes `pure ()` and is invisible.
 /-- For any `LawfulRandMonad`, `Quicksort L` (with no-op cost
 tracking) produces a single deterministic output that is sorted
 and a permutation of `L`. -/
-lemma Correctness_Quicksort
+lemma quicksort_correct
     {M} [Monad M] [LawfulMonad M]
     [LawfulRandMonad M] :
     ∀ L : List α, ∃ Output : List α,
@@ -236,13 +236,13 @@ lemma Correctness_Quicksort
 -- Free Proof: Untimed Quicksort_PMF
 -- ----------------------------------------
 
-lemma Correctness_Quicksort_PMF :
+lemma quicksort_correct_pmf :
     ∀ L : List ℕ, ∃ Output : List ℕ,
       Quicksort_PMF L = pure Output ∧
       Output.SortedLE ∧ Output.Perm L := by
   intro L
   obtain ⟨Out, hEq, hS, hP⟩ :=
-    Correctness_Quicksort (M := PMF) L
+    quicksort_correct (M := PMF) L
   exact ⟨Out, hEq, hS, hP⟩
 
 -- ----------------------------------------
@@ -255,7 +255,7 @@ lemma Correctness_Quicksort_PMF :
 This follows from the unified definition: the `MonadCost.tick` in
 `TimeMT` erases to `pure ()`, matching the no-op `MonadCost` instance.
 -/
-lemma Quicksort_erasure
+lemma quicksort_erasure
     {M} [Monad M] [LawfulMonad M] [RandMonad M]
     (L : List α) :
     TimeM.ret <$>
@@ -274,17 +274,17 @@ lemma Quicksort_erasure
     simp only [ih1, ih2, TimeMT_erase_pure]
 
 /-- Timed PMF correctness for free. -/
-lemma Correctness_Quicksort_Timed_PMF :
+lemma quicksort_correct_timed_pmf :
     ∀ L : List ℕ, ∃ Output : List ℕ,
       TimeM.ret <$> (Quicksort_PMF_Timed L).run =
         pure Output ∧
       Output.SortedLE ∧ Output.Perm L := by
   intro L
   obtain ⟨Out, hEq, hSort, hPerm⟩ :=
-    Correctness_Quicksort_PMF L
+    quicksort_correct_pmf L
   use Out
   unfold Quicksort_PMF_Timed
-  rw [Quicksort_erasure]
+  rw [quicksort_erasure]
   exact ⟨hEq, hSort, hPerm⟩
 
 -- ----------------------------------------
@@ -303,7 +303,7 @@ both by functional induction on `Quicksort`:
   which also yields finiteness of the expected cost;
 * for distinct lists, rank reindexing turns the sum over pivots into
   the harmonic recurrence, which solves exactly to `2(n+1)H(n) − 4n`
-  (`Expected_Complexity_Quicksort`).
+  (`quicksort_cost_exact`).
 
 The upper bound is stated in `ℝ≥0∞`, where no summability bookkeeping
 is needed; the exact formula descends to `ℝ` via `toReal`, with
@@ -410,11 +410,11 @@ private lemma choose_two_add_le (a b : ℕ) :
 /-- For an arbitrary list (possibly
 with duplicates), the expected cost of `Quicksort` is bounded by
 `L.length.choose 2`. Tight on the all-equal list `[a, a, …, a]`. -/
-theorem Quicksort_Cost_Upper_Bound_ennreal
+theorem quicksort_cost_le
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
     𝔼_runtime[Quicksort L | M] ≤
-      ((L.length.choose 2 : ℕ) : ENNReal) := by
+      (L.length.choose 2 : ENNReal) := by
   induction L using Quicksort.induct with
   | case1 =>
     rw [expected_cost_quicksort_nil]
@@ -427,7 +427,7 @@ theorem Quicksort_Cost_Upper_Bound_ennreal
         ((((head :: tail).eraseIdx i).length : ENNReal) +
           𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
           𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]) ≤
-        ((tail.length : ENNReal) + ((tail.length.choose 2 : ℕ) : ENNReal)) := by
+        ((tail.length : ENNReal) + (tail.length.choose 2 : ENNReal)) := by
       intro i
       have hrest := length_eraseIdx_cons head tail i
       have hsplit : (pivotLT (head :: tail) i).length +
@@ -461,13 +461,13 @@ theorem Quicksort_Cost_Upper_Bound_ennreal
 
 /-- For an arbitrary list (possibly with duplicates), the expected cost of
 `Quicksort` is at most `C(n,2)` comparisons. Real-valued corollary of
-`Quicksort_Cost_Upper_Bound_ennreal`. -/
-theorem Quicksort_Cost_Upper_Bound
+`quicksort_cost_le`. -/
+theorem quicksort_cost_le_real
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
     𝔼ℝ_runtime[Quicksort L | M] ≤ L.length.choose 2 := by
   have := ENNReal.toReal_mono (ENNReal.natCast_ne_top _)
-    (Quicksort_Cost_Upper_Bound_ennreal (M := M) L)
+    (quicksort_cost_le (M := M) L)
   simpa using this
 
 /-- Finiteness of the expected cost — a free corollary of the `C(n,2)`
@@ -478,7 +478,7 @@ lemma expected_cost_quicksort_ne_top
     [inst : LawfulRandMonad M] (L : List α) :
     𝔼_runtime[Quicksort L | M] ≠ ⊤ :=
   ne_top_of_le_ne_top (ENNReal.natCast_ne_top _)
-    (Quicksort_Cost_Upper_Bound_ennreal L)
+    (quicksort_cost_le L)
 
 /-!
 ### The exact expected cost for distinct lists
@@ -521,7 +521,7 @@ lemma expected_qs_sum_helper (n : ℕ) :
 /-- **Exact expected complexity of Quicksort.** Sorting a list of `n`
 distinct elements costs exactly `2(n+1)H(n) − 4n` comparisons in
 expectation. -/
-theorem Expected_Complexity_Quicksort
+theorem quicksort_cost_exact
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (hnd : L.Nodup) :
@@ -609,14 +609,14 @@ noncomputable def quicksortComparisons (L : List α) : ENNReal :=
 
 /-- **Expected cost is at most quadratic** on arbitrary lists
 (possibly with duplicates). -/
-theorem quicksort_expected_cost_quadratic (L : List α) :
-    quicksortComparisons L ≤ ((L.length.choose 2 : ℕ) : ENNReal) :=
-  Quicksort_Cost_Upper_Bound_ennreal L
+theorem quicksort_cost_le_pmf (L : List α) :
+    quicksortComparisons L ≤ (L.length.choose 2 : ENNReal) :=
+  quicksort_cost_le L
 
 /-- **Exact expected cost**: sorting `n` distinct elements takes
 exactly `2(n+1)·H(n) − 4n` comparisons in expectation. -/
-theorem quicksort_expected_cost_exact (L : List α) (hnd : L.Nodup) :
+theorem quicksort_cost_exact_pmf (L : List α) (hnd : L.Nodup) :
     (quicksortComparisons L).toReal = (expected_qs_cost L.length : ℚ) :=
-  Expected_Complexity_Quicksort (M := PMF) L hnd
+  quicksort_cost_exact (M := PMF) L hnd
 
 end ARA

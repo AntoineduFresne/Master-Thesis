@@ -1,7 +1,7 @@
 # ARA — Analysis of Randomized Algorithms in Lean 4
 
 A framework where a randomized algorithm is written **once** and that single
-definition serves as:
+definition serves for example (depending on the abstract source of randomness):
 
 * an **executable program** (`IO`, real randomness — `#eval` it),
 * a **distribution** (`PMF`, the mathematical specification),
@@ -10,17 +10,15 @@ definition serves as:
 
 Correctness and expected-complexity proofs then follow a fixed recipe in
 which everything except the *mathematics of the algorithm itself* is
-automated by the framework.
+tried to be automated by the framework.
 
-Author: Antoine du Fresne von Hohenesche (ETHZ, master's thesis).
+Author: Antoine du Fresne von Hohenesche.
 
 ## Start here
 
 **[`ARA/Algorithms/Tutorial.lean`](ARA/Algorithms/Tutorial.lean)** is a
-copy-me template: a toy algorithm (`RandMax`) verified end-to-end in six
-numbered steps. The inductive case of its correctness proof is one tactic
-(`dirac_finish`), and its exact expected cost follows the uniform-pivot
-recipe in a dozen lines.
+tutorial to formalize a toy algorithm (`RandMax`) which is verified 
+end-to-end in six numbered steps.
 
 ```lean
 theorem Correctness_RandMax ... := by
@@ -37,7 +35,7 @@ theorem Correctness_RandMax ... := by
 
 ```
 ARA/
-├── Infrastructure/     the engine (a user never edits this)
+├── Infrastructure/ 
 │   ├── TimeMT.lean            cost transformer over any monad
 │   ├── MonadCost.lean         abstract `tick` (no-op by default)
 │   ├── LawfulRandMonad.lean   `RandMonad` (uniform `randFin`) + `toPMF` semantics
@@ -50,7 +48,7 @@ ARA/
 ├── Helpers/            shared mathematics
 │   └── Partition.lean         pivot-partition lemmas, `pivotLT`/`pivotGE`,
 │                              rank reindexing `nodup_partition_sum₂`
-└── Algorithms/         the case studies (and the Tutorial)
+└── Algorithms/
     ├── Tutorial.lean          ← start here
     ├── Quicksort.lean         Quickselect.lean   Karger.lean
     ├── ReservoirSampling.lean Freivalds.lean     Treap.lean
@@ -70,32 +68,15 @@ analysis; together they are the proof that the framework is usable.
 | **Freivalds** | complete + sound (`≤ 1/2`, any `CommRing`) | exactly `3n²` vs `n³` |
 | **Treap** | every output a valid BST | **`E[height] ≤ 3·log₂(n+3) + 4`** via `E[2^H] ≤ C(n+3,3)` |
 
-All proofs are `sorry`-free; the axiom audit shows only `propext`,
+All proofs rely (after "#print axioms") only on `propext`,
 `Classical.choice`, `Quot.sound`.
-
-## The recipe (what a new algorithm costs you)
-
-1. **Define it once**, polymorphic over
-   `{M} [Monad M] [RandMonad M] [MonadCost ℕ M]`; draw randomness with
-   `randIdx`/`randFin`, charge cost with `MonadCost.tick`.
-2. **Instances for free** — four one-liners (`IO`, `PMF`, timed ×2).
-3. **Decompose** — one branch `abbrev` + two one-line `_eq_bind` lemmas.
-4. **The mathematics** — spec-transport lemmas, tagged `@[spec_transport]`.
-   *This is the only part that is genuinely about your algorithm.*
-5. **Correctness** — `induction … using f.induct`, collapse with
-   `toPMF_randIdx_bind_dirac`, close with `dirac_finish`. (Monte-Carlo:
-   `support_toPMF_randIdx_bind` / `le_toPMF_randIdx_bind` instead.)
-6. **Cost** — branch cost by `cost_step`; the recurrence
-   `E = (1/n)·Σᵢ E[branchᵢ]` by `expected_cost_uniform_step`; upper bounds
-   stay in `ℝ≥0∞`, exact formulas descend to `ℝ` via `toReal_uniform_avg`.
-   Structural output measures (tree height, …) use `expVal`.
 
 ## Notation
 
 ```lean
 𝔼_runtime[Quicksort L | M]      -- expected runtime (ℝ≥0∞) at random monad M
 𝔼ℝ_runtime[Quicksort L | M]     -- the same, as a real number
-expVal (toPMF (treap L)) g      -- E[g(output)] for structural measures
+expVal (toPMF (treap L)) g      -- E[g(output)]
 pivotLT L i, pivotGE L i        -- the two sides of a pivot partition
 ```
 
