@@ -20,7 +20,7 @@ Formal reasoning about randomized algorithms spans a spectrum:
 ARA is a **shallow, no-embedding** framework: an algorithm is an
 ordinary Lean function written in `do`-notation, and its randomness is
 abstracted by a typeclass. We get the full expressiveness of Lean
-(recursion, dependent types, Mathlib) and pay one honest price: **cost
+(recursion, dependent types, Mathlib) and pay one price the fact that **cost
 annotations (`tick`) are trusted**. The `tick` calls state the cost
 model; nothing checks that they match an operational semantics. This is
 the same trade-off made by `TimeM` in cslib. A formal correspondence
@@ -37,12 +37,26 @@ measure with measurable singletons induces a `PMF`; the two views are
 inverse to each other. What makes `PMF` a *programming* object is its
 monad structure — the discrete Giry monad:
 
-* `pure a` — the Dirac distribution concentrated on `a`;
-* `p.bind f` (written `p >>= f`) — sample `a` from `p`, then sample
-  from `f a`; concretely `(p >>= f) b = ∑' a, p a * f a b`.
+- `pure : α → PMF α` which takes a value and returns the distribution that is
+  concentrated on that value (the Dirac distribution) i.e. assigns 1 to that
+  value and 0 to all other values.
 
-Having distributions *in the logic* is the framework's core bet: we
-can state that an algorithm's output **is** a given distribution (not
+- `bind : PMF α → (α → PMF β) → PMF β` which for two types α and β:
+  Takes (P,f) where :
+  * P is a distribution over α, P : PMF α,
+  * f is a function that assigns to each elements of α a distribution over β, f : α → PMF β
+  Returns:
+  the distribution over β obtained by "sampling" from the first distribution and
+  then "sampling" from the second distribution. That is the probability of obtaining
+  b in β from P.bind f is the sum over all a in α of the probability of a from P
+  times the probability of obtaining b from f a, i.e. assigns b : β to the probability:
+  ∑ a : α, P a * (f a) b
+
+  It used concretely like this : pure x for pure x and P >>= f (or P.bind f) for bind (P,f).
+
+The main advantage of having probability distributions in the logic is its
+expressiveness and flexibility: 
+we can state that an algorithm's output **is** a given distribution (not
 merely that some property holds almost surely), compare two
 differently-structured algorithms by proving their output or cost
 distributions equal, and reuse all of Mathlib's `tsum`/`ENNReal`
