@@ -20,7 +20,7 @@ tutorial to formalize a toy algorithm (`RandMax`) which is verified
 end-to-end in six numbered steps.
 
 ```lean
-theorem Correctness_RandMax ... := by
+theorem randMax_correct ... := by
   induction L using RandMax.induct with
   | case1 => rw [RandMax.eq_1]; simp only [LawfulRandMonad.toPMF_pure]; rfl
   | case2 head tail ih =>
