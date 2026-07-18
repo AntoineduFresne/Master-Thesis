@@ -45,13 +45,16 @@ ARA/
 │   ├── LawfulRandMonad.lean   `RandMonad` (uniform `randFin`) + `toPMF` semantics
 │   ├── ExpectedCost.lean      𝔼_runtime[e | M], cost_step, uniform-step lemmas,
 │   │                          `expVal` (expectations of output functionals)
+│   ├── TailBounds.lean        ℙ_runtime[e > k | M], Markov's inequality:
+│   │                          any expected-cost theorem ⇒ tail bound for free
 │   ├── Correctness.lean       Dirac / distributional / support correctness recipes,
 │   │                          `dirac_step`, `dirac_finish`, `@[spec_transport]`
 │   ├── SimpAttr.lean          the registered simp sets
 │   └── Tactics.lean           `pmf_simp`, PMF bridges, derived lemmas
 ├── Helpers/            shared mathematics
-│   └── Partition.lean         pivot-partition lemmas, `pivotLT`/`pivotGE`,
-│                              rank reindexing `nodup_partition_sum₂`
+│   ├── Partition.lean         pivot-partition lemmas, `pivotLT`/`pivotGE`,
+│   │                          rank reindexing `nodup_partition_sum₂`
+│   └── HarmonicSums.lean      prefix sums Σ H_r, Σ r·H_r, Σ (r+1)·H_r
 └── Algorithms/
     ├── Tutorial.lean          ← start here
     ├── Quicksort.lean         Quickselect.lean   Karger.lean
@@ -73,13 +76,15 @@ analysis; together they are the proof that the framework is usable.
 | **Treap** | every output a valid BST | **`E[height] ≤ 3·log₂(n+3) + 4`** via `E[2^H] ≤ C(n+3,3)` |
 
 All proofs rely (after "#print axioms") only on `propext`,
-`Classical.choice`, `Quot.sound`.
+`Classical.choice`, `Quot.sound` — enforced by
+`scripts/AxiomAudit.lean`, which CI runs on every push.
 
 ## Notation
 
 ```lean
 𝔼_runtime[Quicksort L | M]      -- expected runtime (ℝ≥0∞) at random monad M
 𝔼ℝ_runtime[Quicksort L | M]     -- the same, as a real number
+ℙ_runtime[Quicksort L > k | M]  -- tail probability; ≤ 𝔼_runtime[…]/(k+1) by Markov
 expVal (toPMF (treap L)) g      -- E[g(output)]
 pivotLT L i, pivotGE L i        -- the two sides of a pivot partition
 ```

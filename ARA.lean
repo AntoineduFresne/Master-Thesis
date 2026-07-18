@@ -9,8 +9,10 @@ import ARA.Infrastructure.Tactics
 import ARA.Infrastructure.MonadCost
 import ARA.Infrastructure.LawfulRandMonad
 import ARA.Infrastructure.ExpectedCost
+import ARA.Infrastructure.TailBounds
 import ARA.Infrastructure.Correctness
 import ARA.Helpers.Partition
+import ARA.Helpers.HarmonicSums
 import ARA.Algorithms.Tutorial
 import ARA.Algorithms.Quicksort
 import ARA.Algorithms.Quickselect
@@ -33,6 +35,7 @@ everything. The library is organized in three layers:
   the cost transformer (`TimeMT`), the randomness interface
   (`RandMonad`/`LawfulRandMonad`), abstract cost ticks (`MonadCost`),
   expected cost and output-functional expectations (`ExpectedCost`),
+  Markov tail bounds (`TailBounds`),
   the correctness recipes (`Correctness`), and the simp sets/tactics
   (`SimpAttr`, `Tactics`).
 * `ARA/Helpers/` — shared mathematics used by several algorithms

@@ -99,7 +99,11 @@ Practice produced a classification we now build the API around:
 
 Costs likewise: upper bounds live in `ℝ≥0∞` (no summability
 bookkeeping), exact formulas descend to `ℝ` via `toReal` with
-finiteness supplied by the coarse bound.
+finiteness supplied by the coarse bound. On top of expectations sits
+the tail-bound tier (`TailBounds.lean`): Markov's inequality upgrades
+any expected-cost theorem to `ℙ_runtime[m > k] ≤ 𝔼_runtime[m]/(k+1)`
+for free — since costs are `ℕ`-valued, the strict form divides by
+`k + 1` and needs no `k ≠ 0` hypothesis.
 
 ## Known limitations
 
