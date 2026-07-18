@@ -13,6 +13,8 @@ tried to be automated by the framework.
 
 Author: Antoine du Fresne von Hohenesche.
 
+Helped by Claude code: Opus and Fable models were used.
+
 ## Start here
 
 **[`ARA/Algorithms/Tutorial.lean`](ARA/Algorithms/Tutorial.lean)** is a
@@ -29,6 +31,9 @@ theorem randMax_correct ... := by
     unfold randMax_branch
     dirac_finish        -- ← the framework does the rest
 ```
+
+Design rationale (why shallow embedding, `PMF`/Giry monad, correctness
+tiers, known limitations): see [`DESIGN.md`](DESIGN.md).
 
 ## Layout — three layers
 
