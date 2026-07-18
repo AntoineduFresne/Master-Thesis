@@ -76,8 +76,7 @@ analysis; together they are the proof that the framework is usable.
 | **Treap** | every output a valid BST | **`E[height] ≤ 3·log₂(n+3) + 4`** via `E[2^H] ≤ C(n+3,3)` |
 
 All proofs rely (after "#print axioms") only on `propext`,
-`Classical.choice`, `Quot.sound` — enforced by
-`scripts/AxiomAudit.lean`, which CI runs on every push.
+`Classical.choice`, `Quot.sound`.
 
 ## Notation
 
