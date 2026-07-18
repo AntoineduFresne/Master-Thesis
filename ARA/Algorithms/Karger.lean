@@ -605,7 +605,7 @@ estimate and equals `minCutValue` with high probability. -/
 private lemma support_contractAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
     ∀ (k : ℕ) (g : MultiGraph α), g.WF → g.verts.card = k + 2 →
-      ∀ g' ∈ (inst.toPMF (@contractAux _ _ M _ _ instMonadCostDefault k g)).support,
+      ∀ g' ∈ (inst.toPMF (contractAux k g : M (MultiGraph α))).support,
         g.minCutValue ≤ g'.edges.length := by
   intro k
   induction k with
@@ -634,7 +634,7 @@ the algorithm never undershoots. -/
 theorem karger_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    ∀ c ∈ (inst.toPMF (@Karger _ _ M _ _ instMonadCostDefault g)).support,
+    ∀ c ∈ (inst.toPMF (Karger g : M ℕ)).support,
       g.minCutValue ≤ c := by
   intro c hc
   unfold Karger at hc
@@ -769,7 +769,7 @@ theorem karger_success_prob
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card : ℝ≥0∞) * ((g.verts.card : ℝ≥0∞) - 1)) ≤
-      inst.toPMF (@Karger _ _ M _ _ instMonadCostDefault g) g.minCutValue := by
+      inst.toPMF (Karger g : M ℕ) g.minCutValue := by
   have hmain := success_contractAux (M := M) (g.verts.card - 2) g hwf (by omega)
   have hden : (((g.verts.card - 2 + 2) * (g.verts.card - 2 + 1) : ℕ) : ℝ≥0∞) =
       (g.verts.card : ℝ≥0∞) * ((g.verts.card : ℝ≥0∞) - 1) := by

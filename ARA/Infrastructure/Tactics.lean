@@ -205,6 +205,18 @@ lemma pmf_pure_eq {α : Type*} (a : α) :
 lemma pmf_map_eq {α β : Type u} (f : α → β) (p : PMF α) :
     f <$> p = p.map f := rfl
 
+/-- `map some` hits `some a` with the original probability. -/
+lemma pmf_map_some_apply {α : Type*} (p : PMF α) (a : α) :
+    (p.map some) (some a) = p a := by
+  rw [PMF.map_apply]
+  exact (tsum_eq_single a fun y hy =>
+    if_neg fun h => hy (Option.some_inj.mp h).symm).trans (if_pos rfl)
+
+/-- `map some` never hits `none`. -/
+lemma pmf_map_some_none {α : Type*} (p : PMF α) : (p.map some) none = 0 := by
+  rw [PMF.map_apply]
+  simp
+
 /-- uniformOfFintype (Fin 1) = pure 0, useful as a base case -/
 lemma pmf_uniformOfFintype_fin_one :
     PMF.uniformOfFintype (Fin 1) = PMF.pure (0 : Fin 1) := by

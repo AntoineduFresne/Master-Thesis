@@ -51,6 +51,13 @@ Exposes the `TimeMT.lift` for erasure/bridge lemma application. -/
     (randIdx L h : TimeMT ℕ M (Fin L.length)).run =
     (TimeMT.lift (randIdx L h : M (Fin L.length))).run := rfl
 
+/-- In `TimeMT`, `randFin` is likewise a lifted `randFin` of the base
+monad. -/
+@[simp] lemma TimeMT_randFin_run
+    {M} [Monad M] [RandMonad M] (n : ℕ) [NeZero n] :
+    (RandMonad.randFin n : TimeMT ℕ M (Fin n)).run =
+    (TimeMT.lift (RandMonad.randFin n : M (Fin n))).run := rfl
+
 /-!
 ## Core definition
 -/
@@ -105,6 +112,15 @@ lemma uniform_avg_le {n : ℕ} (hn : n ≠ 0) {S c : ENNReal}
     (n : ENNReal)⁻¹ * S ≤ c := by
   refine le_trans (mul_le_mul' le_rfl h) ?_
   rw [← mul_assoc,
+    ENNReal.inv_mul_cancel (Nat.cast_ne_zero.mpr hn) (ENNReal.natCast_ne_top n),
+    one_mul]
+
+/-- The uniform average of `n` copies of the same value is that value —
+the closing step of a cost analysis whose branches all cost the same. -/
+lemma uniform_avg_const {n : ℕ} (hn : n ≠ 0) (c : ENNReal) :
+    (n : ENNReal)⁻¹ * ∑ _i : Fin n, c = c := by
+  rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
+    ← mul_assoc,
     ENNReal.inv_mul_cancel (Nat.cast_ne_zero.mpr hn) (ENNReal.natCast_ne_top n),
     one_mul]
 

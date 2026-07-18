@@ -328,6 +328,25 @@ end LinearOrder
 
 /-! ### Pivot-rank arithmetic -/
 
+/-- Pascal's rule for `choose 2`: `C(n+1, 2) = n + C(n, 2)`. -/
+lemma choose_two_succ (n : ℕ) : (n + 1).choose 2 = n + n.choose 2 := by
+  rw [Nat.choose_succ_succ, Nat.choose_one_right]
+
+/-- Discrete convexity of `Nat.choose · 2`: along the line `a + b = k`,
+the sum `a.choose 2 + b.choose 2` is maximized at the corners.
+Equivalent to `a(a − 1) + b(b − 1) + 2ab = (a + b)(a + b − 1)`. -/
+lemma choose_two_add_le (a b : ℕ) :
+    a.choose 2 + b.choose 2 ≤ (a + b).choose 2 := by
+  induction b with
+  | zero => simp
+  | succ b ih =>
+    have hb : (b + 1).choose 2 = b.choose 2 + b := by
+      rw [Nat.choose_succ_succ, Nat.choose_one_right]; linarith
+    have hab : (a + (b + 1)).choose 2 = (a + b).choose 2 + (a + b) := by
+      rw [show a + (b + 1) = (a + b) + 1 from rfl,
+        Nat.choose_succ_succ, Nat.choose_one_right]; linarith
+    rw [hb, hab]; omega
+
 /-- Arithmetic core of max-side recursion bounds: recursing into the
 larger side of a rank-`r` pivot costs at most `max r (n-1-r)`, and
 summed over all ranks this is at most `3n²/4` (stated multiplied out:

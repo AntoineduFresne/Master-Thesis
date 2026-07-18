@@ -168,7 +168,7 @@ theorem randMax_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
     LawfulRandMonad.toPMF
-      (@RandMax _ _ _ M _ _ instMonadCostDefault L) =
+      (RandMax L : M α) =
       PMF.pure (listMax L) := by
   induction L using RandMax.induct with
   | case1 =>
@@ -248,9 +248,7 @@ theorem randMax_cost_exact
       push_cast
       ring
     -- …so the average of `n` copies of `n` is `n`.
-    rw [Finset.sum_congr rfl fun i _ => hterm i, Finset.sum_const,
-      Finset.card_univ, Fintype.card_fin, nsmul_eq_mul, ← mul_assoc,
-      ENNReal.inv_mul_cancel (by simp) (ENNReal.natCast_ne_top _), one_mul]
+    rw [Finset.sum_congr rfl fun i _ => hterm i, uniform_avg_const (by simp)]
 
 /-!
 ## Where to go from here

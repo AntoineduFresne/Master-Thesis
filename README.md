@@ -1,7 +1,6 @@
 # ARA — Analysis of Randomized Algorithms in Lean 4
 
-A framework where a randomized algorithm is written **once** and that single
-definition serves for example (depending on the abstract source of randomness):
+A framework where a randomized algorithm is written **once** and that single definition serves for example (depending on the abstract source of randomness):
 
 * an **executable program** (`IO`, real randomness — `#eval` it),
 * a **distribution** (`PMF`, the mathematical specification),
@@ -88,4 +87,3 @@ lake build          # builds the whole framework (root manifest ARA.lean)
 
 Toolchain: `leanprover/lean4 v4.31.0`, Mathlib `v4.31.0`,
 [cslib](https://github.com/leanprover/cslib) `v4.31.0` (provides `TimeM`).
-Intended upstreaming target: cslib.

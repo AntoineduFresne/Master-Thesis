@@ -27,9 +27,10 @@ serves as:
 
 ## Main results
 
-* `quicksort_correct` — Establishes generic correctness over any
-  `LawfulRandMonad`: guarantees the algorithm deterministically
-  returns a sorted permutation of the input list.
+* `quicksort_correct` — generic correctness over any
+  `LawfulRandMonad`: the output distribution is the Dirac mass at
+  `L.mergeSort (· ≤ ·)` — the algorithm deterministically returns
+  the sorted list (existential form: `quicksort_correct_spec`).
 * `quicksort_cost_le_real` — For arbitrary lists (possibly with
   duplicates), bounds the expected cost by `C(n,2)`, tight on
   all-equal inputs. Its `ℝ≥0∞` core also supplies the finiteness
@@ -174,15 +175,15 @@ For the correctness proof, we work with the no-op `MonadCost`
 instance. The tick becomes `pure ()` and is invisible.
 -/
 
-/-- For any `LawfulRandMonad`, `Quicksort L` (with no-op cost
-tracking) produces a single deterministic output that is sorted
-and a permutation of `L`. -/
-lemma quicksort_correct
+/-- Existential form of correctness, established by functional
+induction; the Dirac form `quicksort_correct` below identifies the
+output with `L.mergeSort (· ≤ ·)`. -/
+private lemma quicksort_correct_aux
     {M} [Monad M] [LawfulMonad M]
     [LawfulRandMonad M] :
     ∀ L : List α, ∃ Output : List α,
       LawfulRandMonad.toPMF
-        (@Quicksort _ _ M _ _ instMonadCostDefault L) =
+        (Quicksort L : M (List α)) =
         pure Output ∧
       Output.SortedLE ∧ Output.Perm L := by
   apply Quicksort.induct
@@ -226,24 +227,41 @@ lemma quicksort_correct
     obtain ⟨Output, h0, hS, hP⟩ := h_step ⟨0, by grind⟩
     refine ⟨Output, ?_, hS, hP⟩
     show LawfulRandMonad.toPMF
-      (@Quicksort _ _ M _ _ instMonadCostDefault (head :: tail)) = pure Output
+      (Quicksort (head :: tail) : M (List α)) = pure Output
     rw [quicksort_eq_bind, pmf_pure_eq]
     refine toPMF_randIdx_bind_dirac fun i => ?_
     obtain ⟨Oi, hi, si, pi⟩ := h_step i
     rwa [eq_of_sortedLE_perm si hS (pi.trans hP.symm)] at hi
 
+/-- **Correctness.** For any `LawfulRandMonad`, `Quicksort` returns
+exactly the sorted list: its output distribution is the Dirac mass at
+`L.mergeSort (· ≤ ·)`, independently of the random pivot choices. -/
+theorem quicksort_correct
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (L : List α) :
+    LawfulRandMonad.toPMF (Quicksort L : M (List α)) =
+      PMF.pure (L.mergeSort (· ≤ ·)) := by
+  obtain ⟨Out, hEq, hS, hP⟩ := quicksort_correct_aux (M := M) L
+  rwa [eq_of_sortedLE_perm hS sortedLE_mergeSort
+    (hP.trans (mergeSort_perm L _).symm)] at hEq
+
+/-- The output is a sorted permutation of the input (existential
+specification form of `quicksort_correct`). -/
+theorem quicksort_correct_spec
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (L : List α) :
+    ∃ Output : List α,
+      LawfulRandMonad.toPMF (Quicksort L : M (List α)) = pure Output ∧
+      Output.SortedLE ∧ Output.Perm L :=
+  ⟨L.mergeSort (· ≤ ·), quicksort_correct L, sortedLE_mergeSort,
+    mergeSort_perm L _⟩
+
 -- ----------------------------------------
 -- Free Proof: Untimed Quicksort_PMF
 -- ----------------------------------------
 
-lemma quicksort_correct_pmf :
-    ∀ L : List ℕ, ∃ Output : List ℕ,
-      Quicksort_PMF L = pure Output ∧
-      Output.SortedLE ∧ Output.Perm L := by
-  intro L
-  obtain ⟨Out, hEq, hS, hP⟩ :=
-    quicksort_correct (M := PMF) L
-  exact ⟨Out, hEq, hS, hP⟩
+/-- Correctness at `M = PMF` (where `toPMF` is the identity). -/
+theorem quicksort_correct_pmf (L : List α) :
+    (Quicksort L : PMF (List α)) = PMF.pure (L.mergeSort (· ≤ ·)) :=
+  quicksort_correct (M := PMF) L
 
 -- ----------------------------------------
 -- Free Proof: Timed Quicksort_PMF_Timed
@@ -273,19 +291,12 @@ lemma quicksort_erasure
       MonadCost.tick_timeMT, TimeMT_erase_tick, MonadCost.tick_default, pure_bind]
     simp only [ih1, ih2, TimeMT_erase_pure]
 
-/-- Timed PMF correctness for free. -/
-lemma quicksort_correct_timed_pmf :
-    ∀ L : List ℕ, ∃ Output : List ℕ,
-      TimeM.ret <$> (Quicksort_PMF_Timed L).run =
-        pure Output ∧
-      Output.SortedLE ∧ Output.Perm L := by
-  intro L
-  obtain ⟨Out, hEq, hSort, hPerm⟩ :=
-    quicksort_correct_pmf L
-  use Out
-  unfold Quicksort_PMF_Timed
+/-- Timed PMF correctness for free (via erasure). -/
+theorem quicksort_correct_timed_pmf (L : List α) :
+    TimeM.ret <$> (Quicksort L : TimeMT ℕ PMF (List α)).run =
+      PMF.pure (L.mergeSort (· ≤ ·)) := by
   rw [quicksort_erasure]
-  exact ⟨hEq, hSort, hPerm⟩
+  exact quicksort_correct_pmf L
 
 -- ----------------------------------------
 -- Generic Complexity Proof
@@ -388,25 +399,6 @@ across all inputs and pivot sequences, so the expected cost on any list
 is bounded by `C(n,2)`. Its `ℝ≥0∞` form also provides finiteness of
 the expected cost for free. -/
 
-/-- Discrete convexity of `Nat.choose · 2`: along the line `a + b = k`,
-the sum `a.choose 2 + b.choose 2` is maximized at the corners and equals
-`k.choose 2 = (a + b).choose 2`.
-
-Equivalent to the polynomial identity
-`a(a − 1) + b(b − 1) + 2ab = (a + b)(a + b − 1)`. -/
-private lemma choose_two_add_le (a b : ℕ) :
-    a.choose 2 + b.choose 2 ≤ (a + b).choose 2 := by
-  induction b with
-  | zero => simp
-  | succ b ih =>
-    -- Pascal: `(n + 1).choose 2 = n.choose 1 + n.choose 2 = n + n.choose 2`.
-    have hb : (b + 1).choose 2 = b.choose 2 + b := by
-      rw [Nat.choose_succ_succ, Nat.choose_one_right]; linarith
-    have hab : (a + (b + 1)).choose 2 = (a + b).choose 2 + (a + b) := by
-      rw [show a + (b + 1) = (a + b) + 1 from rfl,
-        Nat.choose_succ_succ, Nat.choose_one_right]; linarith
-    rw [hb, hab]; omega
-
 /-- For an arbitrary list (possibly
 with duplicates), the expected cost of `Quicksort` is bounded by
 `L.length.choose 2`. Tight on the all-equal list `[a, a, …, a]`. -/
@@ -450,7 +442,7 @@ theorem quicksort_cost_le
     have hpascal : (head :: tail).length.choose 2 =
         tail.length + tail.length.choose 2 := by
       simp only [List.length_cons]
-      rw [Nat.choose_succ_succ, Nat.choose_one_right]
+      exact choose_two_succ tail.length
     -- Average the `n` equal bounds.
     refine uniform_avg_le (by simp)
       (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)

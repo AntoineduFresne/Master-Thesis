@@ -178,7 +178,7 @@ always accepts, over any `LawfulRandMonad`. -/
 theorem freivalds_complete
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B = C) :
-    inst.toPMF (@freivalds R _ _ n M _ _ instMonadCostDefault A B C)
+    inst.toPMF (freivalds A B C : M Bool)
       true = 1 := by
   have hcheck : ∀ r, freivaldsCheck A B C r = true := fun r =>
     (freivaldsCheck_iff A B C r).mpr (by rw [h, sub_self, Matrix.zero_mulVec])
@@ -256,7 +256,7 @@ with probability at most `1/2` — over any commutative ring. -/
 theorem freivalds_sound
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B ≠ C) :
-    inst.toPMF (@freivalds R _ _ n M _ _ instMonadCostDefault A B C)
+    inst.toPMF (freivalds A B C : M Bool)
       true ≤ 1 / 2 := by
   -- A nonzero witness entry of `D = A*B − C`.
   have hD : ∃ i j, (A * B - C) i j ≠ 0 := by

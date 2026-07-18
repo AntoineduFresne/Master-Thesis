@@ -229,7 +229,7 @@ theorem quickselect_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) :
     LawfulRandMonad.toPMF
-      (@Quickselect _ _ _ M _ _ instMonadCostDefault L k) =
+      (Quickselect L k : M α) =
       PMF.pure (orderStat L k) := by
   induction L, k using Quickselect.induct with
   | case1 k =>
@@ -428,7 +428,7 @@ theorem quickselect_cost_le_quadratic
     have hpascal : (head :: tail).length.choose 2 =
         tail.length + tail.length.choose 2 := by
       simp only [List.length_cons]
-      rw [Nat.choose_succ_succ, Nat.choose_one_right]
+      exact choose_two_succ tail.length
     -- Average the `n` equal bounds.
     refine uniform_avg_le (by simp)
       (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)

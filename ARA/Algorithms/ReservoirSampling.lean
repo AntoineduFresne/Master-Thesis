@@ -97,7 +97,7 @@ private lemma toPMF_reservoirAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (xs : List α) (seen : ℕ) (hseen : seen ≠ 0) (cur y : α) :
     inst.toPMF
-      (@reservoirAux α M _ _ instMonadCostDefault seen cur xs) y =
+      (reservoirAux seen cur xs : M α) y =
     ((if y = cur then (seen : ENNReal) else 0) + (xs.count y : ENNReal)) /
       ((seen : ENNReal) + (xs.length : ENNReal)) := by
   induction xs generalizing seen cur with
@@ -140,18 +140,6 @@ private lemma toPMF_reservoirAux
     rw [← mul_assoc, ENNReal.inv_mul_cancel (by simp) (ENNReal.natCast_ne_top _),
       one_mul]
 
-omit h
-private lemma pmf_map_some_apply (p : PMF α) (a : α) :
-    (p.map some) (some a) = p a := by
-  rw [PMF.map_apply]
-  exact (tsum_eq_single a fun y hy =>
-    if_neg fun h => hy (Option.some_inj.mp h).symm).trans (if_pos rfl)
-
-private lemma pmf_map_some_none (p : PMF α) : (p.map some) none = 0 := by
-  rw [PMF.map_apply]
-  simp
-
-include h
 /-- **Correctness (exact uniformity).** For any `LawfulRandMonad`, each
 element of `L` is returned with probability `count a / |L|`; on a
 distinct list, every element has probability exactly `1/n`. Note the
@@ -159,7 +147,7 @@ statement is about the *whole distribution*, not a point mass. -/
 theorem reservoir_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) (a : α) :
-    inst.toPMF (@reservoir α M _ _ instMonadCostDefault L) (some a) =
+    inst.toPMF (reservoir L : M (Option α)) (some a) =
       (L.count a : ENNReal) / (L.length : ENNReal) := by
   cases L with
   | nil =>
@@ -180,7 +168,7 @@ omit h
 theorem reservoir_none_eq_zero
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) (hL : L ≠ []) :
-    inst.toPMF (@reservoir α M _ _ instMonadCostDefault L) none = 0 := by
+    inst.toPMF (reservoir L : M (Option α)) none = 0 := by
   cases L with
   | nil => exact absurd rfl hL
   | cons x xs =>
@@ -192,7 +180,7 @@ probability exactly `1/n`. -/
 theorem reservoir_correct_of_nodup
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) (hnd : L.Nodup) (a : α) (ha : a ∈ L) :
-    inst.toPMF (@reservoir α M _ _ instMonadCostDefault L) (some a) =
+    inst.toPMF (reservoir L : M (Option α)) (some a) =
       ((L.length : ENNReal))⁻¹ := by
   rw [reservoir_correct, List.count_eq_one_of_mem hnd ha]
   simp
@@ -237,9 +225,7 @@ private lemma expected_cost_reservoirAux
             TimeMT ℕ M α)).run)) = _
       cost_step
       rw [ih, Nat.cast_one]
-    rw [Finset.sum_congr rfl fun i _ => hbranch i, Finset.sum_const,
-      Finset.card_univ, Fintype.card_fin, nsmul_eq_mul, ← mul_assoc,
-      ENNReal.inv_mul_cancel (by simp) (ENNReal.natCast_ne_top _), one_mul]
+    rw [Finset.sum_congr rfl fun i _ => hbranch i, uniform_avg_const (by simp)]
     simp only [List.length_cons]
     push_cast
     ring
