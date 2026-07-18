@@ -3,9 +3,9 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.ExpectedCost
-import ARA.Correctness
-import ARA.Algorithms.Partition
+import ARA.Infrastructure.ExpectedCost
+import ARA.Infrastructure.Correctness
+import ARA.Helpers.Partition
 import Mathlib.Data.List.GetD
 import Mathlib.NumberTheory.Harmonic.Defs
 
@@ -83,7 +83,7 @@ def Quickselect
 -- ----------------------------------------
 
 -- IO version (executable, untimed; `RandMonad IO` comes from
--- `ARA.LawfulRandMonad`)
+-- `ARA.Infrastructure.LawfulRandMonad`)
 def Quickselect_IO : List ℕ → ℕ → IO ℕ := Quickselect
 
 #eval Quickselect_IO [5, 3, 8, 1, 9, 2] 2
@@ -96,7 +96,7 @@ noncomputable def Quickselect_PMF : List ℕ → ℕ → PMF ℕ := Quickselect
 -- ----------------------------------------
 
 -- IO timed version (executable; `RandMonad (TimeMT ℕ M)` comes from
--- `ARA.ExpectedCost`)
+-- `ARA.Infrastructure.ExpectedCost`)
 def Quickselect_IO_Timed : List ℕ → ℕ → TimeMT ℕ IO ℕ := Quickselect
 
 #eval (Quickselect_IO_Timed [5, 3, 8, 1, 9, 2] 2).run
@@ -160,7 +160,7 @@ private lemma quickselect_timed_eq_bind
 /-!
 ### Order-statistic case lemmas
 
-By `mergeSort_partition` (from `ARA.Algorithms.Partition`), the sorted
+By `mergeSort_partition` (from `ARA.Helpers.Partition`), the sorted
 version of `L` splits around any pivot as
 `sorted(< pivot) ++ [pivot] ++ sorted(≥ pivot)`, so the order statistic
 of `L` reduces to the order statistic of one side. All three case
@@ -528,7 +528,7 @@ theorem Expected_Complexity_Quickselect
       nodup_partition_sum₂ (head :: tail) hnd
         (fun a b => (tail.length : ENNReal) + 4 * ((max a b : ℕ) : ENNReal))
     -- ℕ-level bound for the reindexed sum, in `n * (4n)` shape
-    -- (`sum_max_le` is the arithmetic core, from `ARA.Algorithms.Partition`).
+    -- (`sum_max_le` is the arithmetic core, from `ARA.Helpers.Partition`).
     have hkey : (∑ r ∈ Finset.range (tail.length + 1),
         (tail.length + 4 * max r (tail.length - r))) ≤
         (tail.length + 1) * (4 * (tail.length + 1)) := by

@@ -10,4 +10,3 @@ require cslib from git "https://github.com/leanprover/cslib" @ "v4.31.0"
 
 lean_lib ARA
 
-lean_lib TimeMT

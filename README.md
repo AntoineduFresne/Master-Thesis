@@ -1,100 +1,110 @@
-# Master Thesis — ARA: Analysis of Randomized Algorithms
+# ARA — Analysis of Randomized Algorithms in Lean 4
 
-A Lean 4 framework for analyzing randomized algorithms. Author:
-Antoine du Fresne von Hohenesche (ETHZ).
+A framework where a randomized algorithm is written **once** and that single
+definition serves as:
 
-## Primary objective
+* an **executable program** (`IO`, real randomness — `#eval` it),
+* a **distribution** (`PMF`, the mathematical specification),
+* a **timed algorithm** (`TimeMT ℕ M`, cost accumulated per `tick`),
+* a **benchmark** (`TimeMT ℕ IO`, executable with a clock).
 
-Design a foundational framework in Lean 4 where a randomized algorithm is
-written **once** and re-used for all the things one wants to do with it:
+Correctness and expected-complexity proofs then follow a fixed recipe in
+which everything except the *mathematics of the algorithm itself* is
+automated by the framework.
 
-* run it (in `IO`, with real randomness),
-* reason about its output distribution (in `PMF`),
-* reason about its cost distribution (in `TimeMT ℕ PMF`),
-* benchmark it (in `TimeMT ℕ IO`).
+Author: Antoine du Fresne von Hohenesche (ETHZ, master's thesis).
 
-The ultimate goal is to make Lean 4 proofs of complexity and probability
-bounds read about as concisely as a LaTeX proof.
+## Start here
 
-## Framework architecture
-
-```
-TimeM.lean                          deterministic cost monad +
-                                    TimeMT cost-transformer
-        ↑
-ARA/MonadCost.lean                  `MonadCost C M`: abstract cost ticks
-                                    (no-op default, accumulating on TimeMT)
-        ↑
-ARA/LawfulRandMonad.lean            `RandMonad`, `LawfulRandMonad`:
-                                    abstract uniform-randomness primitive
-                                    with `toPMF` semantics
-        ↑
-ARA/Tactics.lean                    `pmf_simp_attr`, `pmf_simp`, `pmf_norm`
-                                    (concrete probability computation)
-        ↑
-ARA/ExpectedCost.lean               `expected_cost`, `runtime`, `runtime_ℝ`,
-                                    notation `𝔼_runtime[·]`, `𝔼ℝ_runtime[·]`,
-                                    `expected_cost_simp` attribute and
-                                    `cost_step` / `runtime_simp` tactics
-        ↑
-ARA/QuickSort.lean                  demo algorithm + correctness proof +
-                                    expected complexity proof for `Nodup`
-                                    lists and an upper-bound theorem for
-                                    arbitrary lists
-```
-
-## Key contributions
-
-1. **Single-source algorithms.** One `def QuickSort` is polymorphic in
-   `[Monad M] [RandMonad M] [MonadCost ℕ M]` and instantiates to:
-   * `IO`              — executable, real randomness, no cost tracking
-   * `PMF`             — output distribution, noncomputable spec
-   * `TimeMT ℕ IO`     — executable + cost tracking
-   * `TimeMT ℕ PMF`    — joint distribution over outputs and costs
-2. **Cost tracking via monad transformer.** `TimeMT T M` is a writer-style
-   transformer that threads a cost through any base monad. The
-   `MonadCost` typeclass keeps the algorithm code agnostic to whether
-   the running monad actually accumulates cost.
-3. **Cost automation.** The `expected_cost_simp` simp set tags the bridge
-   lemmas (`expected_cost_toPMF_tick_bind`, `…_pure_bind`, `…_lift_bind`,
-   `expected_cost_toPMF_pure`, etc.) so `cost_step` mechanically peels
-   `TimeMT` combinators off an expected-cost expression.
-4. **Closed-form QuickSort complexity.** For `L : List ℕ` with
-   `L.Nodup`, the expected number of comparisons is exactly
-   `2(n+1)H(n) − 4n`. For arbitrary lists, the expected cost is bounded
-   by `(n choose 2)` (statement only; proof TODO).
-
-## Usage
+**[`ARA/Algorithms/Tutorial.lean`](ARA/Algorithms/Tutorial.lean)** is a
+copy-me template: a toy algorithm (`RandMax`) verified end-to-end in six
+numbered steps. The inductive case of its correctness proof is one tactic
+(`dirac_finish`), and its exact expected cost follows the uniform-pivot
+recipe in a dozen lines.
 
 ```lean
-import ARA.QuickSort
-
-open ARA Cslib.Algorithms.Lean
-
--- Correctness for any LawfulRandMonad, free for the PMF instance:
-#check Correctness_Quicksort
-
--- Exact expected complexity for Nodup lists:
-example {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
-    (L : List ℕ) (hnd : L.Nodup) :
-    𝔼ℝ_runtime[(QuickSort L : TimeMT ℕ M _)] =
-      expected_qs_cost L.length :=
-  Expected_Complexity_Quicksort L hnd
+theorem Correctness_RandMax ... := by
+  induction L using RandMax.induct with
+  | case1 => rw [RandMax.eq_1]; simp only [LawfulRandMonad.toPMF_pure]; rfl
+  | case2 head tail ih =>
+    rw [randMax_eq_bind]
+    refine toPMF_randIdx_bind_dirac fun i => ?_
+    unfold randMax_branch
+    dirac_finish        -- ← the framework does the rest
 ```
 
-## File map
+## Layout — three layers
 
-* `ARA.lean` — top-level imports (Mathlib).
-* `TimeM.lean` — `TimeM` / `TimeMT` (cslib-shaped, predates this work).
-* `ARA/SimpAttr.lean` — registers `pmf_simp_attr` and `expected_cost_simp`.
-* `ARA/Tactics.lean` — `pmf_simp` / `pmf_norm` for PMF computations.
-* `ARA/MonadCost.lean` — `MonadCost C M` typeclass + default instances.
-* `ARA/LawfulRandMonad.lean` — `RandMonad` / `LawfulRandMonad` typeclasses.
-* `ARA/ExpectedCost.lean` — expected-cost analysis + `cost_step` tactic.
-* `ARA/QuickSort.lean` — demo algorithm + theorems.
-* `archive/` — earlier exploratory material kept for reference (not built).
+```
+ARA/
+├── Infrastructure/     the engine (a user never edits this)
+│   ├── TimeMT.lean            cost transformer over any monad
+│   ├── MonadCost.lean         abstract `tick` (no-op by default)
+│   ├── LawfulRandMonad.lean   `RandMonad` (uniform `randFin`) + `toPMF` semantics
+│   ├── ExpectedCost.lean      𝔼_runtime[e | M], cost_step, uniform-step lemmas,
+│   │                          `expVal` (expectations of output functionals)
+│   ├── Correctness.lean       Dirac / distributional / support correctness recipes,
+│   │                          `dirac_step`, `dirac_finish`, `@[spec_transport]`
+│   ├── SimpAttr.lean          the registered simp sets
+│   └── Tactics.lean           `pmf_simp`, PMF bridges, derived lemmas
+├── Helpers/            shared mathematics
+│   └── Partition.lean         pivot-partition lemmas, `pivotLT`/`pivotGE`,
+│                              rank reindexing `nodup_partition_sum₂`
+└── Algorithms/         the case studies (and the Tutorial)
+    ├── Tutorial.lean          ← start here
+    ├── Quicksort.lean         Quickselect.lean   Karger.lean
+    ├── ReservoirSampling.lean Freivalds.lean     Treap.lean
+```
 
-## Toolchain
+## Verified algorithms
 
-Built with `leanprover/lean4 v4.27.0` against Mathlib `v4.27.0`.
-Intended target for upstreaming: [cslib](https://github.com/leanprover/cslib).
+Each case study exercises a different *tier* of randomized-algorithm
+analysis; together they are the proof that the framework is usable.
+
+| Algorithm | Correctness | Complexity |
+|---|---|---|
+| **Quicksort** | Dirac: always the sorted permutation | exact `2(n+1)H(n) − 4n`; `C(n,2)` for duplicates |
+| **Quickselect** | Dirac: always the k-th order statistic | exact Knuth 1971 bivariate-harmonic formula; `≤ 4n`; `C(n,2)` |
+| **Karger** | one-sided error (support) | success probability `≥ 2/(n(n−1))`; cost `≤ (n−2)·m` |
+| **Reservoir sampling** | exact output distribution: `P[a] = count a / n` | exactly `n − 1` coins, single pass |
+| **Freivalds** | complete + sound (`≤ 1/2`, any `CommRing`) | exactly `3n²` vs `n³` |
+| **Treap** | every output a valid BST | **`E[height] ≤ 3·log₂(n+3) + 4`** via `E[2^H] ≤ C(n+3,3)` |
+
+All proofs are `sorry`-free; the axiom audit shows only `propext`,
+`Classical.choice`, `Quot.sound`.
+
+## The recipe (what a new algorithm costs you)
+
+1. **Define it once**, polymorphic over
+   `{M} [Monad M] [RandMonad M] [MonadCost ℕ M]`; draw randomness with
+   `randIdx`/`randFin`, charge cost with `MonadCost.tick`.
+2. **Instances for free** — four one-liners (`IO`, `PMF`, timed ×2).
+3. **Decompose** — one branch `abbrev` + two one-line `_eq_bind` lemmas.
+4. **The mathematics** — spec-transport lemmas, tagged `@[spec_transport]`.
+   *This is the only part that is genuinely about your algorithm.*
+5. **Correctness** — `induction … using f.induct`, collapse with
+   `toPMF_randIdx_bind_dirac`, close with `dirac_finish`. (Monte-Carlo:
+   `support_toPMF_randIdx_bind` / `le_toPMF_randIdx_bind` instead.)
+6. **Cost** — branch cost by `cost_step`; the recurrence
+   `E = (1/n)·Σᵢ E[branchᵢ]` by `expected_cost_uniform_step`; upper bounds
+   stay in `ℝ≥0∞`, exact formulas descend to `ℝ` via `toReal_uniform_avg`.
+   Structural output measures (tree height, …) use `expVal`.
+
+## Notation
+
+```lean
+𝔼_runtime[Quicksort L | M]      -- expected runtime (ℝ≥0∞) at random monad M
+𝔼ℝ_runtime[Quicksort L | M]     -- the same, as a real number
+expVal (toPMF (treap L)) g      -- E[g(output)] for structural measures
+pivotLT L i, pivotGE L i        -- the two sides of a pivot partition
+```
+
+## Building
+
+```
+lake build          # builds the whole framework (root manifest ARA.lean)
+```
+
+Toolchain: `leanprover/lean4 v4.31.0`, Mathlib `v4.31.0`,
+[cslib](https://github.com/leanprover/cslib) `v4.31.0` (provides `TimeM`).
+Intended upstreaming target: cslib.

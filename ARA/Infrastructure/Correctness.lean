@@ -3,8 +3,8 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.LawfulRandMonad
-import ARA.MonadCost
+import ARA.Infrastructure.LawfulRandMonad
+import ARA.Infrastructure.MonadCost
 
 /-!
 # Correctness recipes for randomized algorithms
@@ -53,7 +53,7 @@ generic primitives are:
 namespace ARA
 
 -- The `>>=`/`pure`/`<$>`-vs-`PMF.bind`/`PMF.pure`/`PMF.map` bridges
--- (`pmf_bind_eq`, `pmf_pure_eq`, `pmf_map_eq`) live in `ARA.Tactics`;
+-- (`pmf_bind_eq`, `pmf_pure_eq`, `pmf_map_eq`) live in `ARA.Infrastructure.Tactics`;
 -- register them for `dirac_step` too.
 attribute [dirac_simp] pmf_bind_eq pmf_pure_eq pmf_map_eq
 

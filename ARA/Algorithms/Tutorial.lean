@@ -3,9 +3,9 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.ExpectedCost
-import ARA.Correctness
-import ARA.Algorithms.Partition
+import ARA.Infrastructure.ExpectedCost
+import ARA.Infrastructure.Correctness
+import ARA.Helpers.Partition
 
 /-!
 # Tutorial — verify your first randomized algorithm
@@ -267,7 +267,7 @@ theorem Expected_Complexity_RandMax
   descend to `ℝ` with `toReal_uniform_avg` — see
   `Quickselect_Cost_Upper_Bound_ennreal`.
 * Monte-Carlo correctness? `support_toPMF_randIdx_bind` and
-  `le_toPMF_randIdx_bind` in `ARA.Correctness` — see `Karger`.
+  `le_toPMF_randIdx_bind` in `ARA.Infrastructure.Correctness` — see `Karger`.
 -/
 
 end ARA

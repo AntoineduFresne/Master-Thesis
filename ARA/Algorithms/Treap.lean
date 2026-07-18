@@ -3,9 +3,9 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.ExpectedCost
-import ARA.Correctness
-import ARA.Algorithms.Partition
+import ARA.Infrastructure.ExpectedCost
+import ARA.Infrastructure.Correctness
+import ARA.Helpers.Partition
 import Mathlib.Data.Nat.Log
 
 /-!
@@ -29,7 +29,7 @@ monad `M` (they run in `IO`, specify distributions in `PMF`, …):
 
 Neither draws `MonadCost` ticks: for a data structure the analogue of
 runtime is a *structural* measure of the output (the tree height),
-handled by the `expVal` output-functional API from `ARA.ExpectedCost`.
+handled by the `expVal` output-functional API from `ARA.Infrastructure.ExpectedCost`.
 
 ## Main results
 

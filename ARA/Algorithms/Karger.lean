@@ -3,7 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.ExpectedCost
+import ARA.Infrastructure.ExpectedCost
 import Mathlib.Order.Lattice.Nat
 
 /-!
@@ -514,7 +514,7 @@ noncomputable def Karger_PMF_Timed : MultiGraph ℕ → TimeMT ℕ PMF ℕ := Ka
 /-! ## Helper lemmas for the analysis
 
 The `>>=`/`pure`-vs-`PMF.bind`/`PMF.pure` bridges (`pmf_bind_eq`,
-`pmf_pure_eq`) come from `ARA.Tactics`. -/
+`pmf_pure_eq`) come from `ARA.Infrastructure.Tactics`. -/
 
 /-- A `Fin`-indexed sum of a function of the list entries is the sum
 over the mapped list. -/

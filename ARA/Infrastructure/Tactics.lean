@@ -3,7 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.SimpAttr
+import ARA.Infrastructure.SimpAttr
 
 /-!
   Tactic infrastructure for PMF proofs.
@@ -16,7 +16,7 @@ import ARA.SimpAttr
   ## Custom simp attribute
 
   We use a registered `@[pmf_simp_attr]` attribute (declared in
-  `ARA.SimpAttr`). Downstream files can locally tag domain-specific
+  `ARA.Infrastructure.SimpAttr`). Downstream files can locally tag domain-specific
   lemmas with `@[pmf_simp_attr]` to extend the automation organically.
 -/
 
@@ -137,7 +137,7 @@ attribute [grind =] PMF.bindOnSupport_apply
   and cleans up arithmetic.
 
   The core simp set is the registered `pmf_simp_attr` attribute
-  (declared in `ARA.SimpAttr`). Downstream files can extend it by
+  (declared in `ARA.Infrastructure.SimpAttr`). Downstream files can extend it by
   tagging their lemmas with `@[pmf_simp_attr]`.
 -/
 
