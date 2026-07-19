@@ -92,14 +92,12 @@ def RandMax_IO_Timed : List ℕ → TimeMT ℕ IO ℕ := RandMax
 #eval (RandMax_IO_Timed [3, 1, 4, 1, 5, 9, 2, 6]).run  -- ret 9, time 8
 
 /-!
-## Step 3 — branch + decomposition (pure boilerplate)
+## Step 3 — name the branch (cost proofs only)
 
-Abstract the deterministic work done at a fixed pivot index; the
-algorithm is then literally `randIdx >>= branch`, which is the shape
-all framework lemmas consume. Both proofs are one rewrite with the
-equation lemma Lean generated from the definition (the timed one needs
-a final `rfl`, and drops the `[MonadCost ℕ M]` binder because
-`TimeMT ℕ M` carries its own accumulating cost instance).
+Abstract the deterministic work done at a fixed pivot index. The
+correctness proof does not need this — `dirac_correct` works on the
+raw definition — but the *cost* lemmas below read better when the
+branch has a name to state costs about.
 -/
 
 /-- The work at a fixed pivot index `i`. -/
@@ -109,23 +107,6 @@ private abbrev randMax_branch
   MonadCost.tick 1
   let m ← RandMax (L.eraseIdx i)
   return max L[i] m
-
-private lemma randMax_eq_bind
-    {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
-    (head : α) (tail : List α) :
-    (RandMax (head :: tail) : M α) =
-    randIdx (head :: tail) >>=
-      fun i => randMax_branch M (head :: tail) i := by
-  rw [RandMax.eq_2]
-
-private lemma randMax_timed_eq_bind
-    {M} [Monad M] [RandMonad M]
-    (head : α) (tail : List α) :
-    (RandMax (head :: tail) : TimeMT ℕ M α) =
-    TimeMT.lift (randIdx (head :: tail) : M _) >>=
-      fun i => randMax_branch (TimeMT ℕ M) (head :: tail) i := by
-  rw [RandMax.eq_2 (M := TimeMT ℕ M)]
-  rfl
 
 /-!
 ## Step 4 — the specification and its transport lemma
@@ -158,28 +139,25 @@ private lemma listMax_branch (L : List α) (i : ℕ) (h : i < L.length) :
 ## Step 5 — Dirac correctness
 
 The output never depends on the coin flips, so the distribution is a
-point mass at the spec. The proof is the recipe verbatim: functional
-induction, expose the pivot, collapse, `dirac_finish`.
+point mass at the spec. With the transport lemma in place, the whole
+proof is one tactic: `dirac_correct RandMax` runs functional
+induction, exposes and collapses the pivot choice, and discharges
+each branch with the `@[spec_transport]` lemmas. If it leaves a goal
+open, that goal *is* the transport lemma you still have to state.
 -/
 
-/-- **Correctness.** For any lawful random monad, `RandMax` returns
-exactly `listMax L` — the pivot choices are invisible. -/
+/-- **Correctness.** For any lawful random monad and any lawful cost
+model, `RandMax` returns exactly `listMax L` — the pivot choices and
+the ticks are invisible. (The `LawfulMonadCost` binder is what makes
+this one statement cover the timed reading `TimeMT ℕ PMF` too.) -/
 theorem randMax_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (L : List α) :
     LawfulRandMonad.toPMF
       (RandMax L : M α) =
       PMF.pure (listMax L) := by
-  induction L using RandMax.induct with
-  | case1 =>
-    rw [RandMax.eq_1]
-    simp only [LawfulRandMonad.toPMF_pure]
-    rfl
-  | case2 head tail ih =>
-    rw [randMax_eq_bind]
-    refine toPMF_randIdx_bind_dirac fun i => ?_
-    unfold randMax_branch
-    dirac_finish
+  dirac_correct RandMax
 
 /-- Correctness at `M = PMF` (where `toPMF` is the identity). -/
 theorem randMax_correct_pmf (L : List α) :
@@ -203,12 +181,8 @@ private lemma expected_cost_randMax_branch
     (L : List α) (i : Fin L.length) :
     𝔼_runtime[randMax_branch (TimeMT ℕ M) L i] =
     1 + 𝔼_runtime[RandMax (L.eraseIdx i) | M] := by
-  show expected_cost (inst.toPMF
-    ((TimeMT.tick 1 >>= fun _ =>
-      (RandMax (L.eraseIdx i) : TimeMT ℕ M α) >>= fun m =>
-        pure (max L[i] m)).run)) = _
+  unfold randMax_branch
   cost_step
-  rw [Nat.cast_one]
 
 private lemma expected_cost_randMax_step
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -217,7 +191,7 @@ private lemma expected_cost_randMax_step
     ((head :: tail).length : ENNReal)⁻¹ *
       ∑ i : Fin (head :: tail).length,
         (1 + 𝔼_runtime[RandMax ((head :: tail).eraseIdx i) | M]) := by
-  rw [randMax_timed_eq_bind head tail, expected_cost_uniform_step]
+  rw [RandMax.eq_2, expected_cost_uniform_step]
   congr 1
   exact Finset.sum_congr rfl fun i _ => expected_cost_randMax_branch (head :: tail) i
 

@@ -328,9 +328,7 @@ private lemma randVec_timed_succ {M} [Monad M] [RandMonad M] (n : ℕ) :
 private lemma expected_cost_randBit
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
     𝔼_runtime[(randBit : TimeMT ℕ M R)] = 0 := by
-  show expected_cost (inst.toPMF
-    ((TimeMT.lift (RandMonad.randFin 2 : M (Fin 2)) >>= fun b =>
-      pure (if b = 0 then (0 : R) else 1)).run)) = 0
+  unfold randBit
   cost_step
 
 private lemma expected_cost_randVec
@@ -362,7 +360,6 @@ theorem freivalds_cost_exact
     (A B C : Matrix (Fin n) (Fin n) R) :
     𝔼_runtime[freivalds A B C | M] = ((3 * n * n : ℕ) : ENNReal) := by
   rw [freivalds]
-  simp only [MonadCost.tick_timeMT]
   cost_step
   rw [expected_cost_randVec]
   simp

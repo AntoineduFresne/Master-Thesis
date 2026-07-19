@@ -794,11 +794,6 @@ contraction never adds edges, every round costs at most `m` and there
 are at most `n - 2` rounds, giving expected cost at most `(n - 2) m`.
 The bound holds for **arbitrary** graphs — no well-formedness needed. -/
 
-/-- `randFin` in `TimeMT` is a lifted `randFin` of the base monad. -/
-private lemma timeMT_randFin {M} [Monad M] [RandMonad M] (n : ℕ) [NeZero n] :
-    (RandMonad.randFin n : TimeMT ℕ M (Fin n)) =
-      TimeMT.lift (RandMonad.randFin n) := rfl
-
 /-- Expected cost of the contraction loop: at most `fuel * m`. -/
 private lemma expected_cost_contractAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
@@ -816,7 +811,6 @@ private lemma expected_cost_contractAux
     by_cases hm : 0 < g.edges.length
     · rw [contractAux.eq_2, dif_pos hm]
       haveI : NeZero g.edges.length := ⟨hm.ne'⟩
-      simp only [MonadCost.tick_timeMT, timeMT_randFin]
       cost_step
       rw [inst.toPMF_randFin, tsum_fintype]
       have hne : Nonempty (Fin g.edges.length) := ⟨⟨0, hm⟩⟩
@@ -870,42 +864,5 @@ theorem karger_cost_le_real
     (karger_cost_le (M := M) g)
   rw [ENNReal.toReal_mul, ENNReal.toReal_natCast, ENNReal.toReal_natCast] at this
   exact this
-
--- ----------------------------------------
--- Free Proof: Timed Karger erases to untimed Karger
--- ----------------------------------------
-
-/-- Erasing time from the timed contraction loop gives the untimed
-loop: the `MonadCost.tick` in `TimeMT` erases to `pure ()`, matching
-the no-op `MonadCost` instance. -/
-private lemma contractAux_erasure
-    {M} [Monad M] [LawfulMonad M] [RandMonad M] :
-    ∀ (k : ℕ) (g : MultiGraph α),
-      TimeM.ret <$> (contractAux k g : TimeMT ℕ M (MultiGraph α)).run =
-        (contractAux k g : M (MultiGraph α)) := by
-  intro k
-  induction k with
-  | zero =>
-    intro g
-    rw [contractAux.eq_1 (M := TimeMT ℕ M), contractAux.eq_1 (M := M)]
-    simp
-  | succ k ih =>
-    intro g
-    rw [contractAux.eq_2 (M := TimeMT ℕ M), contractAux.eq_2 (M := M)]
-    by_cases hm : 0 < g.edges.length
-    · rw [dif_pos hm, dif_pos hm]
-      haveI : NeZero g.edges.length := ⟨hm.ne'⟩
-      simp only [MonadCost.tick_timeMT, timeMT_randFin, TimeMT_erase_bind,
-        TimeMT_erase_tick, TimeMT_erase_lift, MonadCost.tick_default, pure_bind]
-      exact bind_congr fun i => ih (g.contract i)
-    · rw [dif_neg hm, dif_neg hm]
-      simp
-/-- Timed `Karger` erases to untimed `Karger`. -/
-lemma karger_erasure {M} [Monad M] [LawfulMonad M] [RandMonad M]
-    (g : MultiGraph α) :
-    TimeM.ret <$> (Karger g : TimeMT ℕ M ℕ).run = (Karger g : M ℕ) := by
-  unfold Karger
-  simp only [TimeMT_erase_bind, TimeMT_erase_pure]
-  rw [contractAux_erasure]
 
 end ARA

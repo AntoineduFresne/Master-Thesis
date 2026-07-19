@@ -101,6 +101,64 @@ theorem run_monadLift [Zero T] [Add T] [Monad M] (ma : M α) :
 
 
 
+/-! ## Lawfulness
+
+`TimeMT T M` is a lawful monad whenever `M` is and the cost type is an
+additive monoid (`0` and `+` behave): the writer laws are exactly
+`zero_add`/`add_zero`/`add_assoc` threaded through `M`'s laws. -/
+
+/-- `run`-form of `<*>` with projections (not pattern matches), so the
+lawfulness proofs below can rewrite under binders. -/
+theorem run_seq [Zero T] [Add T] [Monad M]
+    (mf : TimeMT T M (α → β)) (mx : TimeMT T M α) :
+    (mf <*> mx).run =
+      mf.run >>= fun f => mx.run >>= fun x =>
+        pure ⟨f.ret x.ret, f.time + x.time⟩ := rfl
+
+private theorem run_bind' [Add T] [Monad M]
+    (m : TimeMT T M α) (f : α → TimeMT T M β) :
+    (m >>= f).run =
+      m.run >>= fun a => (f a.ret).run >>= fun b =>
+        pure ⟨b.ret, a.time + b.time⟩ := rfl
+
+private theorem run_map' [Functor M] (f : α → β) (m : TimeMT T M α) :
+    (f <$> m).run =
+      (fun a : TimeM T α => (⟨f a.ret, a.time⟩ : TimeM T β)) <$> m.run := rfl
+
+instance [AddMonoid T] [Monad M] [LawfulMonad M] :
+    LawfulMonad (TimeMT T M) :=
+  LawfulMonad.mk'
+    (id_map := fun m => by
+      apply TimeMT.ext
+      simp only [run_map', id_eq, id_map'])
+    (pure_bind := fun a f => by
+      apply TimeMT.ext
+      simp only [run_bind', run_pure, pure_bind, zero_add]
+      exact (bind_congr fun _ => rfl).trans (bind_pure _))
+    (bind_assoc := fun m f g => by
+      apply TimeMT.ext
+      simp only [run_bind', bind_assoc, pure_bind, add_assoc])
+    (bind_pure_comp := fun f m => by
+      apply TimeMT.ext
+      simp only [run_bind', run_map', run_pure, map_eq_pure_bind,
+        pure_bind, add_zero])
+    (bind_map := fun f m => by
+      apply TimeMT.ext
+      simp only [run_bind', run_seq, run_map', map_eq_pure_bind,
+        bind_assoc, pure_bind])
+    (seqLeft_eq := fun x y => by
+      apply TimeMT.ext
+      show (Seq.seq (Function.const _ <$> x) fun _ => y).run = _
+      simp only [run_seq, run_map', run_bind', run_pure,
+        map_eq_pure_bind, bind_assoc, pure_bind, add_zero,
+        Function.const_apply])
+    (seqRight_eq := fun x y => by
+      apply TimeMT.ext
+      show (Seq.seq (Function.const _ id <$> x) fun _ => y).run = _
+      simp only [run_seq, run_map', run_bind',
+        map_eq_pure_bind, bind_assoc, pure_bind,
+        Function.const_apply, id_eq])
+
 end TimeMT
 
 end Cslib.Algorithms.Lean

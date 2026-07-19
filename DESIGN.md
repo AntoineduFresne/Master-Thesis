@@ -62,7 +62,7 @@ differently-structured algorithms by proving their output or cost
 distributions equal, and reuse all of Mathlib's `tsum`/`ENNReal`
 machinery in the proofs.
 
-## One definition, four readings
+## One definition, multiple readings (here four)
 
 An algorithm is written once, polymorphic over
 `{M} [Monad M] [RandMonad M] [MonadCost ℕ M]`:
@@ -104,6 +104,16 @@ the tail-bound tier (`TailBounds.lean`): Markov's inequality upgrades
 any expected-cost theorem to `ℙ_runtime[m > k] ≤ 𝔼_runtime[m]/(k+1)`
 for free — since costs are `ℕ`-valued, the strict form divides by
 `k + 1` and needs no `k ≠ 0` hypothesis.
+
+## Module dependency structure
+
+```
+cslib.TimeM ← TimeMT ← MonadCost ─┐
+Mathlib.PMF ← SimpAttr ← Tactics ← LawfulRandMonad ← ExpectedCost ← TailBounds
+                                                   ← Correctness
+Helpers/*     ← Mathlib only (pure mathematics, no Infrastructure)
+Algorithms/*  ← Infrastructure + Helpers + fine-grained Mathlib extras
+```
 
 ## Known limitations
 

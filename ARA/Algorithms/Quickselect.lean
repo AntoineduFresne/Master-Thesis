@@ -64,7 +64,7 @@ def Quickselect
     List α → ℕ → M α
   | [], _ => return default
   | L@(_ :: _), k => do
-      let idx ← randIdx L (by grind)
+      let idx ← randIdx L
       let pivot := L[idx]
       let rest := L.eraseIdx idx
       let lt := rest.filter (· < pivot)
@@ -142,20 +142,9 @@ private lemma quickselect_eq_bind
     {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     (head : α) (tail : List α) (k : ℕ) :
     (Quickselect (head :: tail) k : M α) =
-    randIdx (head :: tail) (by grind) >>=
+    randIdx (head :: tail) >>=
       fun idx => qsel_branch M (head :: tail) k idx := by
   rw [Quickselect.eq_2]
-
-/-- Timed decomposition: in `TimeMT ℕ M`, `Quickselect` decomposes as
-`TimeMT.lift (randIdx ...) >>= qsel_branch`. -/
-private lemma quickselect_timed_eq_bind
-    {M} [Monad M] [RandMonad M]
-    (head : α) (tail : List α) (k : ℕ) :
-    (Quickselect (head :: tail) k : TimeMT ℕ M α) =
-    TimeMT.lift (randIdx (head :: tail) : M _) >>=
-      fun idx => qsel_branch (TimeMT ℕ M) (head :: tail) k idx := by
-  rw [Quickselect.eq_2 (M := TimeMT ℕ M)]
-  rfl
 
 /-!
 ### Order-statistic case lemmas
@@ -214,10 +203,8 @@ private lemma orderStat_gt_branch (L : List α) (i : Fin L.length) {k : ℕ}
 /-!
 ### Generic correctness theorem
 
-For the correctness proof, we work with the no-op `MonadCost`
-instance (`instMonadCostDefault`), whose `tick` is definitionally
-`pure ()` (`MonadCost.tick_default`) — so cost tracking is invisible
-to the output distribution.
+Stated over any lawful cost model (`LawfulMonadCost`), so the one
+theorem covers the cost-free *and* the timed readings.
 -/
 
 /-- For any `LawfulRandMonad`, `Quickselect L k`
@@ -227,6 +214,7 @@ independently of the random pivot choices.
 -/
 theorem quickselect_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (L : List α) (k : ℕ) :
     LawfulRandMonad.toPMF
       (Quickselect L k : M α) =
@@ -261,45 +249,13 @@ theorem quickselect_correct_pmf (L : List α) (k : ℕ) :
     (Quickselect L k : PMF α) = PMF.pure (orderStat L k) :=
   quickselect_correct (M := PMF) L k
 
--- ----------------------------------------
--- Free Proof: Timed Quickselect_PMF_Timed
--- ----------------------------------------
-
-/-! ### TimeMT erasure for the unified Quickselect -/
-
-/-- Erasing time from the timed Quickselect gives the untimed
-Quickselect: the `MonadCost.tick` in `TimeMT` erases to `pure ()`,
-matching the no-op `MonadCost` instance.
--/
-lemma quickselect_erasure
-    {M} [Monad M] [LawfulMonad M] [RandMonad M]
-    (L : List α) (k : ℕ) :
-    TimeM.ret <$> (Quickselect L k : TimeMT ℕ M α).run =
-      (Quickselect L k : M α) := by
-  induction L, k using Quickselect.induct
-  · -- Base case
-    rw [Quickselect.eq_1 (M := TimeMT ℕ M), Quickselect.eq_1 (M := M)]
-    simp
-  · -- Inductive case
-    next head tail k ih1 ih2 =>
-    rw [Quickselect.eq_2 (M := TimeMT ℕ M), Quickselect.eq_2 (M := M)]
-    simp only [TimeMT_erase_bind, TimeMT_randIdx_run, TimeMT_erase_lift,
-      MonadCost.tick_timeMT, TimeMT_erase_tick, MonadCost.tick_default,
-      pure_bind]
-    -- The pivot choice is shared; compare the branches pointwise.
-    refine bind_congr fun idx => ?_
-    split_ifs with h1 h2
-    · exact ih1 idx
-    · simp
-    · exact ih2 idx
-
-/-- Timed PMF correctness for free. -/
-lemma quickselect_correct_timed_pmf (L : List ℕ) (k : ℕ) :
-    TimeM.ret <$> (Quickselect_PMF_Timed L k).run =
-      pure (orderStat L k) := by
-  unfold Quickselect_PMF_Timed
-  rw [quickselect_erasure]
-  exact quickselect_correct_pmf L k
+/-- Timed PMF correctness for free: `TimeMT ℕ PMF` is itself a lawful
+random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
+instantiates directly — erasing the clock *is* its `toPMF`. -/
+theorem quickselect_correct_timed_pmf (L : List α) (k : ℕ) :
+    LawfulRandMonad.toPMF (Quickselect L k : TimeMT ℕ PMF α) =
+      PMF.pure (orderStat L k) :=
+  quickselect_correct (M := TimeMT ℕ PMF) L k
 
 -- ----------------------------------------
 -- Generic Complexity Proof
@@ -340,16 +296,8 @@ private lemma expected_cost_qsel_branch
       else
         𝔼_runtime[Quickselect ((L.eraseIdx i).filter (· ≥ L[i]))
           (k - ((L.eraseIdx i).filter (· < L[i])).length - 1) | M]) := by
-  show expected_cost (inst.toPMF
-    ((TimeMT.tick (L.eraseIdx i).length >>= fun _ =>
-      if k < ((L.eraseIdx i).filter (· < L[i])).length then
-        (Quickselect ((L.eraseIdx i).filter (· < L[i])) k : TimeMT ℕ M α)
-      else if k = ((L.eraseIdx i).filter (· < L[i])).length then
-        pure L[i]
-      else
-        Quickselect ((L.eraseIdx i).filter (· ≥ L[i]))
-          (k - ((L.eraseIdx i).filter (· < L[i])).length - 1)).run)) = _
   -- Peel the tick with the bridge lemmas, then the `pure` branch is free.
+  unfold qsel_branch
   cost_step
   congr 1
   split_ifs
@@ -373,7 +321,7 @@ private lemma expected_cost_quickselect_step
           else
             𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
               (k - (pivotLT (head :: tail) i).length - 1) | M])) := by
-  rw [quickselect_timed_eq_bind head tail k, expected_cost_uniform_step]
+  rw [quickselect_eq_bind head tail k, expected_cost_uniform_step]
   congr 1
   exact Finset.sum_congr rfl fun i _ => expected_cost_qsel_branch (head :: tail) k i
 

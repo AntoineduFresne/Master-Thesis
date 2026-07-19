@@ -58,6 +58,25 @@ monad. -/
     (RandMonad.randFin n : TimeMT ℕ M (Fin n)).run =
     (TimeMT.lift (RandMonad.randFin n : M (Fin n))).run := rfl
 
+/-- Term-level form of `TimeMT_randIdx_run`: lets `cost_step` expose
+the `TimeMT.lift` directly on the goal a user actually has, with no
+`show` desugaring. -/
+@[expected_cost_simp] lemma randIdx_timeMT
+    {M} [Monad M] [RandMonad M] {α : Type*}
+    (L : List α) (h : 0 < L.length) :
+    (randIdx L h : TimeMT ℕ M (Fin L.length)) =
+    TimeMT.lift (randIdx L h : M (Fin L.length)) := rfl
+
+/-- Term-level form of `TimeMT_randFin_run`, for `cost_step`. -/
+@[expected_cost_simp] lemma randFin_timeMT
+    {M} [Monad M] [RandMonad M] (n : ℕ) [NeZero n] :
+    (RandMonad.randFin n : TimeMT ℕ M (Fin n)) =
+    TimeMT.lift (RandMonad.randFin n : M (Fin n)) := rfl
+
+-- `cost_step` must see the `TimeMT.tick` behind the abstract
+-- `MonadCost.tick` a user writes.
+attribute [expected_cost_simp] MonadCost.tick_timeMT
+
 /-!
 ## Core definition
 -/
@@ -284,7 +303,7 @@ so the time marginal is untouched. -/
   unfold expected_cost
   exact tsum_congr fun tm => by
     rcases tm with ⟨a, t⟩
-    simp [Function.comp, pmf_pure_eq]
+    simp [Function.comp]
 
 /-- Pure post-processing costs nothing: `E[m >>= (pure ∘ g)] = E[m]`.
 Lets `cost_step` erase the trailing `return (f x)` of a branch. -/
@@ -333,6 +352,56 @@ Erasing time (`TimeM.ret <$> ·`) distributes through
       (TimeMT.lift m : TimeMT ℕ M α).run = m := by
   rw [TimeMT.run_lift, ← Functor.map_map]
   simp_all only [Functor.map_map, id_map']
+
+/-- `TimeMT ℕ M` is itself a lawful random monad: interpret a timed
+computation by erasing the clock (`TimeM.ret <$> ·.run`) and
+interpreting the result in `M`. The erasure lemmas above are exactly
+the three laws. Consequence: every generic correctness theorem
+instantiates at `M := TimeMT ℕ PMF` for free — correctness of the
+timed program is never a separate proof obligation. -/
+noncomputable instance instLawfulRandMonadTimeMT
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
+    LawfulRandMonad (TimeMT ℕ M) where
+  toRandMonad := instRandMonadTimeMT
+  toPMF m := inst.toPMF (TimeM.ret <$> m.run)
+  toPMF_pure a := by rw [TimeMT_erase_pure, inst.toPMF_pure]
+  toPMF_bind m f := by rw [TimeMT_erase_bind, inst.toPMF_bind]
+  toPMF_randFin n := by
+    intro hn
+    rw [randFin_timeMT, TimeMT_erase_lift, inst.toPMF_randFin]
+
+/-- A cost model is **lawful** when ticking is invisible to the output
+distribution. Both canonical instances qualify: the no-op default and
+the accumulating `TimeMT` one. A correctness theorem stated with
+`[MonadCost C M] [LawfulMonadCost C M]` therefore covers every cost
+reading of the algorithm at once — in particular it instantiates at
+`M := TimeMT ℕ PMF` with real ticks, so timed correctness is free. -/
+class LawfulMonadCost (C : Type) (M : Type → Type)
+    [Monad M] [LawfulMonad M] [LawfulRandMonad M] [MonadCost C M] :
+    Prop where
+  /-- `tick` maps to the Dirac mass at `()`. -/
+  toPMF_tick (c : C) :
+    LawfulRandMonad.toPMF (MonadCost.tick c : M Unit) = PMF.pure ()
+
+-- With an abstract lawful tick, the `PMF.pure ()` it maps to is
+-- collapsed at the `PMF` level, so `PMF.pure_bind` joins the set.
+attribute [dirac_simp] LawfulMonadCost.toPMF_tick PMF.pure_bind
+
+/-- The no-op default cost model is lawful. -/
+instance instLawfulMonadCostDefault {C : Type} {M : Type → Type}
+    [m : Monad M] [lm : LawfulMonad M] [lr : LawfulRandMonad M] :
+    @LawfulMonadCost C M m lm lr instMonadCostDefault :=
+  ⟨fun _ => lr.toPMF_pure ()⟩
+
+/-- The accumulating `TimeMT` cost model is lawful: erasing the clock
+kills the tick. -/
+instance instLawfulMonadCostTimeMT {M : Type → Type}
+    [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
+    LawfulMonadCost ℕ (TimeMT ℕ M) :=
+  ⟨fun c => by
+    show inst.toPMF
+      (TimeM.ret <$> (TimeMT.tick c : TimeMT ℕ M Unit).run) = PMF.pure ()
+    rw [TimeMT_erase_tick, inst.toPMF_pure]; rfl⟩
 
 /-!
 ## Notation and wrappers for expected runtime
@@ -421,6 +490,7 @@ that `cost_step` produces a clean form.
 
 attribute [expected_cost_simp] mul_zero zero_mul add_zero zero_add
 attribute [expected_cost_simp] tsum_zero
+attribute [expected_cost_simp] Nat.cast_one Nat.cast_zero
 
 /-!
 ## Automation tactics
@@ -454,15 +524,19 @@ This rewrites:
 * `𝔼_runtime[lift m]`        ↦  `0`
 
 When an extra rewrite is needed (e.g. unfolding a recursive call),
-combine with `simp only [expected_cost_simp, my_lemma]` directly. -/
+combine with `simp only [expected_cost_simp, my_lemma]` directly.
+
+The leading `dsimp` clears the `have`/`let` redexes that do-notation
+`let`s desugar to, so `unfold my_branch; cost_step` works on branches
+written with local `let`s. -/
 scoped macro "cost_step" : tactic =>
-  `(tactic| simp only [expected_cost_simp])
+  `(tactic| ((try dsimp only []); simp only [expected_cost_simp]))
 
 /-- `runtime_simp` is the combined normalizer: peels `TimeMT` combinators
 with `expected_cost_simp`, then cleans up arithmetic/`PMF` weights via
 `pmf_simp_attr`. Intended for fully-closed cost computations. -/
 scoped macro "runtime_simp" : tactic =>
-  `(tactic| (simp only [expected_cost_simp, pmf_simp_attr]; try norm_num))
+  `(tactic| ((try dsimp only []); simp only [expected_cost_simp, pmf_simp_attr]; try norm_num))
 
 /-!
 ## Uniform-pivot recipes
@@ -482,13 +556,17 @@ lemma expected_cost_myAlgo_step ... :
 -/
 
 /-- **Uniform-pivot step.** The expected cost of
-`lift (randIdx L) >>= branch` is the uniform average of the branch
-costs: the one-step recurrence `E = (1/n) · Σᵢ E[branch i]`. -/
+`randIdx L >>= branch` is the uniform average of the branch
+costs: the one-step recurrence `E = (1/n) · Σᵢ E[branch i]`.
+
+Stated on the instance form `(randIdx L hL : TimeMT ℕ M _)` — exactly
+the term a goal contains after `rw [myAlgo.eq_def]` — so no `show` or
+re-association lemma is ever needed. -/
 lemma expected_cost_uniform_step
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {α : Type*} {β : Type} {L : List α} (hL : 0 < L.length)
     (f : Fin L.length → TimeMT ℕ M β) :
-    𝔼_runtime[TimeMT.lift (randIdx L hL : M _) >>= f] =
+    𝔼_runtime[(randIdx L hL : TimeMT ℕ M _) >>= f] =
     (L.length : ENNReal)⁻¹ * ∑ i : Fin L.length, 𝔼_runtime[f i] := by
   have : Nonempty (Fin L.length) := ⟨⟨0, hL⟩⟩
   show expected_cost (inst.toPMF
@@ -500,11 +578,12 @@ lemma expected_cost_uniform_step
 
 /-- `randFin` variant of `expected_cost_uniform_step`, for algorithms
 that draw from `Fin n` directly (e.g. reservoir sampling's
-`1/(seen+1)` coin). -/
+`1/(seen+1)` coin). Stated on the instance form, like
+`expected_cost_uniform_step`. -/
 lemma expected_cost_uniform_step_fin
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {β : Type} (n : ℕ) [NeZero n] (f : Fin n → TimeMT ℕ M β) :
-    𝔼_runtime[TimeMT.lift (RandMonad.randFin n : M _) >>= f] =
+    𝔼_runtime[(RandMonad.randFin n : TimeMT ℕ M _) >>= f] =
     (n : ENNReal)⁻¹ * ∑ i : Fin n, 𝔼_runtime[f i] := by
   have : Nonempty (Fin n) := ⟨⟨0, Nat.pos_of_ne_zero (NeZero.ne n)⟩⟩
   show expected_cost (inst.toPMF

@@ -6,7 +6,6 @@ Authors: Antoine du Fresne von Hohenesche
 import ARA.Infrastructure.ExpectedCost
 import ARA.Infrastructure.Correctness
 
-#check propext
 /-!
 # Reservoir sampling (Algorithm R, k = 1)
 
@@ -209,22 +208,14 @@ private lemma expected_cost_reservoirAux
     simp
   | cons x xs ih =>
     haveI : NeZero (seen + 1) := ⟨seen.succ_ne_zero⟩
-    rw [reservoirAux.eq_2]
-    show 𝔼_runtime[TimeMT.lift (RandMonad.randFin (seen + 1) : M _) >>=
-      fun i => (MonadCost.tick 1 : TimeMT ℕ M Unit) >>= fun _ =>
-        reservoirAux (seen + 1) (if i.val = 0 then x else cur) xs] = _
-    rw [expected_cost_uniform_step_fin]
+    rw [reservoirAux.eq_2, expected_cost_uniform_step_fin]
     have hbranch : ∀ i : Fin (seen + 1),
         𝔼_runtime[(MonadCost.tick 1 : TimeMT ℕ M Unit) >>= fun _ =>
           reservoirAux (seen + 1) (if i.val = 0 then x else cur) xs] =
         1 + (xs.length : ENNReal) := by
       intro i
-      show expected_cost (inst.toPMF
-        ((TimeMT.tick 1 >>= fun _ =>
-          (reservoirAux (seen + 1) (if i.val = 0 then x else cur) xs :
-            TimeMT ℕ M α)).run)) = _
       cost_step
-      rw [ih, Nat.cast_one]
+      rw [ih]
     rw [Finset.sum_congr rfl fun i _ => hbranch i, uniform_avg_const (by simp)]
     simp only [List.length_cons]
     push_cast

@@ -142,6 +142,22 @@ scoped macro "dirac_finish" : tactic =>
   `(tactic| (dirac_step <;> (try split_ifs) <;>
       simp_all [spec_transport, dirac_simp]))
 
+/-- `dirac_correct f` attempts a Dirac-correctness goal
+`toPMF (f … : M _) = PMF.pure (spec …)` in one shot: functional
+induction on `f` (`fun_induction` unfolds each equation and quantifies
+the IHs over the pivot), collapse of the uniform pivot choice
+(`toPMF_randIdx_bind_dirac`), then `dirac_finish` per branch, with a
+`rfl` fallback for base cases whose spec reduces definitionally.
+
+Any goal it leaves open is exactly the missing mathematics — state
+the `@[spec_transport]` lemma it needs and it will close. -/
+scoped macro "dirac_correct" f:ident : tactic =>
+  `(tactic| (fun_induction $f <;>
+      first
+        | (refine toPMF_randIdx_bind_dirac fun i => ?_) <;> dirac_finish
+        | dirac_finish
+        | (dirac_step; rfl)))
+
 -- Smoke test: a branch with no case split collapses outright.
 example {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (a : ℕ) :

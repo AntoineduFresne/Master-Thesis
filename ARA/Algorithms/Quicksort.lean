@@ -78,7 +78,7 @@ def Quicksort
     List α → M (List α)
   | [] => return []
   | L@(_::_) => do
-      let idx ← randIdx L (by grind)
+      let idx ← randIdx L
       let pivot := L[idx]
       let rest := L.eraseIdx idx
       let L1 := rest.filter (· < pivot)
@@ -152,97 +152,40 @@ private lemma quicksort_eq_bind
     {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     (head : α) (tail : List α) :
     (Quicksort (head :: tail) : M (List α)) =
-    randIdx (head :: tail) (by grind) >>=
+    randIdx (head :: tail) >>=
       fun idx => qs_branch M (head :: tail) idx := by
   rw [Quicksort.eq_2 head tail]
-
-/-- Timed decomposition: in `TimeMT ℕ M`, `Quicksort` decomposes
-as `TimeMT.lift (randIdx ...) >>= qs_branch`. This exposes the
-`TimeMT.lift` for bridge lemma application. -/
-private lemma quicksort_timed_eq_bind
-    {M} [Monad M] [RandMonad M]
-    (head : α) (tail : List α) :
-    (Quicksort (head :: tail) : TimeMT ℕ M (List α)) =
-    TimeMT.lift (randIdx (head :: tail) : M _) >>=
-      fun idx => qs_branch (TimeMT ℕ M) (head :: tail) idx := by
-  rw [Quicksort.eq_2 (M := TimeMT ℕ M) head tail]
-  rfl
 
 /-!
 ### Generic correctness theorem
 
-For the correctness proof, we work with the no-op `MonadCost`
-instance. The tick becomes `pure ()` and is invisible.
+The proof is the Tutorial's recipe verbatim: functional induction,
+expose the pivot, collapse, discharge the branch — the transport
+lemma is `mergeSort_partition`.
 -/
 
-/-- Existential form of correctness, established by functional
-induction; the Dirac form `quicksort_correct` below identifies the
-output with `L.mergeSort (· ≤ ·)`. -/
-private lemma quicksort_correct_aux
-    {M} [Monad M] [LawfulMonad M]
-    [LawfulRandMonad M] :
-    ∀ L : List α, ∃ Output : List α,
-      LawfulRandMonad.toPMF
-        (Quicksort L : M (List α)) =
-        pure Output ∧
-      Output.SortedLE ∧ Output.Perm L := by
-  apply Quicksort.induct
-  -- Base case
-  · exact ⟨[],
-      by simp [Quicksort,
-        LawfulRandMonad.toPMF_pure],
-      by simp [List.sortedLE_iff_pairwise],
-      by simp⟩
-  -- Inductive case
-  · intro head tail ihL1 ihL2
-    let L := head :: tail
-    -- For each pivot, build a correct output from IH
-    have h_step :
-        ∀ i : Fin L.length, ∃ Out,
-          LawfulRandMonad.toPMF
-            (@qs_branch _ _ M _ _ instMonadCostDefault L i) =
-            pure Out ∧
-          Out.SortedLE ∧ Out.Perm L := by
-      intro i
-      obtain ⟨O1, h1, s1, p1⟩ := ihL1 i
-      obtain ⟨O2, h2, s2, p2⟩ := ihL2 i
-      use O1 ++ [L[i]] ++ O2
-      split_ands
-      · unfold qs_branch; unfold_do
-        simp only [LawfulRandMonad.toPMF_bind,
-          LawfulRandMonad.toPMF_pure,
-          MonadCost.tick_default]
-        rw [h1, h2]
-        simp_all [length_cons,
-          Fin.getElem_fin, ge_iff_le, L]
-        rfl
-      · apply sorted_concat_pivot s1 s2
-          <;> grind
-      · exact (Perm.append
-          (Perm.append p1 (.refl _)) p2).trans
-          (perm_filter_partition L i)
-    -- All pivots yield the same output (uniqueness of the sorted
-    -- permutation), so the uniform pivot choice collapses
-    -- (`toPMF_randIdx_bind_dirac`).
-    obtain ⟨Output, h0, hS, hP⟩ := h_step ⟨0, by grind⟩
-    refine ⟨Output, ?_, hS, hP⟩
-    show LawfulRandMonad.toPMF
-      (Quicksort (head :: tail) : M (List α)) = pure Output
-    rw [quicksort_eq_bind, pmf_pure_eq]
-    refine toPMF_randIdx_bind_dirac fun i => ?_
-    obtain ⟨Oi, hi, si, pi⟩ := h_step i
-    rwa [eq_of_sortedLE_perm si hS (pi.trans hP.symm)] at hi
-
-/-- **Correctness.** For any `LawfulRandMonad`, `Quicksort` returns
-exactly the sorted list: its output distribution is the Dirac mass at
-`L.mergeSort (· ≤ ·)`, independently of the random pivot choices. -/
+/-- **Correctness.** For any lawful random monad and any lawful cost
+model, `Quicksort` returns exactly the sorted list: its output
+distribution is the Dirac mass at `L.mergeSort (· ≤ ·)`,
+independently of the random pivot choices and of the ticks. -/
 theorem quicksort_correct
-    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (L : List α) :
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
     LawfulRandMonad.toPMF (Quicksort L : M (List α)) =
       PMF.pure (L.mergeSort (· ≤ ·)) := by
-  obtain ⟨Out, hEq, hS, hP⟩ := quicksort_correct_aux (M := M) L
-  rwa [eq_of_sortedLE_perm hS sortedLE_mergeSort
-    (hP.trans (mergeSort_perm L _).symm)] at hEq
+  induction L using Quicksort.induct with
+  | case1 =>
+    rw [Quicksort.eq_1]
+    simp only [LawfulRandMonad.toPMF_pure, List.mergeSort_nil]
+    rfl
+  | case2 head tail ih1 ih2 =>
+    rw [quicksort_eq_bind]
+    refine toPMF_randIdx_bind_dirac fun i => ?_
+    unfold qs_branch
+    dirac_step
+    rw [ih1 i, ih2 i]
+    dirac_step
+    rw [← mergeSort_partition]
 
 /-- The output is a sorted permutation of the input (existential
 specification form of `quicksort_correct`). -/
@@ -263,40 +206,13 @@ theorem quicksort_correct_pmf (L : List α) :
     (Quicksort L : PMF (List α)) = PMF.pure (L.mergeSort (· ≤ ·)) :=
   quicksort_correct (M := PMF) L
 
--- ----------------------------------------
--- Free Proof: Timed Quicksort_PMF_Timed
--- ----------------------------------------
-
-/-! ### TimeMT erasure for the unified Quicksort -/
-
-/-- Erasing time from the timed Quicksort gives the untimed Quicksort.
-This follows from the unified definition: the `MonadCost.tick` in
-`TimeMT` erases to `pure ()`, matching the no-op `MonadCost` instance.
--/
-lemma quicksort_erasure
-    {M} [Monad M] [LawfulMonad M] [RandMonad M]
-    (L : List α) :
-    TimeM.ret <$>
-      (Quicksort L : TimeMT ℕ M (List α)).run =
-      (Quicksort L : M (List α)) := by
-  induction L using Quicksort.induct
-  · -- Base case
-    rw [Quicksort.eq_1 (M := TimeMT ℕ M), Quicksort.eq_1 (M := M)]
-    simp
-  · -- Inductive case
-    next head tail ih1 ih2 =>
-    rw [Quicksort.eq_2 (M := TimeMT ℕ M) head tail,
-        Quicksort.eq_2 (M := M) head tail]
-    simp only [TimeMT_erase_bind, TimeMT_randIdx_run, TimeMT_erase_lift,
-      MonadCost.tick_timeMT, TimeMT_erase_tick, MonadCost.tick_default, pure_bind]
-    simp only [ih1, ih2, TimeMT_erase_pure]
-
-/-- Timed PMF correctness for free (via erasure). -/
+/-- Timed PMF correctness for free: `TimeMT ℕ PMF` is itself a lawful
+random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
+instantiates directly — erasing the clock *is* its `toPMF`. -/
 theorem quicksort_correct_timed_pmf (L : List α) :
-    TimeM.ret <$> (Quicksort L : TimeMT ℕ PMF (List α)).run =
-      PMF.pure (L.mergeSort (· ≤ ·)) := by
-  rw [quicksort_erasure]
-  exact quicksort_correct_pmf L
+    LawfulRandMonad.toPMF (Quicksort L : TimeMT ℕ PMF (List α)) =
+      PMF.pure (L.mergeSort (· ≤ ·)) :=
+  quicksort_correct (M := TimeMT ℕ PMF) L
 
 -- ----------------------------------------
 -- Generic Complexity Proof
@@ -321,44 +237,35 @@ is needed; the exact formula descends to `ℝ` via `toReal`, with
 finiteness supplied by the `C(n,2)` bound.
 -/
 
-/-- The expected cost of `qs_branch` in `TimeMT` is
-`rest.length + E[QS L1] + E[QS L2]`. -/
+/-- The expected cost of `qs_branch` is
+`|rest| + E[QS (pivotLT L i)] + E[QS (pivotGE L i)]`. -/
 private lemma expected_cost_qs_branch
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (i : Fin L.length) :
-    let pivot := L[i]
-    let rest := L.eraseIdx i
-    let L1 := rest.filter (· < pivot)
-    let L2 := rest.filter (· ≥ pivot)
     𝔼_runtime[qs_branch (TimeMT ℕ M) L i] =
-    (rest.length : ENNReal) +
-      𝔼_runtime[Quicksort L1 | M] +
-      𝔼_runtime[Quicksort L2 | M] := by
-  intro pivot rest L1 L2
+    ((L.eraseIdx i).length : ENNReal) +
+      𝔼_runtime[Quicksort (pivotLT L i) | M] +
+      𝔼_runtime[Quicksort (pivotGE L i) | M] := by
   -- Peel `tick` and the trailing `pure` automatically.
-  show expected_cost (inst.toPMF
-    (TimeMT.tick rest.length >>=
-      fun _ => (Quicksort L1 : TimeMT ℕ M _) >>=
-        fun S1 => (Quicksort L2 : TimeMT ℕ M _) >>=
-          fun S2 => pure
-            (S1 ++ [pivot] ++ S2)).run) = _
+  unfold qs_branch
   cost_step
   -- Decompose the outer recursive bind, then collapse the inner
-  -- continuation `(QS L2 >>= pure)` to `E[QS L2]`.
+  -- continuation `(QS (pivotGE L i) >>= pure)` to `E[QS (pivotGE L i)]`.
   rw [expected_cost_toPMF_bind]
   have h_inner : ∀ tm : TimeM ℕ (List α),
       expected_cost
         (inst.toPMF
-          ((Quicksort L2 : TimeMT ℕ M _) >>= fun S2 =>
-            (pure (tm.ret ++ [pivot] ++ S2) :
+          ((Quicksort (pivotGE L i) : TimeMT ℕ M _) >>= fun S2 =>
+            (pure (tm.ret ++ [L[i]] ++ S2) :
               TimeMT ℕ M (List α))).run) =
       expected_cost
-        (inst.toPMF (Quicksort L2 : TimeMT ℕ M _).run) := by
+        (inst.toPMF (Quicksort (pivotGE L i) : TimeMT ℕ M _).run) := by
     intro tm
     rw [expected_cost_toPMF_bind]
     cost_step
-  simp only [h_inner, ENNReal.tsum_mul_right, PMF.tsum_coe, one_mul]
+  simp only [pivotLT, pivotGE, h_inner, ENNReal.tsum_mul_right,
+    PMF.tsum_coe, one_mul]
   ring
 
 /-- The empty list costs nothing. -/
@@ -380,7 +287,7 @@ lemma expected_cost_quicksort_step
         ((((head :: tail).eraseIdx i).length : ENNReal) +
           𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
           𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]) := by
-  rw [quicksort_timed_eq_bind head tail, expected_cost_uniform_step]
+  rw [quicksort_eq_bind head tail, expected_cost_uniform_step]
   congr 1
   exact Finset.sum_congr rfl fun i _ => expected_cost_qs_branch (head :: tail) i
 
