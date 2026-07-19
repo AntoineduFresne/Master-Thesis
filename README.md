@@ -43,6 +43,8 @@ ARA/
 │   │                          `expVal` (expectations of output functionals)
 │   ├── TailBounds.lean        ℙ_runtime[e > k | M], Markov's inequality:
 │   │                          any expected-cost theorem ⇒ tail bound for free
+│   ├── Amplify.lean           `amplify best k m`: k independent runs, keep the
+│   │                          best — P(success) ≥ 1 − (1−p)^k, cost linear in k
 │   ├── RandVec.lean           randBit/randVec 0/1 entropy source and the
 │   │                          counting principle #accepting / 2^n
 │   ├── Correctness.lean       Dirac / distributional / support correctness recipes,
@@ -57,6 +59,7 @@ ARA/
     ├── Tutorial.lean          ← start here
     ├── Quicksort.lean         Quickselect.lean   Karger.lean
     ├── ReservoirSampling.lean Freivalds.lean     Treap.lean
+    ├── FisherYates.lean       uniform shuffle (sampler for Treap)
 ```
 
 ## Verified algorithms
@@ -68,8 +71,9 @@ analysis; together they are the proof that the framework is usable.
 |---|---|---|
 | **Quicksort** | Dirac: always the sorted permutation | exact `2(n+1)H(n) − 4n`; `C(n,2)` for duplicates |
 | **Quickselect** | Dirac: always the k-th order statistic | exact Knuth 1971 bivariate-harmonic formula; `≤ 4n`; `C(n,2)` |
-| **Karger** | one-sided error (support) | success probability `≥ 2/(n(n−1))`; cost `≤ (n−2)·m` |
+| **Karger** | one-sided error (support) | success probability `≥ 2/(n(n−1))`; amplified: `k` runs fail with prob. `≤ (1−2/(n(n−1)))^k`; cost `≤ (n−2)·m` |
 | **Reservoir sampling** | exact output distribution: `P[a] = count a / n` | exactly `n − 1` coins, single pass |
+| **Fisher–Yates** | exact output distribution: uniform over all `n!` permutations | free — a sampler, no ticks |
 | **Freivalds** | complete + sound (`≤ 1/2`, any `CommRing`) | exactly `3n²` vs `n³` |
 | **Treap** | every output a valid BST | **`E[height] ≤ 3·log₂(n+3) + 4`** via `E[2^H] ≤ C(n+3,3)` |
 

@@ -109,18 +109,19 @@ for free — since costs are `ℕ`-valued, the strict form divides by
 
 ```
 cslib.TimeM ← TimeMT ← MonadCost ─┐
-Mathlib.PMF ← SimpAttr ← Tactics ← LawfulRandMonad ← ExpectedCost ← TailBounds
+Mathlib.PMF ← SimpAttr ← Tactics ← LawfulRandMonad ← ExpectedCost ← TailBounds ← Amplify
                                                    ←            ← RandVec
                                                    ← Correctness
 Helpers/*     ← Mathlib only (pure mathematics, no Infrastructure)
 Algorithms/*  ← Infrastructure + Helpers + fine-grained Mathlib extras
+                (Treap consumes the Fisher–Yates shuffle)
 ```
 
 ## Known limitations
 
 * `PMF` forces total mass 1: algorithms must terminate with
-  probability 1, so genuine retry-until-success loops need fuel (as in
-  the treap's shuffle) or, one day, sub-probability distributions.
+  probability 1, so genuine retry-until-success loops need fuel or,
+  one day, sub-probability distributions.
 * Continuous distributions would mean `MeasureTheory.Measure`,
   sigma-algebras and measurability side conditions everywhere — far
   future.

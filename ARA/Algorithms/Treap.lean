@@ -6,6 +6,7 @@ Authors: Antoine du Fresne von Hohenesche
 import ARA.Infrastructure.ExpectedCost
 import ARA.Infrastructure.Correctness
 import ARA.Helpers.Partition
+import ARA.Algorithms.FisherYates
 import Mathlib.Data.Nat.Log
 
 /-!
@@ -202,22 +203,11 @@ end Tree
 
 /-! ## Algorithm -/
 
-/-- Uniformly random shuffle of a list, by repeatedly removing a
-uniformly random remaining element (`fuel` bounds the removals). -/
-def shuffle {M} [Monad M] [RandMonad M] : ℕ → List ℕ → M (List ℕ)
-  | 0, _ => return []
-  | fuel + 1, L =>
-      if h : 0 < L.length then do
-        let i ← randIdx L h
-        let rest ← shuffle fuel (L.eraseIdx i.1)
-        return L[i] :: rest
-      else
-        return []
-
 /-- Build a randomized BST by inserting the keys in a uniformly random
-order. -/
+order (`shuffle` is the Fisher–Yates sampler from
+`ARA.Algorithms.FisherYates`). -/
 def randomBST {M} [Monad M] [RandMonad M] (keys : List ℕ) : M Tree := do
-  let perm ← shuffle keys.length keys
+  let perm ← shuffle keys
   return perm.foldl Tree.insert Tree.leaf
 
 -- ----------------------------------------
@@ -248,42 +238,6 @@ private lemma pairwise_lt_nodup {l : List ℕ} (h : l.Pairwise (· < ·)) :
     l.Nodup :=
   h.imp (fun hab => ne_of_lt hab)
 
-/-- The shuffle outputs only permutations of its input. -/
-lemma shuffle_perm {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
-    ∀ (fuel : ℕ) (L : List ℕ), L.length ≤ fuel →
-      ∀ t ∈ 𝒟[shuffle fuel L | M].support, t.Perm L := by
-  intro fuel
-  induction fuel with
-  | zero =>
-    intro L hL t ht
-    rw [show L = [] from List.eq_nil_of_length_eq_zero (by omega)]
-    rw [show L = [] from List.eq_nil_of_length_eq_zero (by omega)] at ht
-    rw [shuffle, inst.toPMF_pure, pmf_pure_eq, PMF.support_pure,
-      Set.mem_singleton_iff] at ht
-    rw [ht]
-  | succ fuel ih =>
-    intro L hL t ht
-    rw [shuffle] at ht
-    by_cases h : 0 < L.length
-    · rw [dif_pos h, inst.toPMF_bind, inst.toPMF_randIdx] at ht
-      rw [pmf_bind_eq, PMF.mem_support_bind_iff] at ht
-      obtain ⟨i, _, ht'⟩ := ht
-      rw [inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht'
-      obtain ⟨rest, hrest, ht''⟩ := ht'
-      rw [inst.toPMF_pure, pmf_pure_eq, PMF.support_pure,
-        Set.mem_singleton_iff] at ht''
-      -- `t = L[i] :: rest`, `rest ~ L.eraseIdx i`.
-      have hlen : (L.eraseIdx i.1).length ≤ fuel := by
-        have hi : (i : ℕ) < L.length := i.isLt
-        rw [List.length_eraseIdx]
-        split <;> omega
-      have hp := ih (L.eraseIdx i.1) hlen rest hrest
-      rw [ht'']
-      exact (hp.cons L[i]).trans (perm_getElem_cons_eraseIdx L i).symm
-    · rw [dif_neg h, inst.toPMF_pure, pmf_pure_eq, PMF.support_pure,
-        Set.mem_singleton_iff] at ht
-      rw [ht, show L = [] from List.eq_nil_of_length_eq_zero (by omega)]
-
 /-- **Correctness.** For any `LawfulRandMonad`, every tree the sampler
 can produce from distinct `keys` is a valid BST over them: its in-order
 traversal is sorted and a permutation of `keys`. -/
@@ -296,7 +250,7 @@ theorem randomBST_correct
   obtain ⟨perm, hperm, ht'⟩ := ht
   rw [inst.toPMF_pure, pmf_pure_eq, PMF.support_pure, Set.mem_singleton_iff] at ht'
   -- `t = perm.foldl insert leaf` and `perm ~ keys`.
-  have hp : perm.Perm keys := shuffle_perm keys.length keys le_rfl perm hperm
+  have hp : perm.Perm keys := support_shuffle keys perm hperm
   subst ht'
   have hsorted : (perm.foldl Tree.insert Tree.leaf).inorder.Pairwise (· < ·) :=
     Tree.sorted_inorder_foldl perm Tree.leaf (by simp [Tree.inorder])
@@ -338,7 +292,7 @@ theorem randomBST_height_le
   rw [randomBST, inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht
   obtain ⟨perm, hperm, ht'⟩ := ht
   rw [inst.toPMF_pure, pmf_pure_eq, PMF.support_pure, Set.mem_singleton_iff] at ht'
-  have hp : perm.Perm keys := shuffle_perm keys.length keys le_rfl perm hperm
+  have hp : perm.Perm keys := support_shuffle keys perm hperm
   subst ht'
   calc (perm.foldl Tree.insert Tree.leaf).height
       ≤ (perm.foldl Tree.insert Tree.leaf).size := Tree.height_le_size _

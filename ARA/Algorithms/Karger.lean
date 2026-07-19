@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.ExpectedCost
+import ARA.Infrastructure.Amplify
 import Mathlib.Order.Lattice.Nat
 
 /-!
@@ -867,5 +868,47 @@ theorem karger_cost_le_real
     (karger_cost_le (M := M) g)
   rw [ENNReal.toReal_mul, ENNReal.toReal_natCast, ENNReal.toReal_natCast] at this
   exact this
+
+/-! ## Amplification: repetition finds the minimum cut
+
+A single contraction run succeeds with probability only `Ω(1/n²)`, but
+Karger is one-sided — outputs never undershoot — so the *minimum* over
+independent runs succeeds as soon as any single run does. The generic
+`amplify` combinator turns this into a theorem. -/
+
+/-- **Amplified Karger.** Run the contraction algorithm `k` times and
+keep the smallest cut value found: the result is the exact minimum-cut
+value with probability at least `1 − (1 − 2/(n(n−1)))^k`, so the
+failure probability decays geometrically and `O(n² log n)` repetitions
+find a minimum cut with high probability. -/
+theorem karger_amplified
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
+    (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (k : ℕ) :
+    1 - (1 - 2 / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞)) ^ k ≤
+      𝒟[amplify min k (Karger g) | M] g.minCutValue := by
+  have h := amplify_success (best := min) (m := (Karger g : M ℕ))
+    (S := {g.minCutValue}) (V := Set.Ici g.minCutValue)
+    (p := 2 / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞))
+    (fun c hc => karger_correct g hwf h2 c hc)
+    (fun a ha b hb => Set.mem_Ici.mpr (le_min (Set.mem_Ici.mp ha) (Set.mem_Ici.mp hb)))
+    (fun a ha b hb hor => by
+      rw [Set.mem_Ici] at ha hb
+      rw [Set.mem_singleton_iff]
+      rcases hor with h1 | h1 <;> rw [Set.mem_singleton_iff] at h1 <;> subst h1
+      · exact min_eq_left hb
+      · exact min_eq_right ha)
+    (by rw [prob_singleton]; exact karger_success_prob g hwf h2) k
+  rwa [prob_singleton] at h
+
+/-- Amplified cost: `k + 1` runs cost at most `k + 1` times the
+single-run bound `(n − 2) m`. -/
+theorem karger_amplified_cost_le
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (g : MultiGraph α) (k : ℕ) :
+    𝔼_runtime[amplify min (k + 1) (Karger g) | M] ≤
+      (k + 1 : ℝ≥0∞) * (((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞)) := by
+  rw [expected_cost_amplify]
+  exact mul_le_mul' le_rfl (karger_cost_le g)
 
 end ARA
