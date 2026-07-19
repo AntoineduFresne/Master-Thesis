@@ -68,20 +68,19 @@ class LawfulRandMonad
   toPMF_bind : ∀ {α β} (x : M α) (f : α → M β),
     toPMF (x >>= f) =
       (toPMF x) >>= (fun a => toPMF (f a))
-  /-- `randFin n` maps to the uniform distribution on `Fin n`. -/
+  /-- `randFin n` maps to the uniform distribution on `Fin n`
+  (`Nonempty (Fin n)` is synthesized from `[NeZero n]`). -/
   toPMF_randFin :
     ∀ (n : ℕ) [NeZero n],
-      toPMF (randFin n) =
-        (have : Nonempty (Fin n) := ⟨⟨0, Nat.pos_of_ne_zero (NeZero.ne n)⟩⟩
-         PMF.uniformOfFintype (Fin n))
+      toPMF (randFin n) = PMF.uniformOfFintype (Fin n)
 
 /-- Derived: `toPMF` maps `randIdx` to the uniform distribution. -/
 lemma LawfulRandMonad.toPMF_randIdx
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {α : Type*} (L : List α) (hne : 0 < L.length) :
     inst.toPMF (randIdx L hne) =
-      (have : Nonempty (Fin L.length) := ⟨⟨0, hne⟩⟩
-       PMF.uniformOfFintype (Fin L.length)) := by
+      haveI : NeZero L.length := ⟨hne.ne'⟩
+      PMF.uniformOfFintype (Fin L.length) := by
   unfold randIdx
   have : NeZero L.length := ⟨hne.ne'⟩
   exact inst.toPMF_randFin L.length
@@ -94,6 +93,27 @@ lemma LawfulRandMonad.toPMF_map
       f <$> LawfulRandMonad.toPMF x := by
   rw [map_eq_bind_pure_comp, LawfulRandMonad.toPMF_bind]
   simp [LawfulRandMonad.toPMF_pure, map_eq_bind_pure_comp]
+
+/-!
+### Notation
+
+`𝒟[e | M]` is the correctness twin of `𝔼_runtime[e | M]`: the output
+distribution of a monad-polymorphic algorithm, read at the random
+monad `M`. A Dirac-correctness theorem then reads as English:
+`𝒟[RandMax L | M] = PMF.pure (listMax L)` — "the distribution of
+`RandMax` over `M` is a point mass at the maximum".
+-/
+
+/-- `𝒟[e | M]` ≡ `LawfulRandMonad.toPMF (e : M _)` — the output
+distribution of the algorithm `e` at the random monad `M`. Expands to
+the underlying form so `simp`/`rw` match the `toPMF` lemmas. -/
+scoped macro "𝒟[" e:term " | " M:term "]" : term =>
+  `(LawfulRandMonad.toPMF ($e : $M _))
+
+/-- `𝒟[m]` ≡ `LawfulRandMonad.toPMF m`, for an already-typed
+computation. -/
+scoped macro "𝒟[" m:term "]" : term =>
+  `(LawfulRandMonad.toPMF $m)
 
 /-!
 ### Canonical instances

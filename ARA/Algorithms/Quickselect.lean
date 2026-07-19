@@ -88,8 +88,9 @@ def Quickselect_IO : List ℕ → ℕ → IO ℕ := Quickselect
 
 #eval Quickselect_IO [5, 3, 8, 1, 9, 2] 2
 
--- PMF version (noncomputable specification)
-noncomputable def Quickselect_PMF : List ℕ → ℕ → PMF ℕ := Quickselect
+-- PMF reading (noncomputable specification; an `example` suffices —
+-- theorems are stated about `Quickselect` itself)
+noncomputable example : List ℕ → ℕ → PMF ℕ := Quickselect
 
 -- ----------------------------------------
 -- Monad transformer version (timed)
@@ -101,9 +102,8 @@ def Quickselect_IO_Timed : List ℕ → ℕ → TimeMT ℕ IO ℕ := Quickselect
 
 #eval (Quickselect_IO_Timed [5, 3, 8, 1, 9, 2] 2).run
 
--- PMF timed version (noncomputable specification)
-noncomputable def Quickselect_PMF_Timed :
-    List ℕ → ℕ → TimeMT ℕ PMF ℕ := Quickselect
+-- PMF timed reading (noncomputable specification)
+noncomputable example : List ℕ → ℕ → TimeMT ℕ PMF ℕ := Quickselect
 
 -- ----------------------------------------
 -- Generic Correctness proof
@@ -119,7 +119,7 @@ step at a fixed pivot index; the algorithm is `randIdx >>= branch`.
 /-- Branch: partition around pivot `L[i]` and recurse into the side
 containing rank `k` (or stop). Used for both correctness and
 complexity proofs. -/
-private noncomputable abbrev qsel_branch
+private abbrev qsel_branch
     (M : Type → Type) [Monad M] [RandMonad M] [MonadCost ℕ M]
     (L : List α) (k : ℕ) (i : Fin L.length) : M α := do
   let pivot := L[i]
@@ -158,40 +158,52 @@ sides).
 -/
 
 /-- Rank `k` falls in the `< pivot` side: the order statistic is found
-left of the pivot. -/
+left of the pivot. Stated with a ℕ index in `simp`-normal form and
+oriented "branch = spec" (the pivot occurs on the left, so simp can
+instantiate it) — the convention `dirac_correct` consumes. -/
 @[spec_transport]
-private lemma orderStat_lt_branch (L : List α) (i : Fin L.length) {k : ℕ}
-    (hk : k < ((L.eraseIdx i).filter (· < L[i])).length) :
-    orderStat L k = orderStat ((L.eraseIdx i).filter (· < L[i])) k := by
+private lemma orderStat_lt_branch (L : List α) (i : ℕ) (hi : i < L.length)
+    {k : ℕ} (hk : k < ((L.eraseIdx i).filter (· < L[i])).length) :
+    orderStat ((L.eraseIdx i).filter (· < L[i])) k = orderStat L k := by
+  symm
+  have h := mergeSort_partition L ⟨i, hi⟩
+  simp only [Fin.getElem_fin] at h
   unfold orderStat
   -- Index `k` lands inside the first block of the split sorted list.
-  rw [mergeSort_partition L i, List.append_assoc,
-    List.getD_append _ _ _ _ (by simpa using hk)]
+  rw [h, List.append_assoc, List.getD_append _ _ _ _ (by simpa using hk)]
 
 /-- Rank `k` is exactly the pivot's rank: the order statistic is the
-pivot itself. -/
+pivot itself. The rank is spelled out on the left so that after
+`simp_all` substitutes the guard `k = …length`, the rule matches
+syntactically. -/
 @[spec_transport]
-private lemma orderStat_eq_branch (L : List α) (i : Fin L.length) {k : ℕ}
-    (hk : k = ((L.eraseIdx i).filter (· < L[i])).length) :
-    orderStat L k = L[i] := by
+private lemma orderStat_eq_branch (L : List α) (i : ℕ) (hi : i < L.length) :
+    orderStat L ((L.eraseIdx i).filter (· < L[i])).length = L[i] := by
+  have h := mergeSort_partition L ⟨i, hi⟩
+  simp only [Fin.getElem_fin] at h
   unfold orderStat
   -- Index `k` lands exactly on the singleton `[pivot]` block.
-  rw [mergeSort_partition L i, List.append_assoc,
-    List.getD_append_right _ _ _ _ (by simp [hk])]
-  simp [hk]
+  rw [h, List.append_assoc,
+    List.getD_append_right _ _ _ _ (by simp)]
+  simp
 
 /-- Rank `k` falls in the `≥ pivot` side: shift the rank past the left
 block and the pivot. Also covers out-of-range ranks (both sides yield
 `default`). -/
 @[spec_transport]
-private lemma orderStat_gt_branch (L : List α) (i : Fin L.length) {k : ℕ}
-    (hk : ((L.eraseIdx i).filter (· < L[i])).length < k) :
-    orderStat L k =
-      orderStat ((L.eraseIdx i).filter (· ≥ L[i]))
-        (k - ((L.eraseIdx i).filter (· < L[i])).length - 1) := by
+private lemma orderStat_gt_branch (L : List α) (i : ℕ) (hi : i < L.length)
+    {k : ℕ} (hk1 : ((L.eraseIdx i).filter (· < L[i])).length ≤ k)
+    (hk2 : ¬ k = ((L.eraseIdx i).filter (· < L[i])).length) :
+    orderStat ((L.eraseIdx i).filter (· ≥ L[i]))
+        (k - ((L.eraseIdx i).filter (· < L[i])).length - 1) =
+      orderStat L k := by
+  have hk : ((L.eraseIdx i).filter (· < L[i])).length < k := by omega
+  symm
+  have h := mergeSort_partition L ⟨i, hi⟩
+  simp only [Fin.getElem_fin] at h
   unfold orderStat
   -- Index `k` lands in the last block; subtract the first block's length…
-  rw [mergeSort_partition L i, List.append_assoc,
+  rw [h, List.append_assoc,
     List.getD_append_right _ _ _ _ (by simp only [List.length_mergeSort]; omega)]
   rw [List.singleton_append]
   -- …and one more for the pivot.
@@ -207,8 +219,8 @@ Stated over any lawful cost model (`LawfulMonadCost`), so the one
 theorem covers the cost-free *and* the timed readings.
 -/
 
-/-- For any `LawfulRandMonad`, `Quickselect L k`
-returns exactly the `k`-th order statistic:
+/-- For any `LawfulRandMonad` and any lawful cost model,
+`Quickselect L k` returns exactly the `k`-th order statistic:
 its output distribution is the Dirac mass at `orderStat L k`,
 independently of the random pivot choices.
 -/
@@ -216,33 +228,10 @@ theorem quickselect_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (L : List α) (k : ℕ) :
-    LawfulRandMonad.toPMF
-      (Quickselect L k : M α) =
-      PMF.pure (orderStat L k) := by
-  induction L, k using Quickselect.induct with
-  | case1 k =>
-    -- Base case: the empty list returns `default`, matching the
-    -- out-of-range value of `orderStat`.
-    rw [Quickselect.eq_1]
-    simp only [LawfulRandMonad.toPMF_pure]
-    rw [show orderStat ([] : List α) k = default from by simp [orderStat]]
-    rfl
-  | case2 head tail k ih1 ih2 =>
-    -- Collapse the uniform pivot choice (`toPMF_randIdx_bind_dirac`):
-    -- every branch produces the same Dirac mass at the order statistic.
-    rw [quickselect_eq_bind]
-    refine toPMF_randIdx_bind_dirac fun i => ?_
-    unfold qsel_branch
-    dirac_step
-    split_ifs with h1 h2
-    · -- `k` in the `<`-side: recurse (IH) and transport the order
-      -- statistic with `orderStat_lt_branch`.
-      rw [ih1 i, orderStat_lt_branch _ i h1]
-    · -- `k` is the pivot's rank: the branch returns the pivot.
-      rw [orderStat_eq_branch _ i h2]
-      exact LawfulRandMonad.toPMF_pure _
-    · -- `k` in the `≥`-side: recurse with the shifted rank.
-      rw [ih2 i, orderStat_gt_branch _ i (by omega)]
+    𝒟[Quickselect L k | M] = PMF.pure (orderStat L k) := by
+  dirac_correct Quickselect
+  -- Leftover base case: `orderStat` of `[]` is `default`.
+  simp [orderStat, LawfulRandMonad.toPMF_pure, pmf_pure_eq]
 
 /-- Correctness at `M = PMF` (where `toPMF` is the identity). -/
 theorem quickselect_correct_pmf (L : List α) (k : ℕ) :
@@ -253,8 +242,7 @@ theorem quickselect_correct_pmf (L : List α) (k : ℕ) :
 random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
 instantiates directly — erasing the clock *is* its `toPMF`. -/
 theorem quickselect_correct_timed_pmf (L : List α) (k : ℕ) :
-    LawfulRandMonad.toPMF (Quickselect L k : TimeMT ℕ PMF α) =
-      PMF.pure (orderStat L k) :=
+    𝒟[Quickselect L k | TimeMT ℕ PMF] = PMF.pure (orderStat L k) :=
   quickselect_correct (M := TimeMT ℕ PMF) L k
 
 -- ----------------------------------------
@@ -307,7 +295,7 @@ private lemma expected_cost_qsel_branch
 
 /-- The expected cost of `Quickselect` on a nonempty list is the
 uniform average of the branch costs. -/
-private lemma expected_cost_quickselect_step
+lemma expected_cost_quickselect_step
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (head : α) (tail : List α) (k : ℕ) :
@@ -321,15 +309,15 @@ private lemma expected_cost_quickselect_step
           else
             𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
               (k - (pivotLT (head :: tail) i).length - 1) | M])) := by
-  rw [quickselect_eq_bind head tail k, expected_cost_uniform_step]
-  congr 1
-  exact Finset.sum_congr rfl fun i _ => expected_cost_qsel_branch (head :: tail) k i
+  rw [quickselect_eq_bind head tail k]
+  exact expected_cost_uniform_step' (by simp)
+    fun i => expected_cost_qsel_branch (head :: tail) k i
 
 /-- The empty list costs nothing (for any rank). -/
 lemma expected_cost_quickselect_nil
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (k : ℕ) :
     𝔼_runtime[Quickselect ([] : List α) k | M] = 0 := by
-  rw [Quickselect.eq_1, expected_cost_toPMF_pure]
+  rw [Quickselect.eq_1]; cost_step
 
 /-!
 ### The `C(n,2)` bound for arbitrary lists
@@ -378,7 +366,7 @@ theorem quickselect_cost_le_quadratic
       simp only [List.length_cons]
       exact choose_two_succ tail.length
     -- Average the `n` equal bounds.
-    refine uniform_avg_le (by simp)
+    refine uniform_avg_le
       (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)
     rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
       hpascal]
@@ -484,7 +472,7 @@ theorem quickselect_cost_le_linear
         ring
       omega
     -- Average the `n` bounds: `n⁻¹ * (n * 4n) ≤ 4n`.
-    refine uniform_avg_le (by simp)
+    refine uniform_avg_le
       (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)
     rw [hsum, Fin.sum_univ_eq_sum_range
       (fun r => (tail.length : ENNReal) +

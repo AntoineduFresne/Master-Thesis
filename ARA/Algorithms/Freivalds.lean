@@ -3,7 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.ExpectedCost
+import ARA.Infrastructure.RandVec
 import ARA.Infrastructure.Correctness
 import Mathlib.Data.Matrix.Mul
 
@@ -12,7 +12,8 @@ import Mathlib.Data.Matrix.Mul
 
 Given `n × n` matrices `A, B, C`, decide whether `A * B = C` in
 `O(n²)` ring operations by picking a uniformly random `0/1` vector `r`
-and testing `A (B r) = C r`.
+(`randVec`, from `ARA.Infrastructure.RandVec`) and testing
+`A (B r) = C r`.
 
 ## Architecture
 
@@ -31,40 +32,30 @@ specification, and as timed algorithm.
   witness column pairs each accepting vector with a rejecting one.
 * `freivalds_cost_exact` — `3n²` ring multiplications
   (three matrix-vector products), against `n³` for naive
-  recomputation.
+  recomputation. Honesty note: the cost model charges the three
+  matrix-vector products as one wholesale tick, so this theorem reads
+  the model back rather than deriving it; a per-multiplication
+  instrumented `mulVec` is future work.
 -/
 
 namespace ARA
 
 open Cslib.Algorithms.Lean
 
-variable {R : Type} [CommRing R] [h : DecidableEq R] {n : ℕ}
+variable {R : Type} [CommRing R] {n : ℕ}
 
 /-! ## Algorithm -/
 
-/-- Sample a single uniform `0/1` entry of the ring `R`. -/
-def randBit {M} [Monad M] [RandMonad M] : M R := do
-  let b ← (haveI : NeZero 2 := ⟨by decide⟩; RandMonad.randFin 2)
-  return if b = 0 then 0 else 1
-
-/-- Sample a uniformly random `0/1` vector `r : Fin n → R`. -/
-def randVec {M} [Monad M] [RandMonad M] : (n : ℕ) → M (Fin n → R)
-  | 0 => return fun i => i.elim0
-  | n + 1 => do
-      let b ← (randBit : M R)
-      let rest ← randVec n
-      return Fin.cons b rest
-
 /-- The deterministic verifier at a fixed test vector `r`: accept iff
 `A (B r) = C r`. -/
-def freivaldsCheck (A B C : Matrix (Fin n) (Fin n) R) (r : Fin n → R) :
-    Bool :=
+def freivaldsCheck [DecidableEq R] (A B C : Matrix (Fin n) (Fin n) R)
+    (r : Fin n → R) : Bool :=
   decide (A.mulVec (B.mulVec r) = C.mulVec r)
 
 /-- Freivalds' algorithm: sample a random `0/1` vector and run the
 verifier — `3n²` ring multiplications (three matrix-vector products)
 instead of the `n³` of recomputing `A * B`. -/
-def freivalds {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
+def freivalds {M} [Monad M] [RandMonad M] [MonadCost ℕ M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) : M Bool := do
   MonadCost.tick (3 * n * n)
   let r ← (randVec n : M (Fin n → R))
@@ -77,116 +68,38 @@ def freivalds {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
 def freivalds_IO (A B C : Matrix (Fin n) (Fin n) ℤ) : IO Bool :=
   freivalds A B C
 
-noncomputable def freivalds_PMF (A B C : Matrix (Fin n) (Fin n) ℤ) :
-    PMF Bool :=
+noncomputable example (A B C : Matrix (Fin n) (Fin n) ℤ) : PMF Bool :=
   freivalds A B C
 
 def freivalds_IO_Timed (A B C : Matrix (Fin n) (Fin n) ℤ) :
     TimeMT ℕ IO Bool :=
   freivalds A B C
 
--- ----------------------------------------
--- Generic Correctness proof
--- ----------------------------------------
-
-/-!
-## The distribution of the random bit vector
-
-`randVec n` samples the uniform distribution on `0/1` vectors; we
-express the acceptance probability of any test as a normalized count
-over the `2^n` bit choices `Fin n → Fin 2`, by induction on `n`.
--/
-
-/-- Interpret a bit choice as a `0/1` vector of `R`. -/
-private def bitVec (v : Fin n → Fin 2) : Fin n → R :=
-  fun i => if v i = 0 then 0 else 1
-
-omit h
-private lemma bitVec_cons (i : Fin 2) (v : Fin n → Fin 2) :
-    (bitVec (Fin.cons i v) : Fin (n + 1) → R) =
-      Fin.cons (if i = 0 then (0 : R) else 1) (bitVec v) := by
-  funext k
-  refine Fin.cases ?_ (fun k => ?_) k
-  · simp [bitVec, Fin.cons_zero]
-  · simp [bitVec, Fin.cons_succ]
-
-/-- **Acceptance probability as a count.** Testing any predicate on a
-random `0/1` vector accepts with probability
-`#{accepting bit choices} / 2^n`. -/
-private lemma toPMF_randVec_true
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
-    ∀ (n : ℕ) (p : (Fin n → R) → Bool),
-    inst.toPMF ((randVec n : M (Fin n → R)) >>= fun r => pure (p r)) true =
-      (∑ v : Fin n → Fin 2, if p (bitVec v) then (1 : ENNReal) else 0) /
-        2 ^ n := by
-  intro n
-  induction n with
-  | zero =>
-    intro p
-    haveI : Subsingleton (Fin 0 → R) := ⟨fun a b => funext fun i => i.elim0⟩
-    rw [randVec, pure_bind, inst.toPMF_pure, pmf_pure_eq, PMF.pure_apply,
-      Fintype.sum_eq_single (fun i : Fin 0 => i.elim0)
-        (fun b hb => absurd (Subsingleton.elim b _) hb),
-      pow_zero, div_one,
-      show (bitVec (fun i : Fin 0 => i.elim0) : Fin 0 → R) = fun i => i.elim0 from
-        Subsingleton.elim _ _]
-    split_ifs with ha hb <;> simp_all
-  | succ n ih =>
-    intro p
-    haveI : NeZero 2 := ⟨by decide⟩
-    rw [randVec, randBit]
-    simp only [bind_assoc, pure_bind]
-    rw [inst.toPMF_bind, inst.toPMF_randFin, pmf_bind_eq, PMF.bind_apply,
-      tsum_fintype]
-    simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
-    rw [← Finset.mul_sum]
-    simp only [ih]
-    -- Reindex the `2^(n+1)` bit choices by first bit × rest.
-    rw [show (∑ w : Fin (n + 1) → Fin 2,
-          if p (bitVec w) then (1 : ENNReal) else 0) =
-        ∑ i : Fin 2, ∑ v : Fin n → Fin 2,
-          if p (Fin.cons (if i = 0 then (0 : R) else 1) (bitVec v)) then
-            (1 : ENNReal) else 0 from by
-      rw [← Equiv.sum_comp (Fin.consEquiv fun _ => Fin 2)
-        (fun w => if p (bitVec w) then (1 : ENNReal) else 0),
-        Fintype.sum_prod_type]
-      exact Finset.sum_congr rfl fun i _ => Finset.sum_congr rfl fun v _ => by
-        rw [show (Fin.consEquiv fun _ => Fin 2) (i, v) = Fin.cons i v from rfl,
-          bitVec_cons]]
-    -- `2⁻¹ · Σᵢ (Tᵢ / 2ⁿ) = (Σᵢ Tᵢ) / 2^(n+1)`.
-    have h2 : ((2 : ENNReal) ^ (n + 1))⁻¹ = (2 ^ n)⁻¹ * 2⁻¹ := by
-      rw [pow_succ, ENNReal.mul_inv (Or.inl (by positivity))
-        (Or.inl (ENNReal.pow_ne_top ENNReal.ofNat_ne_top))]
-    simp only [ENNReal.div_eq_inv_mul]
-    rw [← Finset.mul_sum, h2]
-    ring
-
 /-!
 ## Completeness and soundness
 -/
 
-include h
 /-- The check, propositionally: `r` is in the kernel of `A*B − C`. -/
-private lemma freivaldsCheck_iff (A B C : Matrix (Fin n) (Fin n) R)
-    (r : Fin n → R) :
+private lemma freivaldsCheck_iff [DecidableEq R]
+    (A B C : Matrix (Fin n) (Fin n) R) (r : Fin n → R) :
     freivaldsCheck A B C r = true ↔ (A * B - C).mulVec r = 0 := by
   rw [freivaldsCheck, decide_eq_true_eq, Matrix.sub_mulVec,
     ← Matrix.mulVec_mulVec, sub_eq_zero]
 
 /-- **Completeness (no false negatives).** If `A * B = C`, Freivalds
-always accepts, over any `LawfulRandMonad`. -/
+always accepts, over any `LawfulRandMonad` and any lawful cost
+model. -/
 theorem freivalds_complete
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B = C) :
-    inst.toPMF (freivalds A B C : M Bool)
-      true = 1 := by
+    𝒟[freivalds A B C | M] true = 1 := by
   have hcheck : ∀ r, freivaldsCheck A B C r = true := fun r =>
     (freivaldsCheck_iff A B C r).mpr (by rw [h, sub_self, Matrix.zero_mulVec])
   rw [freivalds]
-  simp only [MonadCost.tick_default, pure_bind, hcheck]
-  rw [inst.toPMF_bind]
-  simp only [inst.toPMF_pure, pmf_pure_eq, pmf_bind_eq, PMF.bind_const,
-    PMF.pure_apply]
+  simp only [inst.toPMF_bind, LawfulMonadCost.toPMF_tick, pmf_bind_eq,
+    pmf_pure_eq, PMF.pure_bind, hcheck]
+  simp only [inst.toPMF_pure, pmf_pure_eq, PMF.bind_const, PMF.pure_apply]
   simp
 
 /-! ### Soundness: the pairing argument
@@ -197,7 +110,6 @@ vectors that differ exactly in bit `j`, at most one can pass the test.
 The flip is an involution, so at most half of the `2^n` vectors
 accept. This works over any `CommRing` — no field needed. -/
 
-omit h
 /-- `mulVec` after updating one coordinate of the vector. -/
 private lemma mulVec_update (D : Matrix (Fin n) (Fin n) R)
     (r : Fin n → R) (j : Fin n) (c : R) (i : Fin n) :
@@ -230,10 +142,10 @@ private lemma eq_zero_of_mul_unit {x d : R} (hd : d * d = 1) (h : x * d = 0) :
   have : x * d * d = 0 := by rw [h, zero_mul]
   rwa [mul_assoc, hd, mul_one] at this
 
-include h
 /-- The two vectors differing exactly in bit `j` cannot both pass the
 test when `D i j ≠ 0`: flipping bit `j` moves `(D r) i` by `±D i j`. -/
-private lemma not_check_both (A B C : Matrix (Fin n) (Fin n) R)
+private lemma not_check_both [DecidableEq R]
+    (A B C : Matrix (Fin n) (Fin n) R)
     {i j : Fin n} (hD : (A * B - C) i j ≠ 0) (v : Fin n → Fin 2) :
     ¬(freivaldsCheck A B C (bitVec v) = true ∧
       freivaldsCheck A B C (bitVec (Function.update v j (v j + 1))) = true) := by
@@ -255,9 +167,9 @@ private lemma not_check_both (A B C : Matrix (Fin n) (Fin n) R)
 with probability at most `1/2` — over any commutative ring. -/
 theorem freivalds_sound
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B ≠ C) :
-    inst.toPMF (freivalds A B C : M Bool)
-      true ≤ 1 / 2 := by
+    𝒟[freivalds A B C | M] true ≤ 1 / 2 := by
   -- A nonzero witness entry of `D = A*B − C`.
   have hD : ∃ i j, (A * B - C) i j ≠ 0 := by
     by_contra hall
@@ -265,7 +177,9 @@ theorem freivalds_sound
     exact h (by ext i j; simpa [sub_eq_zero] using hall i j)
   obtain ⟨i, j, hD⟩ := hD
   rw [freivalds]
-  simp only [MonadCost.tick_default, pure_bind]
+  rw [inst.toPMF_bind]
+  simp only [LawfulMonadCost.toPMF_tick, pmf_bind_eq, pmf_pure_eq,
+    PMF.pure_bind]
   rw [toPMF_randVec_true]
   -- The bit-flip at `j` is an involution pairing accept with reject.
   set F : (Fin n → Fin 2) → ENNReal :=
@@ -313,50 +227,17 @@ theorem freivalds_sound
 /-!
 ## Complexity
 
-Three matrix-vector products at `n²` ring multiplications each; the
-random vector itself is free of ticks.
+The cost model charges the three matrix-vector products wholesale:
+one `tick (3 * n * n)` and nothing else (the random vector is free,
+`expected_cost_randVec`). The theorem below therefore reads the model
+back; instrumenting `mulVec` per multiplication is future work.
 -/
-
-/-- Timed decomposition of `randVec (n+1)` (definitional). -/
-private lemma randVec_timed_succ {M} [Monad M] [RandMonad M] (n : ℕ) :
-    (randVec (n + 1) : TimeMT ℕ M (Fin (n + 1) → R)) =
-    (randBit : TimeMT ℕ M R) >>= fun b =>
-      (randVec n : TimeMT ℕ M (Fin n → R)) >>= fun rest =>
-        pure (Fin.cons b rest) := rfl
-
-/-- `randBit` performs no ticks. -/
-private lemma expected_cost_randBit
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
-    𝔼_runtime[(randBit : TimeMT ℕ M R)] = 0 := by
-  unfold randBit
-  cost_step
-
-private lemma expected_cost_randVec
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
-    ∀ n : ℕ,
-    𝔼_runtime[(randVec n : TimeMT ℕ M (Fin n → R))] = 0 := by
-  intro n
-  induction n with
-  | zero =>
-    rw [randVec, expected_cost_toPMF_pure]
-  | succ n ih =>
-    haveI : NeZero 2 := ⟨by decide⟩
-    rw [randVec_timed_succ]
-    unfold TimedPMF
-    rw [expected_cost_toPMF_bind]
-    have h2 : ∀ b : R, expected_cost (inst.toPMF
-        (((randVec n : TimeMT ℕ M (Fin n → R)) >>= fun rest =>
-          (pure (Fin.cons b rest) : TimeMT ℕ M (Fin (n + 1) → R))).run)) = 0 :=
-        fun b => by
-      rw [expected_cost_toPMF_bind_pure]
-      exact ih
-    simp only [expected_cost_randBit, h2, mul_zero, tsum_zero, add_zero]
 
 /-- **Exact cost.** Freivalds performs exactly `3n²` ring
 multiplications — three matrix-vector products — against the `n³` of
 recomputing `A * B`. -/
 theorem freivalds_cost_exact
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) :
     𝔼_runtime[freivalds A B C | M] = ((3 * n * n : ℕ) : ENNReal) := by
   rw [freivalds]
@@ -369,14 +250,14 @@ theorem freivalds_cost_exact
 -/
 
 /-- Completeness at `M = PMF`. -/
-theorem freivalds_complete_pmf (A B C : Matrix (Fin n) (Fin n) R)
-    (h : A * B = C) :
+theorem freivalds_complete_pmf [DecidableEq R]
+    (A B C : Matrix (Fin n) (Fin n) R) (h : A * B = C) :
     (freivalds A B C : PMF Bool) true = 1 :=
   freivalds_complete (M := PMF) A B C h
 
 /-- Soundness at `M = PMF`: amplify by repetition. -/
-theorem freivalds_sound_pmf (A B C : Matrix (Fin n) (Fin n) R)
-    (h : A * B ≠ C) :
+theorem freivalds_sound_pmf [DecidableEq R]
+    (A B C : Matrix (Fin n) (Fin n) R) (h : A * B ≠ C) :
     (freivalds A B C : PMF Bool) true ≤ 1 / 2 :=
   freivalds_sound (M := PMF) A B C h
 

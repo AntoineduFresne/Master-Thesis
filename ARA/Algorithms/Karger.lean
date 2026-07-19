@@ -497,7 +497,7 @@ def kargerDemo : MultiGraph ℕ where
 #eval Karger_IO kargerDemo
 
 -- PMF version (noncomputable specification)
-noncomputable def Karger_PMF : MultiGraph ℕ → PMF ℕ := Karger
+noncomputable example : MultiGraph ℕ → PMF ℕ := Karger
 
 -- ----------------------------------------
 -- Monad transformer version (timed)
@@ -509,7 +509,7 @@ def Karger_IO_Timed : MultiGraph ℕ → TimeMT ℕ IO ℕ := Karger
 #eval (Karger_IO_Timed kargerDemo).run
 
 -- PMF timed version (noncomputable specification)
-noncomputable def Karger_PMF_Timed : MultiGraph ℕ → TimeMT ℕ PMF ℕ := Karger
+noncomputable example : MultiGraph ℕ → TimeMT ℕ PMF ℕ := Karger
 
 /-! ## Helper lemmas for the analysis
 
@@ -603,7 +603,8 @@ algorithm: taking the minimum over repetitions only improves the
 estimate and equals `minCutValue` with high probability. -/
 
 private lemma support_contractAux
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] :
     ∀ (k : ℕ) (g : MultiGraph α), g.WF → g.verts.card = k + 2 →
       ∀ g' ∈ (inst.toPMF (contractAux k g : M (MultiGraph α))).support,
         g.minCutValue ≤ g'.edges.length := by
@@ -618,8 +619,8 @@ private lemma support_contractAux
     intro g hwf hcard g' hg'
     by_cases hm : 0 < g.edges.length
     · rw [contractAux.eq_2, dif_pos hm] at hg'
-      simp only [MonadCost.tick_default, pure_bind] at hg'
-      rw [inst.toPMF_bind, inst.toPMF_randFin, pmf_bind_eq] at hg'
+      simp only [inst.toPMF_bind, LawfulMonadCost.toPMF_tick,
+        inst.toPMF_randFin, pmf_bind_eq, pmf_pure_eq, PMF.pure_bind] at hg'
       obtain ⟨i, -, hi⟩ := (PMF.mem_support_bind_iff _ _ _).mp hg'
       refine le_trans (minCutValue_le_contract hwf i (by omega))
         (ih (g.contract i) (hwf.contract i)
@@ -633,8 +634,9 @@ every value `Karger` can output is at least the true minimum-cut value:
 the algorithm never undershoots. -/
 theorem karger_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    ∀ c ∈ (inst.toPMF (Karger g : M ℕ)).support,
+    ∀ c ∈ 𝒟[Karger g | M].support,
       g.minCutValue ≤ c := by
   intro c hc
   unfold Karger at hc
@@ -659,12 +661,12 @@ a graph whose edge count equals the *original* minimum-cut value with
 probability at least `2 / ((k+2)(k+1))`. Induction on `k`, following
 the classical argument. -/
 private lemma success_contractAux
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] :
     ∀ (k : ℕ) (g : MultiGraph α), g.WF → g.verts.card = k + 2 →
       (2 : ℝ≥0∞) / (((k + 2) * (k + 1) : ℕ) : ℝ≥0∞) ≤
         inst.toPMF
-          (@contractAux _ _ M _ _ instMonadCostDefault k g >>=
-            fun g' => pure g'.edges.length)
+          ((contractAux k g >>= fun g' => pure g'.edges.length : M ℕ))
           g.minCutValue := by
   intro k
   induction k with
@@ -681,7 +683,11 @@ private lemma success_contractAux
     by_cases hm : 0 < g.edges.length
     · -- Main case: pick a uniform edge, recurse.
       rw [contractAux.eq_2, dif_pos hm]
-      simp only [MonadCost.tick_default, pure_bind, bind_assoc]
+      simp only [bind_assoc]
+      -- Peel the tick at the PMF level (rw stops at binders, so the
+      -- per-edge recursive binds stay intact for `hsum`).
+      rw [inst.toPMF_bind, LawfulMonadCost.toPMF_tick, pmf_bind_eq,
+        PMF.pure_bind]
       rw [inst.toPMF_bind, inst.toPMF_randFin, pmf_bind_eq, PMF.bind_apply]
       have hne : Nonempty (Fin g.edges.length) := ⟨⟨0, hm⟩⟩
       simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
@@ -691,21 +697,17 @@ private lemma success_contractAux
       -- The branch value as a function of the contracted edge.
       set F : α × α → ℝ≥0∞ := fun e =>
         inst.toPMF
-          ((@contractAux _ _ M _ _ instMonadCostDefault k
-              (g.contractEdge e.1 e.2)) >>=
-            fun g' => pure g'.edges.length)
+          ((contractAux k (g.contractEdge e.1 e.2) >>=
+            fun g' => pure g'.edges.length : M ℕ))
           g.minCutValue with hF
       have hsum : (∑ i : Fin g.edges.length,
           inst.toPMF
-            ((@contractAux _ _ M _ _ instMonadCostDefault k (g.contract i)) >>=
-              fun g' => pure g'.edges.length)
+            ((contractAux k (g.contract i) >>=
+              fun g' => pure g'.edges.length : M ℕ))
             g.minCutValue) = (g.edges.map F).sum := by
         rw [← sum_univ_getElem g.edges F]
         rfl
-      rw [show (∑ i : Fin g.edges.length,
-          inst.toPMF ((@contractAux _ _ M _ _ instMonadCostDefault k (g.contract i)) >>=
-            fun g' => pure g'.edges.length) g.minCutValue) = (g.edges.map F).sum
-        from hsum]
+      rw [hsum]
       -- Every non-crossing edge contributes at least the IH bound.
       have hbranch : ∀ e ∈ g.edges,
           (if Crossing S e then 0 else
@@ -752,6 +754,7 @@ private lemma success_contractAux
     · -- No edges left: the graph is edgeless, so its min cut is `0` and
       -- the reported value `0` is exact — success with probability `1`.
       rw [contractAux.eq_2, dif_neg hm, pure_bind, inst.toPMF_pure, pmf_pure_eq]
+
       have hzero : g.minCutValue = 0 :=
         Nat.le_zero.mp (le_trans (minCutValue_le_length g (by omega)) (by omega))
       rw [PMF.pure_apply, if_pos (by omega : g.minCutValue = g.edges.length)]
@@ -767,22 +770,22 @@ Consequently `O(n² log n)` independent repetitions find a minimum cut
 with high probability. -/
 theorem karger_success_prob
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    (2 : ℝ≥0∞) / ((g.verts.card : ℝ≥0∞) * ((g.verts.card : ℝ≥0∞) - 1)) ≤
-      inst.toPMF (Karger g : M ℕ) g.minCutValue := by
+    (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
+      𝒟[Karger g | M] g.minCutValue := by
   have hmain := success_contractAux (M := M) (g.verts.card - 2) g hwf (by omega)
-  have hden : (((g.verts.card - 2 + 2) * (g.verts.card - 2 + 1) : ℕ) : ℝ≥0∞) =
-      (g.verts.card : ℝ≥0∞) * ((g.verts.card : ℝ≥0∞) - 1) := by
+  have harith : (g.verts.card - 2 + 2) * (g.verts.card - 2 + 1) =
+      g.verts.card * (g.verts.card - 1) := by
     rw [show g.verts.card - 2 + 2 = g.verts.card by omega,
-      show g.verts.card - 2 + 1 = g.verts.card - 1 by omega,
-      Nat.cast_mul, ENNReal.natCast_sub, Nat.cast_one]
-  rw [hden] at hmain
+      show g.verts.card - 2 + 1 = g.verts.card - 1 by omega]
+  rw [harith] at hmain
   exact hmain
 
 /-- Success probability at `M = PMF`. -/
 theorem karger_success_prob_pmf (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
-    (2 : ℝ≥0∞) / ((g.verts.card : ℝ≥0∞) * ((g.verts.card : ℝ≥0∞) - 1)) ≤
+    (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
       (Karger g : PMF ℕ) g.minCutValue :=
   karger_success_prob (M := PMF) g hwf h2
 
@@ -825,7 +828,7 @@ private lemma expected_cost_contractAux
           (mul_le_mul' le_rfl
             (Nat.cast_le.mpr (length_edges_contract_le g i)))) ?_
         rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
-      refine le_trans (add_le_add le_rfl (uniform_avg_le hm.ne' hsum)) ?_
+      refine le_trans (add_le_add le_rfl (uniform_avg_le hsum hm.ne')) ?_
       rw [show ((k + 1 : ℕ) : ℝ≥0∞) = (k : ℝ≥0∞) + 1 by push_cast; ring]
       rw [add_mul, one_mul, add_comm]
     · rw [contractAux.eq_2, dif_neg hm, expected_cost_toPMF_pure]

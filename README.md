@@ -22,14 +22,10 @@ tutorial to formalize a toy algorithm (`RandMax`) which is verified
 end-to-end in six numbered steps.
 
 ```lean
-theorem randMax_correct ... := by
-  induction L using RandMax.induct with
-  | case1 => rw [RandMax.eq_1]; simp only [LawfulRandMonad.toPMF_pure]; rfl
-  | case2 head tail ih =>
-    rw [randMax_eq_bind]
-    refine toPMF_randIdx_bind_dirac fun i => ?_
-    unfold randMax_branch
-    dirac_finish        -- ← the framework does the rest
+theorem randMax_correct ... :
+    𝒟[RandMax L | M] = PMF.pure (listMax L) := by
+  dirac_correct RandMax   -- ← the framework does everything except
+                          --   the @[spec_transport] lemma (the math)
 ```
 
 Design rationale (why shallow embedding, `PMF`/Giry monad, correctness
@@ -47,6 +43,8 @@ ARA/
 │   │                          `expVal` (expectations of output functionals)
 │   ├── TailBounds.lean        ℙ_runtime[e > k | M], Markov's inequality:
 │   │                          any expected-cost theorem ⇒ tail bound for free
+│   ├── RandVec.lean           randBit/randVec 0/1 entropy source and the
+│   │                          counting principle #accepting / 2^n
 │   ├── Correctness.lean       Dirac / distributional / support correctness recipes,
 │   │                          `dirac_step`, `dirac_finish`, `@[spec_transport]`
 │   ├── SimpAttr.lean          the registered simp sets
@@ -81,6 +79,7 @@ All proofs rely (after "#print axioms") only on `propext`,
 ## Notation
 
 ```lean
+𝒟[Quicksort L | M]              -- output distribution at random monad M
 𝔼_runtime[Quicksort L | M]      -- expected runtime (ℝ≥0∞) at random monad M
 𝔼ℝ_runtime[Quicksort L | M]     -- the same, as a real number
 ℙ_runtime[Quicksort L > k | M]  -- tail probability; ≤ 𝔼_runtime[…]/(k+1) by Markov

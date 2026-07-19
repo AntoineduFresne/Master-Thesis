@@ -19,25 +19,25 @@ yours, and follow the numbered steps. Everything that is not marked
 1. **Algorithm** — write it *once*, polymorphic over
    `{M} [Monad M] [RandMonad M] [MonadCost ℕ M]`. Draw randomness with
    `randIdx`/`randFin`, charge cost with `MonadCost.tick`, and let
-   `termination_by`/`decreasing_by grind` handle recursion.
+   `termination_by`/`decreasing_by grind` handle recursion (if `grind`
+   fails, prove the size decrease by hand under `decreasing_by`).
 2. **Instances for free** — the same definition runs in `IO`
    (execute it!), specifies a distribution in `PMF`, and carries a
    clock in `TimeMT ℕ _`. Sanity-check with `#eval`.
-3. **Branch + decomposition** — an `abbrev` for the per-pivot branch
-   and two one-line `_eq_bind` lemmas exposing the pivot choice.
+3. **Branch abbrev (cost proofs only)** — an `abbrev` naming the
+   per-pivot work, so cost lemmas have something to state costs about.
 4. **Spec + transport lemmas** — define the specification and prove
    how it commutes with one branch (tag `@[spec_transport]`).
    *This is the only real mathematics.*
-5. **Correctness** — `induction … using yourAlgo.induct`, expose the
-   pivot, collapse with `toPMF_randIdx_bind_dirac`, finish with
-   `dirac_finish`.
+5. **Correctness** — one tactic: `dirac_correct yourAlgo`. Any goal
+   it leaves open is a missing transport lemma.
    * For Monte-Carlo algorithms (output genuinely random, e.g.
      `Karger`), replace the collapse by the distributional primitives
      `support_toPMF_randIdx_bind` / `le_toPMF_randIdx_bind` and state
      correctness as a support fact plus a success-probability bound.
 
 6. **Expected cost** — branch cost by `cost_step`, step lemma by
-   `expected_cost_uniform_step`, then solve the recurrence along
+   `expected_cost_uniform_step'`, then solve the recurrence along
    `yourAlgo.induct`.
 
 ## Example
@@ -51,6 +51,7 @@ namespace ARA
 
 open Cslib.Algorithms.Lean
 
+-- `Inhabited` supplies the `default` returned on the empty list.
 variable {α : Type} [LinearOrder α] [Inhabited α]
 
 /-!
@@ -85,7 +86,10 @@ def RandMax_IO : List ℕ → IO ℕ := RandMax
 
 #eval RandMax_IO [3, 1, 4, 1, 5, 9, 2, 6]        -- 9
 
-noncomputable def RandMax_PMF : List ℕ → PMF ℕ := RandMax
+-- `PMF` is a mathematical object: the reading exists (`example`
+-- suffices — no named API needed), but it is noncomputable, so don't
+-- try to `#eval` it.
+noncomputable example : List ℕ → PMF ℕ := RandMax
 
 def RandMax_IO_Timed : List ℕ → TimeMT ℕ IO ℕ := RandMax
 
@@ -119,15 +123,21 @@ branch of the recursion. Everything else in the file is machinery.
 /-- Specification: the maximum of a list (with `default` for `[]`). -/
 def listMax (L : List α) : α := L.foldr max default
 
+-- `Perm.foldr_eq` (used below) reorders the fold, which needs `max`
+-- to be left-commutative.
 private instance : LeftCommutative (max : α → α → α) :=
   max_left_commutative
 
 /-- Transport: removing the chosen element and re-inserting it via
 `max` recovers the maximum — because `max`-folds are invariant under
-permutation, and `L` permutes to `L[i] :: L.eraseIdx i`.
+permutation, and `L` permutes to `L[i] :: L.eraseIdx i`
+(`perm_getElem_cons_eraseIdx`, from `ARA.Helpers.Partition` — browse
+that file for ready-made pivot lemmas before proving your own).
 
-Stated with a ℕ index (the `simp`-normal form of `L[i]`), so that
-`dirac_finish` can apply it. -/
+State transport lemmas so that their hypotheses match the branch's
+guards (here: a ℕ index with an explicit bound, the `simp`-normal
+form of `L[i]`), so `dirac_finish` can discharge the side conditions
+from the context. -/
 @[spec_transport]
 private lemma listMax_branch (L : List α) (i : ℕ) (h : i < L.length) :
     max L[i] (listMax (L.eraseIdx i)) = listMax L := by
@@ -154,9 +164,7 @@ theorem randMax_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (L : List α) :
-    LawfulRandMonad.toPMF
-      (RandMax L : M α) =
-      PMF.pure (listMax L) := by
+    𝒟[RandMax L | M] = PMF.pure (listMax L) := by
   dirac_correct RandMax
 
 /-- Correctness at `M = PMF` (where `toPMF` is the identity). -/
@@ -167,12 +175,15 @@ theorem randMax_correct_pmf (L : List α) :
 /-!
 ## Step 6 — expected cost
 
-Three lemmas, each following a fixed pattern:
+Costs live in `ℝ≥0∞`, so no summability side conditions ever appear;
+descend to `ℝ` with `toReal` only for a final closed form with
+subtraction (see `quicksort_cost_exact`). Three lemmas, each
+following a fixed pattern:
 
 * the **branch cost** is read off by `cost_step` (the trailing
   `return …` is free by `expected_cost_toPMF_bind_pure`);
-* the **step lemma** is `expected_cost_uniform_step` plus the branch
-  cost — this is the recurrence `E(n) = (1/n) Σᵢ (1 + E(n−1))`;
+* the **step lemma** is one `expected_cost_uniform_step'` — this is
+  the recurrence `E(n) = (1/n) Σᵢ (1 + E(n−1))`;
 * the **closed form** solves the recurrence along `RandMax.induct`.
 -/
 
@@ -191,14 +202,14 @@ private lemma expected_cost_randMax_step
     ((head :: tail).length : ENNReal)⁻¹ *
       ∑ i : Fin (head :: tail).length,
         (1 + 𝔼_runtime[RandMax ((head :: tail).eraseIdx i) | M]) := by
-  rw [RandMax.eq_2, expected_cost_uniform_step]
-  congr 1
-  exact Finset.sum_congr rfl fun i _ => expected_cost_randMax_branch (head :: tail) i
+  rw [RandMax.eq_2]
+  exact expected_cost_uniform_step' (by simp)
+    fun i => expected_cost_randMax_branch (head :: tail) i
 
 private lemma expected_cost_randMax_nil
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] :
     𝔼_runtime[RandMax ([] : List α) | M] = 0 := by
-  rw [RandMax.eq_1, expected_cost_toPMF_pure]
+  rw [RandMax.eq_1]; cost_step
 
 /-- **Exact expected cost.** `RandMax` performs exactly `n` comparisons
 in expectation (in fact, always): one per round, `n` rounds. -/
@@ -227,11 +238,10 @@ theorem randMax_cost_exact
 /-!
 ## Where to go from here
 
-* Case splits in a branch? `dirac_finish` handles guards it can read
-  off the hypotheses; orient your `@[spec_transport]` lemmas
-  left-to-right ("branch value = spec") and close stubborn cases
-  manually after `dirac_step` + `split_ifs` — see
-  `quickselect_correct`.
+* Case splits in a branch? `dirac_correct` splits them and reads the
+  guards off the hypotheses — state each `@[spec_transport]` lemma
+  with hypotheses matching the guards (either orientation works, as
+  long as the rewrite terminates) — see `quickselect_correct`.
 * Non-uniform recursion (branch size depends on the pivot)? Reindex
   the step-lemma sum by pivot rank with `nodup_partition_sum₂` — see
   the exact cost proofs of `Quicksort` and `Quickselect`.

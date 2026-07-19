@@ -125,14 +125,26 @@ then the uniform average over the `n` branches is at most `c`.
 This is the standard closing step of a uniform-pivot cost analysis.
 
 Stated with `le_trans` in mind rather than `calc`: unifying against a
-concrete sum `S` is a cheap metavariable assignment. -/
-lemma uniform_avg_le {n : ℕ} (hn : n ≠ 0) {S c : ENNReal}
-    (h : S ≤ n * c) :
+concrete sum `S` is a cheap metavariable assignment. The `n ≠ 0` side
+condition is an autoparam (`by simp`), so call sites never spell it. -/
+lemma uniform_avg_le {n : ℕ} {S c : ENNReal}
+    (h : S ≤ n * c) (hn : n ≠ 0 := by simp) :
     (n : ENNReal)⁻¹ * S ≤ c := by
   refine le_trans (mul_le_mul' le_rfl h) ?_
   rw [← mul_assoc,
     ENNReal.inv_mul_cancel (Nat.cast_ne_zero.mpr hn) (ENNReal.natCast_ne_top n),
     one_mul]
+
+/-- Uniform average of pointwise-bounded branch costs: if every branch
+costs at most `c`, so does the average. Packages the closing
+`sum_le_sum`/`sum_const`/cancellation dance of a uniform-pivot
+bound. -/
+lemma uniform_avg_le_of_forall_le {n : ℕ} {cost : Fin n → ENNReal}
+    {c : ENNReal} (h : ∀ i, cost i ≤ c) (hn : n ≠ 0 := by simp) :
+    (n : ENNReal)⁻¹ * ∑ i, cost i ≤ c := by
+  refine uniform_avg_le ?_ hn
+  refine le_trans (Finset.sum_le_sum fun i _ => h i) ?_
+  rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
 
 /-- The uniform average of `n` copies of the same value is that value —
 the closing step of a cost analysis whose branches all cost the same. -/
@@ -404,34 +416,19 @@ instance instLawfulMonadCostTimeMT {M : Type → Type}
     rw [TimeMT_erase_tick, inst.toPMF_pure]; rfl⟩
 
 /-!
-## Notation and wrappers for expected runtime
+## Notation for expected runtime
 
-We provide user-friendly wrappers and notation so that the expected runtime
-of a timed computation can be written concisely.
-
-* `TimedPMF m`     — distribution over `(value, time)` pairs obtained by
-  interpreting `m : TimeMT ℕ M α` via a `LawfulRandMonad`.
-* `runtime m`      — `expected_cost (TimedPMF m) : ENNReal`, named API.
-* `runtime_ℝ m`    — `(runtime m).toReal : ℝ`, named API. Convenient for
-  stating closed-form bounds like `2(n+1)H(n) − 4n`.
-* `𝔼_cost[p]`      — notation for `expected_cost p`.
-* `𝔼_runtime[m]`   — notation for `expected_cost (TimedPMF m)` (defeq
-  to `runtime m`). Expands to the underlying form so `simp`/`rw` can
-  match bridge lemmas without unfolding hints.
-* `𝔼ℝ_runtime[m]`  — notation for `(𝔼_runtime[m]).toReal`.
-
-### Usage with polymorphic algorithms
-
-When the algorithm `f` is polymorphic in its monad (the typical case in
-this framework, e.g. `Quicksort`), Lean cannot infer which monad to
-instantiate from context. Use a type ascription:
-
-```
-𝔼ℝ_runtime[(Quicksort L : TimeMT ℕ M _)] = expected_qs_cost L.length
-```
-
-The instances `instRandMonadTimeMT` and `instMonadCostTimeMT` are picked
-up automatically by priority resolution. -/
+* `TimedPMF m`      — distribution over `(value, time)` pairs obtained
+  by interpreting `m : TimeMT ℕ M α` via a `LawfulRandMonad`.
+* `𝔼_runtime[m]`    — `expected_cost (TimedPMF m) : ℝ≥0∞`. Expands to
+  the underlying form so `simp`/`rw` match the bridge lemmas without
+  unfolding hints.
+* `𝔼ℝ_runtime[m]`   — the same as a real number, for closed-form
+  bounds like `2(n+1)H(n) − 4n`.
+* `𝔼_runtime[e | M]` / `𝔼ℝ_runtime[e | M]` — the forms to use with a
+  monad-polymorphic algorithm `e` (the typical case): they instantiate
+  `e` at `TimeMT ℕ M`, where the instances `instRandMonadTimeMT` and
+  `instMonadCostTimeMT` are picked up automatically. -/
 
 /-- The distribution over `(value, time)` pairs obtained by interpreting
 a timed computation `m : TimeMT ℕ M α` via a `LawfulRandMonad` instance.
@@ -441,22 +438,6 @@ noncomputable abbrev TimedPMF
     [inst : LawfulRandMonad M] {α : Type}
     (m : TimeMT ℕ M α) : PMF (TimeM ℕ α) :=
   inst.toPMF m.run
-
-/-- Expected runtime of a timed computation, as `ENNReal`. -/
-noncomputable abbrev runtime
-    {M : Type → Type} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
-    {α : Type} (m : TimeMT ℕ M α) : ENNReal :=
-  expected_cost (TimedPMF m)
-
-/-- Expected runtime of a timed computation, as a real number.
-Convenient for stating closed-form complexity bounds. -/
-noncomputable abbrev runtime_ℝ
-    {M : Type → Type} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
-    {α : Type} (m : TimeMT ℕ M α) : ℝ :=
-  (runtime m).toReal
-
-/-- `𝔼_cost[p]` ≡ `expected_cost p`, where `p : PMF (TimeM ℕ α)`. -/
-scoped notation "𝔼_cost[" p "]" => expected_cost p
 
 /-- `𝔼_runtime[m]` ≡ `expected_cost (TimedPMF m)`, the expected runtime
 of `m` as `ENNReal`. Expands to the underlying form so `simp`/`rw` can
@@ -575,6 +556,20 @@ lemma expected_cost_uniform_step
   rw [inst.toPMF_randIdx, tsum_fintype]
   simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
   rw [← Finset.mul_sum]
+
+/-- `expected_cost_uniform_step` in hypothesis form: supply the branch
+costs and get the recurrence. An algorithm's entire step lemma becomes
+`rw [algo_eq_bind]; exact expected_cost_uniform_step' _ branch_lemma`. -/
+lemma expected_cost_uniform_step'
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    {α : Type*} {β : Type} {L : List α} (hL : 0 < L.length)
+    {f : Fin L.length → TimeMT ℕ M β} {c : Fin L.length → ENNReal}
+    (h : ∀ i, 𝔼_runtime[f i] = c i) :
+    𝔼_runtime[(randIdx L hL : TimeMT ℕ M _) >>= f] =
+    (L.length : ENNReal)⁻¹ * ∑ i : Fin L.length, c i := by
+  rw [expected_cost_uniform_step hL f]
+  congr 1
+  exact Finset.sum_congr rfl fun i _ => h i
 
 /-- `randFin` variant of `expected_cost_uniform_step`, for algorithms
 that draw from `Fin n` directly (e.g. reservoir sampling's

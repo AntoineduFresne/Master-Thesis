@@ -37,7 +37,7 @@ namespace ARA
 
 open Cslib.Algorithms.Lean
 
-variable {α : Type} [h : DecidableEq α]
+variable {α : Type}
 
 /-! ## Algorithm -/
 
@@ -49,8 +49,7 @@ def reservoirAux {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
     ℕ → α → List α → M α
   | _, cur, [] => return cur
   | seen, cur, x :: xs => do
-      let i ← (haveI : NeZero (seen + 1) := ⟨seen.succ_ne_zero⟩
-               RandMonad.randFin (seen + 1))
+      let i ← RandMonad.randFin (seen + 1)
       MonadCost.tick 1
       reservoirAux (seen + 1) (if i.val = 0 then x else cur) xs
 
@@ -69,7 +68,7 @@ def reservoir_IO : List ℕ → IO (Option ℕ) := reservoir
 
 #eval reservoir_IO [3, 1, 4, 1, 5, 9, 2, 6]
 
-noncomputable def reservoir_PMF : List ℕ → PMF (Option ℕ) := reservoir
+noncomputable example : List ℕ → PMF (Option ℕ) := reservoir
 
 def reservoir_IO_Timed : List ℕ → TimeMT ℕ IO (Option ℕ) := reservoir
 
@@ -94,9 +93,9 @@ multiplicities via `List.count`, over any `LawfulRandMonad`.
 normalized by the total number of elements seen at the end. -/
 private lemma toPMF_reservoirAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq α]
     (xs : List α) (seen : ℕ) (hseen : seen ≠ 0) (cur y : α) :
-    inst.toPMF
-      (reservoirAux seen cur xs : M α) y =
+    𝒟[reservoirAux seen cur xs | M] y =
     ((if y = cur then (seen : ENNReal) else 0) + (xs.count y : ENNReal)) /
       ((seen : ENNReal) + (xs.length : ENNReal)) := by
   induction xs generalizing seen cur with
@@ -107,11 +106,10 @@ private lemma toPMF_reservoirAux
     · rw [ENNReal.div_self (by exact_mod_cast hseen) (ENNReal.natCast_ne_top _)]
     · rw [ENNReal.zero_div]
   | cons x xs ih =>
-    haveI : NeZero (seen + 1) := ⟨seen.succ_ne_zero⟩
     rw [reservoirAux.eq_2]
-    simp only [MonadCost.tick_default, pure_bind]
-    rw [inst.toPMF_bind, inst.toPMF_randFin, pmf_bind_eq, PMF.bind_apply,
-      tsum_fintype]
+    simp only [inst.toPMF_bind, LawfulMonadCost.toPMF_tick, pmf_bind_eq,
+      pmf_pure_eq, PMF.pure_bind]
+    rw [inst.toPMF_randFin, PMF.bind_apply, tsum_fintype]
     simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
     rw [← Finset.mul_sum, Fin.sum_univ_succ]
     -- The coin: index `0` adopts `x`, the `seen` others keep `cur`.
@@ -145,8 +143,9 @@ distinct list, every element has probability exactly `1/n`. Note the
 statement is about the *whole distribution*, not a point mass. -/
 theorem reservoir_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq α]
     (L : List α) (a : α) :
-    inst.toPMF (reservoir L : M (Option α)) (some a) =
+    𝒟[reservoir L | M] (some a) =
       (L.count a : ENNReal) / (L.length : ENNReal) := by
   cases L with
   | nil =>
@@ -162,22 +161,22 @@ theorem reservoir_correct
       · simp only [if_neg h, if_neg fun hh : x = a => h hh.symm]; push_cast; ring
     · push_cast; ring
 
-omit h
 /-- The sampler never returns `none` on a nonempty list. -/
 theorem reservoir_none_eq_zero
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (L : List α) (hL : L ≠ []) :
-    inst.toPMF (reservoir L : M (Option α)) none = 0 := by
+    𝒟[reservoir L | M] none = 0 := by
   cases L with
   | nil => exact absurd rfl hL
   | cons x xs =>
     rw [reservoir.eq_2, LawfulRandMonad.toPMF_map, pmf_map_eq, pmf_map_some_none]
 
-include h
 /-- On a list of distinct elements, every member is returned with
 probability exactly `1/n`. -/
 theorem reservoir_correct_of_nodup
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq α]
     (L : List α) (hnd : L.Nodup) (a : α) (ha : a ∈ L) :
     inst.toPMF (reservoir L : M (Option α)) (some a) =
       ((L.length : ENNReal))⁻¹ := by
@@ -197,7 +196,6 @@ One coin flip and one tick per stream element: the pass costs exactly
 with a constant recurrence.
 -/
 
-omit [DecidableEq α]
 private lemma expected_cost_reservoirAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (xs : List α) (seen : ℕ) (cur : α) :
@@ -240,9 +238,8 @@ theorem reservoir_cost_exact
 -/
 
 
-include h
 /-- Uniformity at `M = PMF` (where `toPMF` is the identity). -/
-theorem reservoir_correct_pmf (L : List α) (a : α) :
+theorem reservoir_correct_pmf [DecidableEq α] (L : List α) (a : α) :
     (reservoir L : PMF (Option α)) (some a) =
       (L.count a : ENNReal) / (L.length : ENNReal) :=
   reservoir_correct (M := PMF) L a

@@ -228,7 +228,7 @@ def randomBST_IO : List ℕ → IO Tree := randomBST
 
 #eval do IO.println s!"{repr (← randomBST_IO [3, 1, 4, 1, 5, 9, 2, 6])}"
 
-noncomputable def randomBST_PMF : List ℕ → PMF Tree := randomBST
+noncomputable example : List ℕ → PMF Tree := randomBST
 
 -- ----------------------------------------
 -- Generic Correctness proof
@@ -251,7 +251,7 @@ private lemma pairwise_lt_nodup {l : List ℕ} (h : l.Pairwise (· < ·)) :
 /-- The shuffle outputs only permutations of its input. -/
 lemma shuffle_perm {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
     ∀ (fuel : ℕ) (L : List ℕ), L.length ≤ fuel →
-      ∀ t ∈ (inst.toPMF (shuffle fuel L)).support, t.Perm L := by
+      ∀ t ∈ 𝒟[shuffle fuel L | M].support, t.Perm L := by
   intro fuel
   induction fuel with
   | zero =>
@@ -290,7 +290,7 @@ traversal is sorted and a permutation of `keys`. -/
 theorem randomBST_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
-    (ht : t ∈ (inst.toPMF (randomBST keys)).support) :
+    (ht : t ∈ 𝒟[randomBST keys | M].support) :
     t.inorder.Pairwise (· < ·) ∧ t.inorder.Perm keys := by
   rw [randomBST, inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht
   obtain ⟨perm, hperm, ht'⟩ := ht
@@ -333,7 +333,7 @@ has height at most `keys.length`. -/
 theorem randomBST_height_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (keys : List ℕ) (t : Tree)
-    (ht : t ∈ (inst.toPMF (randomBST keys)).support) :
+    (ht : t ∈ 𝒟[randomBST keys | M].support) :
     t.height ≤ keys.length := by
   rw [randomBST, inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht
   obtain ⟨perm, hperm, ht'⟩ := ht
@@ -384,7 +384,7 @@ def treap_IO : List ℕ → IO Tree := treap
 
 #eval do IO.println s!"{repr (← treap_IO [3, 1, 4, 1, 5, 9, 2, 6])}"
 
-noncomputable def treap_PMF : List ℕ → PMF Tree := treap
+noncomputable example : List ℕ → PMF Tree := treap
 
 /-- Decomposition of `treap` on a nonempty list (definitional). -/
 private lemma treap_eq_bind {M} [Monad M] [RandMonad M]
@@ -451,7 +451,7 @@ set_option maxHeartbeats 400000 in
 theorem treap_expVal_exp_height
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) :
-    expVal (inst.toPMF (treap L)) (fun t => 2 ^ t.height) ≤
+    expVal 𝒟[treap L | M] (fun t => 2 ^ t.height) ≤
       ((L.length + 3).choose 3 : ENNReal) := by
   revert hnd
   induction L using treap.induct with
@@ -462,7 +462,7 @@ theorem treap_expVal_exp_height
   | case2 x xs ih1 ih2 =>
     intro hnd
     rw [treap_eq_bind, expVal_toPMF_randIdx_bind]
-    refine uniform_avg_le (by simp) ?_
+    refine uniform_avg_le ?_
     -- Bound each branch by `2·C(|lt|+3,3) + 2·C(|ge|+3,3)` via the IHs.
     have hbranch : ∀ i : Fin (x :: xs).length,
         expVal (inst.toPMF
@@ -545,7 +545,7 @@ sharp constant is `≈ 3` in base 2, Devroye 1986). -/
 theorem treap_expected_height_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) :
-    expVal (inst.toPMF (treap L)) (fun t => (t.height : ENNReal)) ≤
+    expVal 𝒟[treap L | M] (fun t => (t.height : ENNReal)) ≤
       ((3 * Nat.log 2 (L.length + 3) + 4 : ℕ) : ENNReal) := by
   -- `k` is one more than the log of the exponential-height bound.
   refine le_trans (expVal_mono _ fun t =>
@@ -598,7 +598,7 @@ theorem treap_expected_height_le_pmf (keys : List ℕ) (hnd : keys.Nodup) :
 theorem treap_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) (t : Tree)
-    (ht : t ∈ (inst.toPMF (treap L)).support) :
+    (ht : t ∈ 𝒟[treap L | M].support) :
     t.inorder.Pairwise (· < ·) ∧ t.inorder.Perm L := by
   revert hnd t
   induction L using treap.induct with

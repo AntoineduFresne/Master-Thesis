@@ -156,7 +156,8 @@ scoped macro "dirac_correct" f:ident : tactic =>
       first
         | (refine toPMF_randIdx_bind_dirac fun i => ?_) <;> dirac_finish
         | dirac_finish
-        | (dirac_step; rfl)))
+        | (dirac_step; rfl)
+        | skip))
 
 -- Smoke test: a branch with no case split collapses outright.
 example {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]

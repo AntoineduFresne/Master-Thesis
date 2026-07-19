@@ -132,7 +132,7 @@ partition-and-recurse step at a given pivot index.
 /-- Branch: partition around pivot `L[i]` and
 recurse with `Quicksort`. Used for both correctness
 and complexity proofs. -/
-private noncomputable abbrev qs_branch
+private abbrev qs_branch
     (M : Type → Type) [Monad M] [RandMonad M] [MonadCost ℕ M]
     (L : List α) (i : Fin L.length) :
     M (List α) := do
@@ -171,8 +171,7 @@ independently of the random pivot choices and of the ticks. -/
 theorem quicksort_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
-    LawfulRandMonad.toPMF (Quicksort L : M (List α)) =
-      PMF.pure (L.mergeSort (· ≤ ·)) := by
+    𝒟[Quicksort L | M] = PMF.pure (L.mergeSort (· ≤ ·)) := by
   induction L using Quicksort.induct with
   | case1 =>
     rw [Quicksort.eq_1]
@@ -192,7 +191,7 @@ specification form of `quicksort_correct`). -/
 theorem quicksort_correct_spec
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (L : List α) :
     ∃ Output : List α,
-      LawfulRandMonad.toPMF (Quicksort L : M (List α)) = pure Output ∧
+      𝒟[Quicksort L | M] = pure Output ∧
       Output.SortedLE ∧ Output.Perm L :=
   ⟨L.mergeSort (· ≤ ·), quicksort_correct L, sortedLE_mergeSort,
     mergeSort_perm L _⟩
@@ -210,8 +209,7 @@ theorem quicksort_correct_pmf (L : List α) :
 random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
 instantiates directly — erasing the clock *is* its `toPMF`. -/
 theorem quicksort_correct_timed_pmf (L : List α) :
-    LawfulRandMonad.toPMF (Quicksort L : TimeMT ℕ PMF (List α)) =
-      PMF.pure (L.mergeSort (· ≤ ·)) :=
+    𝒟[Quicksort L | TimeMT ℕ PMF] = PMF.pure (L.mergeSort (· ≤ ·)) :=
   quicksort_correct (M := TimeMT ℕ PMF) L
 
 -- ----------------------------------------
@@ -287,9 +285,9 @@ lemma expected_cost_quicksort_step
         ((((head :: tail).eraseIdx i).length : ENNReal) +
           𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
           𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]) := by
-  rw [quicksort_eq_bind head tail, expected_cost_uniform_step]
-  congr 1
-  exact Finset.sum_congr rfl fun i _ => expected_cost_qs_branch (head :: tail) i
+  rw [quicksort_eq_bind head tail]
+  exact expected_cost_uniform_step' (by simp)
+    fun i => expected_cost_qs_branch (head :: tail) i
 
 /-!
 ### The `C(n,2)` bound for arbitrary lists
@@ -351,7 +349,7 @@ theorem quicksort_cost_le
       simp only [List.length_cons]
       exact choose_two_succ tail.length
     -- Average the `n` equal bounds.
-    refine uniform_avg_le (by simp)
+    refine uniform_avg_le
       (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)
     rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
       hpascal]

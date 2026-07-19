@@ -10,6 +10,7 @@ import ARA.Infrastructure.MonadCost
 import ARA.Infrastructure.LawfulRandMonad
 import ARA.Infrastructure.ExpectedCost
 import ARA.Infrastructure.TailBounds
+import ARA.Infrastructure.RandVec
 import ARA.Infrastructure.Correctness
 import ARA.Helpers.Partition
 import ARA.Helpers.HarmonicSums
