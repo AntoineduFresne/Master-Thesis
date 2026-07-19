@@ -28,18 +28,20 @@ point mass at the specification value. The recipe for proving
    choice with the algorithm's `_eq_bind` decomposition lemma.
 3. **Collapse**: `refine toPMF_randIdx_bind_dirac fun i => ?_` reduces
    the goal to a single branch at a fixed pivot `i`.
-4. **Discharge the branch**: `dirac_step` pushes `toPMF` through the
-   monadic structure (no-op `tick`s vanish, `bind`/`pure` distribute);
-   close each case with the inductive hypotheses and the transport
-   lemmas — or try `dirac_finish`, which attempts all of step 4 at
-   once and leaves open exactly the missing mathematics.
+4. **Discharge the branch**: `toPMF_step` pushes `toPMF` through the
+   monadic structure (lawful `tick`s vanish, `bind`/`pure`
+   distribute); close each case with the inductive hypotheses and the
+   transport lemmas — or try `dirac_finish`, which attempts all of
+   step 4 at once and leaves open exactly the missing mathematics.
 
 ## Distributional correctness (Monte Carlo algorithms)
 
 When the output is genuinely random (e.g. `Karger`), correctness is a
 property of the distribution: typically a support statement
-(one-sided error) plus a success-probability bound. The analogous
-generic primitives are:
+(one-sided error) plus a success-probability bound, and for the exact
+tier the full output law. The recipe mirrors the Dirac one — unfold,
+peel (`toPMF_step` / `toPMF_tick_bind`), uniform-average the pivot,
+discharge each branch, count — with these generic primitives:
 
 * `toPMF_randIdx_bind_apply` — the output probability is the uniform
   average of the branch probabilities (probabilistic analogue of
@@ -47,15 +49,20 @@ generic primitives are:
 * `le_toPMF_randIdx_bind` — lower-bound the success probability by a
   single good pivot;
 * `support_toPMF_randIdx_bind` — the support is the union of the
-  branch supports.
+  branch supports;
+* `toPMF_bind_pure_apply` / `toPMF_map_apply` (+ their `_eq_zero`
+  off-range forms) — pure post-processing along an injective function
+  just transports probabilities;
+* `mem_support_toPMF_bind_pure` — the support of a post-processed
+  computation is the image of the support.
 -/
 
 namespace ARA
 
 -- The `>>=`/`pure`/`<$>`-vs-`PMF.bind`/`PMF.pure`/`PMF.map` bridges
 -- (`pmf_bind_eq`, `pmf_pure_eq`, `pmf_map_eq`) live in `ARA.Infrastructure.Tactics`;
--- register them for `dirac_step` too.
-attribute [dirac_simp] pmf_bind_eq pmf_pure_eq pmf_map_eq
+-- register them for `toPMF_step` too.
+attribute [toPMF_simp] pmf_bind_eq pmf_pure_eq pmf_map_eq
 
 /-! ### Dirac correctness -/
 
@@ -116,31 +123,88 @@ theorem support_toPMF_randIdx_bind
   rw [inst.toPMF_bind, inst.toPMF_randIdx, pmf_bind_eq, PMF.support_bind]
   simp [PMF.support_uniformOfFintype]
 
+/-- Pure post-processing along an **injective** function transports
+probabilities pointwise: the probability of `f a` is the probability
+of `a`. Generic form of "the trailing `return (f x)` is invisible". -/
+lemma toPMF_bind_pure_apply
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α β : Type} (m : M α) {f : α → β} (hf : Function.Injective f) (a : α) :
+    inst.toPMF (m >>= fun x => pure (f x)) (f a) = inst.toPMF m a := by
+  rw [inst.toPMF_bind, pmf_bind_eq]
+  simp only [inst.toPMF_pure, pmf_pure_eq]
+  rw [PMF.bind_apply, tsum_eq_single a fun x hx => ?_]
+  · rw [PMF.pure_apply, if_pos rfl, mul_one]
+  · rw [PMF.pure_apply, if_neg fun hc => hx (hf hc).symm, mul_zero]
+
+/-- Off the range of `f`, the post-processed computation has
+probability zero. -/
+lemma toPMF_bind_pure_apply_eq_zero
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α β : Type} (m : M α) {f : α → β} {b : β} (hb : b ∉ Set.range f) :
+    inst.toPMF (m >>= fun x => pure (f x)) b = 0 := by
+  rw [inst.toPMF_bind, pmf_bind_eq]
+  simp only [inst.toPMF_pure, pmf_pure_eq]
+  rw [PMF.bind_apply]
+  refine ENNReal.tsum_eq_zero.mpr fun x => ?_
+  rw [PMF.pure_apply, if_neg fun hc => hb ⟨x, hc.symm⟩, mul_zero]
+
+/-- `toPMF_bind_pure_apply` in the `<$>` spelling. -/
+lemma toPMF_map_apply
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α β : Type} (m : M α) {f : α → β} (hf : Function.Injective f) (a : α) :
+    inst.toPMF (f <$> m) (f a) = inst.toPMF m a := by
+  rw [map_eq_bind_pure_comp]
+  exact toPMF_bind_pure_apply m hf a
+
+/-- `toPMF_bind_pure_apply_eq_zero` in the `<$>` spelling. -/
+lemma toPMF_map_apply_eq_zero
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α β : Type} (m : M α) {f : α → β} {b : β} (hb : b ∉ Set.range f) :
+    inst.toPMF (f <$> m) b = 0 := by
+  rw [map_eq_bind_pure_comp]
+  exact toPMF_bind_pure_apply_eq_zero m hb
+
+/-- The support of a post-processed computation is the image of the
+support: one lemma for the
+`mem_support_bind_iff`/`support_pure`/`subst` unpacking dance. Use
+with an `⟨a, ha, rfl⟩` pattern. -/
+lemma mem_support_toPMF_bind_pure
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α β : Type} {m : M α} {f : α → β} {b : β} :
+    b ∈ (inst.toPMF (m >>= fun a => pure (f a))).support ↔
+      ∃ a ∈ (inst.toPMF m).support, b = f a := by
+  rw [inst.toPMF_bind, pmf_bind_eq]
+  simp only [inst.toPMF_pure, pmf_pure_eq]
+  rw [PMF.mem_support_bind_iff]
+  exact exists_congr fun a => and_congr_right fun _ => by
+    rw [PMF.support_pure, Set.mem_singleton_iff]
+
 /-! ### Automation -/
 
-attribute [dirac_simp] LawfulRandMonad.toPMF_pure
-attribute [dirac_simp] LawfulRandMonad.toPMF_bind
-attribute [dirac_simp] MonadCost.tick_default
-attribute [dirac_simp] pure_bind bind_pure map_pure
+attribute [toPMF_simp] LawfulRandMonad.toPMF_pure
+attribute [toPMF_simp] LawfulRandMonad.toPMF_bind
+attribute [toPMF_simp] MonadCost.tick_default
+attribute [toPMF_simp] pure_bind bind_pure map_pure
 
-/-- `dirac_step` pushes `toPMF` through one algorithm branch: no-op
+/-- `toPMF_step` pushes `toPMF` through one algorithm branch: lawful
 `tick`s vanish, `toPMF` distributes over `bind` and evaluates on
 `pure`. What remains is the branch's case split plus the recursive
-calls, to be closed by the inductive hypotheses and the
-`@[spec_transport]` lemmas. -/
-scoped macro "dirac_step" : tactic =>
-  `(tactic| simp only [dirac_simp])
+calls, to be closed by the inductive hypotheses and (for the Dirac
+tier) the `@[spec_transport]` lemmas. Tier-agnostic: the same
+normalizer drives Dirac, distributional and support proofs. -/
+scoped macro "toPMF_step" : tactic =>
+  `(tactic| simp only [toPMF_simp])
 
 /-- `dirac_finish` attempts to close a branch goal outright: push
-`toPMF` through with `dirac_step`, split the branch's `if`s (when
+`toPMF` through with `toPMF_step`, split the branch's `if`s (when
 any), then finish each case from the hypotheses in context (inductive
 hypotheses, guard conditions) and the `@[spec_transport]` lemmas.
 Best-effort: any leftover goal is exactly the missing mathematics
 (typically a guard that needs `omega` before a transport lemma
 applies). -/
 scoped macro "dirac_finish" : tactic =>
-  `(tactic| (dirac_step <;> (try split_ifs) <;>
-      simp_all [spec_transport, dirac_simp]))
+  `(tactic| (toPMF_step <;> (try split_ifs) <;>
+      simp_all [spec_transport, toPMF_simp]))
 
 /-- `dirac_correct f` attempts a Dirac-correctness goal
 `toPMF (f … : M _) = PMF.pure (spec …)` in one shot: functional
@@ -156,7 +220,7 @@ scoped macro "dirac_correct" f:ident : tactic =>
       first
         | (refine toPMF_randIdx_bind_dirac fun i => ?_) <;> dirac_finish
         | dirac_finish
-        | (dirac_step; rfl)
+        | (toPMF_step; rfl)
         | skip))
 
 -- Smoke test: a branch with no case split collapses outright.

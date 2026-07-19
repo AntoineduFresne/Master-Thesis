@@ -620,8 +620,7 @@ private lemma support_contractAux
     intro g hwf hcard g' hg'
     by_cases hm : 0 < g.edges.length
     · rw [contractAux.eq_2, dif_pos hm] at hg'
-      simp only [inst.toPMF_bind, LawfulMonadCost.toPMF_tick,
-        inst.toPMF_randFin, pmf_bind_eq, pmf_pure_eq, PMF.pure_bind] at hg'
+      simp only [toPMF_simp, inst.toPMF_randFin] at hg'
       obtain ⟨i, -, hi⟩ := (PMF.mem_support_bind_iff _ _ _).mp hg'
       refine le_trans (minCutValue_le_contract hwf i (by omega))
         (ih (g.contract i) (hwf.contract i)
@@ -641,10 +640,7 @@ theorem karger_correct
       g.minCutValue ≤ c := by
   intro c hc
   unfold Karger at hc
-  rw [inst.toPMF_bind, pmf_bind_eq] at hc
-  obtain ⟨g', hg', hc'⟩ := (PMF.mem_support_bind_iff _ _ _).mp hc
-  rw [inst.toPMF_pure, pmf_pure_eq] at hc'
-  rw [show c = g'.edges.length by simpa [PMF.support_pure] using hc']
+  obtain ⟨g', hg', rfl⟩ := mem_support_toPMF_bind_pure.mp hc
   exact support_contractAux (g.verts.card - 2) g hwf (by omega) g' hg'
 
 /-- Correctness at `M = PMF`. -/
@@ -687,8 +683,7 @@ private lemma success_contractAux
       simp only [bind_assoc]
       -- Peel the tick at the PMF level (rw stops at binders, so the
       -- per-edge recursive binds stay intact for `hsum`).
-      rw [inst.toPMF_bind, LawfulMonadCost.toPMF_tick, pmf_bind_eq,
-        PMF.pure_bind]
+      rw [toPMF_tick_bind]
       rw [inst.toPMF_bind, inst.toPMF_randFin, pmf_bind_eq, PMF.bind_apply]
       have hne : Nonempty (Fin g.edges.length) := ⟨⟨0, hm⟩⟩
       simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
@@ -774,7 +769,7 @@ theorem karger_success_prob
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      𝒟[Karger g | M] g.minCutValue := by
+      ℙ[Karger g = g.minCutValue | M] := by
   have hmain := success_contractAux (M := M) (g.verts.card - 2) g hwf (by omega)
   have harith : (g.verts.card - 2 + 2) * (g.verts.card - 2 + 1) =
       g.verts.card * (g.verts.card - 1) := by
@@ -886,20 +881,9 @@ theorem karger_amplified
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (k : ℕ) :
     1 - (1 - 2 / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞)) ^ k ≤
-      𝒟[amplify min k (Karger g) | M] g.minCutValue := by
-  have h := amplify_success (best := min) (m := (Karger g : M ℕ))
-    (S := {g.minCutValue}) (V := Set.Ici g.minCutValue)
-    (p := 2 / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞))
-    (fun c hc => karger_correct g hwf h2 c hc)
-    (fun a ha b hb => Set.mem_Ici.mpr (le_min (Set.mem_Ici.mp ha) (Set.mem_Ici.mp hb)))
-    (fun a ha b hb hor => by
-      rw [Set.mem_Ici] at ha hb
-      rw [Set.mem_singleton_iff]
-      rcases hor with h1 | h1 <;> rw [Set.mem_singleton_iff] at h1 <;> subst h1
-      · exact min_eq_left hb
-      · exact min_eq_right ha)
-    (by rw [prob_singleton]; exact karger_success_prob g hwf h2) k
-  rwa [prob_singleton] at h
+      ℙ[amplify min k (Karger g) = g.minCutValue | M] :=
+  amplify_min_success (fun c hc => karger_correct g hwf h2 c hc)
+    (karger_success_prob g hwf h2) k
 
 /-- Amplified cost: `k + 1` runs cost at most `k + 1` times the
 single-run bound `(n − 2) m`. -/

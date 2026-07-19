@@ -246,6 +246,19 @@ lemma expected_cost_toPMF_bind
     simp +decide only [h2]
     simp +decide [mul_add, ENNReal.tsum_add, expected_cost]
 
+/-- `expected_cost_toPMF_bind` when every continuation costs the
+same: `E[m >>= f] = E[m] + c`. -/
+lemma expected_cost_toPMF_bind_const
+    {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M]
+    {α β : Type} (m : TimeMT ℕ M α) (f : α → TimeMT ℕ M β) {c : ENNReal}
+    (h : ∀ a, expected_cost (inst.toPMF (f a).run) = c) :
+    expected_cost (inst.toPMF (m >>= f).run) =
+      expected_cost (inst.toPMF m.run) + c := by
+  rw [expected_cost_toPMF_bind]
+  simp only [h]
+  rw [ENNReal.tsum_mul_right, PMF.tsum_coe, one_mul]
+
 /-- `expected_cost` of `pure a` in `TimeMT` is `0`. -/
 @[expected_cost_simp] lemma expected_cost_toPMF_pure
     {M} [Monad M] [LawfulMonad M]
@@ -397,7 +410,7 @@ class LawfulMonadCost (C : Type) (M : Type → Type)
 
 -- With an abstract lawful tick, the `PMF.pure ()` it maps to is
 -- collapsed at the `PMF` level, so `PMF.pure_bind` joins the set.
-attribute [dirac_simp] LawfulMonadCost.toPMF_tick PMF.pure_bind
+attribute [toPMF_simp] LawfulMonadCost.toPMF_tick PMF.pure_bind
 
 /-- The no-op default cost model is lawful. -/
 instance instLawfulMonadCostDefault {C : Type} {M : Type → Type}
@@ -414,6 +427,14 @@ instance instLawfulMonadCostTimeMT {M : Type → Type}
     show inst.toPMF
       (TimeM.ret <$> (TimeMT.tick c : TimeMT ℕ M Unit).run) = PMF.pure ()
     rw [TimeMT_erase_tick, inst.toPMF_pure]; rfl⟩
+
+/-- A lawful `tick` is invisible to the output distribution even
+mid-computation: peel it in one rewrite. -/
+lemma toPMF_tick_bind {C : Type} {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M] [MonadCost C M] [LawfulMonadCost C M]
+    {β : Type} (c : C) (f : Unit → M β) :
+    inst.toPMF (MonadCost.tick c >>= f) = inst.toPMF (f ()) := by
+  rw [inst.toPMF_bind, LawfulMonadCost.toPMF_tick, pmf_bind_eq, PMF.pure_bind]
 
 /-!
 ## Notation for expected runtime

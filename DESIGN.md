@@ -111,7 +111,7 @@ for free — since costs are `ℕ`-valued, the strict form divides by
 cslib.TimeM ← TimeMT ← MonadCost ─┐
 Mathlib.PMF ← SimpAttr ← Tactics ← LawfulRandMonad ← ExpectedCost ← TailBounds ← Amplify
                                                    ←            ← RandVec
-                                                   ← Correctness
+                                                   ← Correctness ← Amplify (too)
 Helpers/*     ← Mathlib only (pure mathematics, no Infrastructure)
 Algorithms/*  ← Infrastructure + Helpers + fine-grained Mathlib extras
                 (Treap consumes the Fisher–Yates shuffle)

@@ -5,6 +5,7 @@ Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.ExpectedCost
 import ARA.Infrastructure.Correctness
+import ARA.Infrastructure.TailBounds
 
 /-!
 # Reservoir sampling (Algorithm R, k = 1)
@@ -107,8 +108,7 @@ private lemma toPMF_reservoirAux
     · rw [ENNReal.zero_div]
   | cons x xs ih =>
     rw [reservoirAux.eq_2]
-    simp only [inst.toPMF_bind, LawfulMonadCost.toPMF_tick, pmf_bind_eq,
-      pmf_pure_eq, PMF.pure_bind]
+    simp only [toPMF_simp]
     rw [inst.toPMF_randFin, PMF.bind_apply, tsum_fintype]
     simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
     rw [← Finset.mul_sum, Fin.sum_univ_succ]
@@ -145,14 +145,14 @@ theorem reservoir_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq α]
     (L : List α) (a : α) :
-    𝒟[reservoir L | M] (some a) =
+    ℙ[reservoir L = some a | M] =
       (L.count a : ENNReal) / (L.length : ENNReal) := by
   cases L with
   | nil =>
     rw [reservoir.eq_1, inst.toPMF_pure, pmf_pure_eq, PMF.pure_apply]
     simp
   | cons x xs =>
-    rw [reservoir.eq_2, LawfulRandMonad.toPMF_map, pmf_map_eq, pmf_map_some_apply,
+    rw [reservoir.eq_2, toPMF_map_apply _ (Option.some_injective α) a,
       toPMF_reservoirAux xs 1 one_ne_zero x a]
     simp only [List.count_cons, List.length_cons, beq_iff_eq]
     congr 1
@@ -166,11 +166,11 @@ theorem reservoir_none_eq_zero
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (L : List α) (hL : L ≠ []) :
-    𝒟[reservoir L | M] none = 0 := by
+    ℙ[reservoir L = none | M] = 0 := by
   cases L with
   | nil => exact absurd rfl hL
   | cons x xs =>
-    rw [reservoir.eq_2, LawfulRandMonad.toPMF_map, pmf_map_eq, pmf_map_some_none]
+    rw [reservoir.eq_2, toPMF_map_apply_eq_zero _ (by simp)]
 
 /-- On a list of distinct elements, every member is returned with
 probability exactly `1/n`. -/
@@ -178,7 +178,7 @@ theorem reservoir_correct_of_nodup
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq α]
     (L : List α) (hnd : L.Nodup) (a : α) (ha : a ∈ L) :
-    inst.toPMF (reservoir L : M (Option α)) (some a) =
+    ℙ[reservoir L = some a | M] =
       ((L.length : ENNReal))⁻¹ := by
   rw [reservoir_correct, List.count_eq_one_of_mem hnd ha]
   simp

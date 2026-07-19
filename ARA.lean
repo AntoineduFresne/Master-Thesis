@@ -16,13 +16,13 @@ import ARA.Infrastructure.Correctness
 import ARA.Helpers.Partition
 import ARA.Helpers.HarmonicSums
 import ARA.Algorithms.Tutorial
-import ARA.Algorithms.Quicksort
-import ARA.Algorithms.Quickselect
-import ARA.Algorithms.Karger
-import ARA.Algorithms.ReservoirSampling
-import ARA.Algorithms.Freivalds
-import ARA.Algorithms.FisherYates
-import ARA.Algorithms.Treap
+import ARA.Algorithms.Quicksort.Quicksort
+import ARA.Algorithms.Quickselect.Quickselect
+import ARA.Algorithms.Karger.Karger
+import ARA.Algorithms.ReservoirSampling.ReservoirSampling
+import ARA.Algorithms.Freivalds.Freivalds
+import ARA.Algorithms.FisherYates.FisherYates
+import ARA.Algorithms.Treap.Treap
 
 /-!
 # ARA — Analysis of Randomized Algorithms

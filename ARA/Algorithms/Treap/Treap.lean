@@ -6,7 +6,7 @@ Authors: Antoine du Fresne von Hohenesche
 import ARA.Infrastructure.ExpectedCost
 import ARA.Infrastructure.Correctness
 import ARA.Helpers.Partition
-import ARA.Algorithms.FisherYates
+import ARA.Algorithms.FisherYates.FisherYates
 import Mathlib.Data.Nat.Log
 
 /-!
@@ -246,12 +246,10 @@ theorem randomBST_correct
     (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
     (ht : t ∈ 𝒟[randomBST keys | M].support) :
     t.inorder.Pairwise (· < ·) ∧ t.inorder.Perm keys := by
-  rw [randomBST, inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht
-  obtain ⟨perm, hperm, ht'⟩ := ht
-  rw [inst.toPMF_pure, pmf_pure_eq, PMF.support_pure, Set.mem_singleton_iff] at ht'
+  rw [randomBST] at ht
+  obtain ⟨perm, hperm, rfl⟩ := mem_support_toPMF_bind_pure.mp ht
   -- `t = perm.foldl insert leaf` and `perm ~ keys`.
   have hp : perm.Perm keys := support_shuffle keys perm hperm
-  subst ht'
   have hsorted : (perm.foldl Tree.insert Tree.leaf).inorder.Pairwise (· < ·) :=
     Tree.sorted_inorder_foldl perm Tree.leaf (by simp [Tree.inorder])
   refine ⟨hsorted, ?_⟩
@@ -289,11 +287,9 @@ theorem randomBST_height_le
     (keys : List ℕ) (t : Tree)
     (ht : t ∈ 𝒟[randomBST keys | M].support) :
     t.height ≤ keys.length := by
-  rw [randomBST, inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht
-  obtain ⟨perm, hperm, ht'⟩ := ht
-  rw [inst.toPMF_pure, pmf_pure_eq, PMF.support_pure, Set.mem_singleton_iff] at ht'
+  rw [randomBST] at ht
+  obtain ⟨perm, hperm, rfl⟩ := mem_support_toPMF_bind_pure.mp ht
   have hp : perm.Perm keys := support_shuffle keys perm hperm
-  subst ht'
   calc (perm.foldl Tree.insert Tree.leaf).height
       ≤ (perm.foldl Tree.insert Tree.leaf).size := Tree.height_le_size _
     _ ≤ Tree.leaf.size + perm.length := Tree.size_foldl_le perm Tree.leaf
@@ -580,14 +576,14 @@ theorem treap_correct
     -- The two subtrees hold exactly the `<`- and `≥`-side keys.
     have hmem_l : ∀ a ∈ l.inorder, a < (x :: xs)[i] := fun a ha => by
       have hmem := hpl.mem_iff.mp ha
-      simp only [pivotLT, List.mem_filter, decide_eq_true_eq] at hmem
+      simp only [List.mem_filter, decide_eq_true_eq] at hmem
       exact hmem.2
     have hpiv_not : (x :: xs)[i] ∉ (x :: xs).eraseIdx i := by
       have hperm := perm_getElem_cons_eraseIdx (x :: xs) i
       exact (List.nodup_cons.mp (hperm.nodup_iff.mp hnd)).1
     have hmem_r : ∀ a ∈ r.inorder, (x :: xs)[i] < a := fun a ha => by
       have hmem := hpr.mem_iff.mp ha
-      simp only [pivotGE, List.mem_filter, decide_eq_true_eq, ge_iff_le] at hmem
+      simp only [List.mem_filter, decide_eq_true_eq, ge_iff_le] at hmem
       rcases lt_or_eq_of_le hmem.2 with h | h
       · exact h
       · rw [← h] at hmem

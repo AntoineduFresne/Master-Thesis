@@ -41,14 +41,14 @@ ARA/
 │   ├── LawfulRandMonad.lean   `RandMonad` (uniform `randFin`) + `toPMF` semantics
 │   ├── ExpectedCost.lean      𝔼_runtime[e | M], cost_step, uniform-step lemmas,
 │   │                          `expVal` (expectations of output functionals)
-│   ├── TailBounds.lean        ℙ_runtime[e > k | M], Markov's inequality:
-│   │                          any expected-cost theorem ⇒ tail bound for free
+│   ├── TailBounds.lean        ℙ_runtime[e > k | M] + Markov's inequality, and the
+│   │                          success-probability notation ℙ[e = v | M], ℙ[e ∈ S | M]
 │   ├── Amplify.lean           `amplify best k m`: k independent runs, keep the
-│   │                          best — P(success) ≥ 1 − (1−p)^k, cost linear in k
+│   │                          best — ℙ[success] ≥ 1 − (1−p)^k, cost linear in k
 │   ├── RandVec.lean           randBit/randVec 0/1 entropy source and the
 │   │                          counting principle #accepting / 2^n
 │   ├── Correctness.lean       Dirac / distributional / support correctness recipes,
-│   │                          `dirac_step`, `dirac_finish`, `@[spec_transport]`
+│   │                          `toPMF_step`, `dirac_finish`, `@[spec_transport]`
 │   ├── SimpAttr.lean          the registered simp sets
 │   └── Tactics.lean           `pmf_simp`, PMF bridges, derived lemmas
 ├── Helpers/            shared mathematics
@@ -57,9 +57,15 @@ ARA/
 │   └── HarmonicSums.lean      prefix sums Σ H_r, Σ r·H_r, Σ (r+1)·H_r
 └── Algorithms/
     ├── Tutorial.lean          ← start here
-    ├── Quicksort.lean         Quickselect.lean   Karger.lean
-    ├── ReservoirSampling.lean Freivalds.lean     Treap.lean
-    ├── FisherYates.lean       uniform shuffle (sampler for Treap)
+    ├── Quicksort/             Quickselect/       Karger/
+    ├── ReservoirSampling/     Freivalds/         Treap/
+    ├── FisherYates/           uniform shuffle (sampler for Treap)
+    │
+    │   Each algorithm folder holds X.lean (the formal development)
+    │   and X.md — the same algorithm in plain English and standard
+    │   LaTeX mathematics, with no reference to Lean: problem,
+    │   algorithm, correctness and complexity proofs. The pair is the
+    │   English ↔ Lean translation exhibit the framework is measured by.
 ```
 
 ## Verified algorithms

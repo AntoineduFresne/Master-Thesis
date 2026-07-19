@@ -165,4 +165,37 @@ example {M : Type → Type} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
   norm_num at h
   exact h
 
+/-!
+## Success probability of outputs
+
+`ℙ[e = v | M]` / `ℙ[e ∈ S | M]` are the correctness twins of
+`ℙ_runtime[e > k | M]`: the probability that the algorithm `e`, run
+at the random monad `M`, outputs exactly `v` (resp. lands in the
+event `S`). A Monte-Carlo statement then reads as English:
+`2 / (n(n−1)) ≤ ℙ[Karger g = g.minCutValue | M]`. Both expand to the
+underlying `toPMF`/`prob` form so `simp`/`rw` match lemmas without
+unfolding hints; `prob_singleton` (in `ARA.Infrastructure.Amplify`)
+mediates between the two.
+-/
+
+/-- `ℙ[e = v | M]` — probability that the algorithm `e`, run at the
+random monad `M`, outputs exactly `v`. -/
+scoped macro "ℙ[" e:term:51 " = " v:term:51 " | " M:term "]" : term =>
+  `(LawfulRandMonad.toPMF ($e : $M _) $v)
+
+/-- `ℙ[m = v]` — output probability of an already-typed
+computation. -/
+scoped macro "ℙ[" m:term:51 " = " v:term "]" : term =>
+  `(LawfulRandMonad.toPMF $m $v)
+
+/-- `ℙ[e ∈ S | M]` — probability that the algorithm `e`, run at the
+random monad `M`, outputs a value in the event `S`. -/
+scoped macro "ℙ[" e:term:51 " ∈ " S:term:51 " | " M:term "]" : term =>
+  `(prob (LawfulRandMonad.toPMF ($e : $M _)) $S)
+
+/-- `ℙ[m ∈ S]` — event probability of an already-typed
+computation. -/
+scoped macro "ℙ[" m:term:51 " ∈ " S:term "]" : term =>
+  `(prob (LawfulRandMonad.toPMF $m) $S)
+
 end ARA

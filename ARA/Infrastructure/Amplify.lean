@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.TailBounds
+import ARA.Infrastructure.Correctness
 
 /-!
 # Amplification
@@ -40,7 +41,14 @@ correctness theorem ("every output is at least the minimum cut"):
   amplification
 * `prob_amplify_compl_le` — the failure product `q ^ k`
 * `amplify_success` — the amplification theorem `1 − (1 − p) ^ k`
+* `amplify_min_success` / `amplify_max_success` — the ready-made form
+  for one-sided algorithms on a linear order: the hypotheses are
+  exactly the support and success theorems such an algorithm already
+  provides
 * `expected_cost_amplify` — `k + 1` runs cost `k + 1` times one run
+
+Statements are phrased with the `ℙ[m ∈ S]` / `ℙ[m = v]` notation from
+`ARA.Infrastructure.TailBounds`.
 -/
 
 namespace ARA
@@ -214,12 +222,9 @@ lemma support_amplify_subset
     | zero => exact hsupp
     | succ k =>
       intro c hc
-      rw [amplify_succ_succ] at hc
-      simp only [inst.toPMF_bind, inst.toPMF_pure, pmf_bind_eq, pmf_pure_eq] at hc
+      rw [amplify_succ_succ, inst.toPMF_bind, pmf_bind_eq] at hc
       obtain ⟨a, ha, hc'⟩ := (PMF.mem_support_bind_iff _ _ _).mp hc
-      obtain ⟨b, hb, hc''⟩ := (PMF.mem_support_bind_iff _ _ _).mp hc'
-      rw [PMF.support_pure, Set.mem_singleton_iff] at hc''
-      rw [hc'']
+      obtain ⟨b, hb, rfl⟩ := mem_support_toPMF_bind_pure.mp hc'
       exact hclosed a (hsupp ha) b (ih hb)
 
 /-- **Failure product.** All `k` runs must fail for the amplified run
@@ -231,7 +236,7 @@ theorem prob_amplify_compl_le
     (hsupp : (𝒟[m]).support ⊆ V)
     (hclosed : ∀ a ∈ V, ∀ b ∈ V, best a b ∈ V)
     (hkeep : ∀ a ∈ V, ∀ b ∈ V, a ∈ S ∨ b ∈ S → best a b ∈ S) (k : ℕ) :
-    prob (𝒟[amplify best k m]) Sᶜ ≤ prob (𝒟[m]) Sᶜ ^ k := by
+    ℙ[amplify best k m ∈ Sᶜ] ≤ ℙ[m ∈ Sᶜ] ^ k := by
   induction k with
   | zero => rw [pow_zero]; exact prob_le_one _ _
   | succ k ih =>
@@ -260,8 +265,8 @@ theorem amplify_success
     (hsupp : (𝒟[m]).support ⊆ V)
     (hclosed : ∀ a ∈ V, ∀ b ∈ V, best a b ∈ V)
     (hkeep : ∀ a ∈ V, ∀ b ∈ V, a ∈ S ∨ b ∈ S → best a b ∈ S)
-    (hp : p ≤ prob (𝒟[m]) S) (k : ℕ) :
-    1 - (1 - p) ^ k ≤ prob (𝒟[amplify best k m]) S := by
+    (hp : p ≤ ℙ[m ∈ S]) (k : ℕ) :
+    1 - (1 - p) ^ k ≤ ℙ[amplify best k m ∈ S] := by
   have hq : prob (𝒟[m]) Sᶜ ≤ 1 - p := by
     rw [prob_compl_eq_one_sub]
     exact tsub_le_tsub_left hp 1
@@ -271,6 +276,50 @@ theorem amplify_success
   calc 1 - (1 - p) ^ k
       ≤ 1 - prob (𝒟[amplify best k m]) Sᶜ := tsub_le_tsub_left hfail 1
     _ = prob (𝒟[amplify best k m]) S := (prob_eq_one_sub_compl _ _).symm
+
+/-- `amplify_success` for the ubiquitous "keep the smallest answer"
+case: if every output of `m` is at least `v` (one-sided error) and
+`m` hits `v` with probability at least `p`, the minimum over `k`
+independent runs is exactly `v` with probability at least
+`1 − (1 − p) ^ k`. The two hypotheses are exactly the support and
+success theorems a one-sided algorithm already provides. -/
+theorem amplify_min_success
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {β : Type} [LinearOrder β] {m : M β} {v : β} {p : ℝ≥0∞}
+    (hsupp : ∀ b ∈ (𝒟[m]).support, v ≤ b)
+    (hp : p ≤ ℙ[m = v]) (k : ℕ) :
+    1 - (1 - p) ^ k ≤ ℙ[amplify min k m = v] := by
+  have h := amplify_success (best := min) (S := {v}) (V := Set.Ici v) (p := p)
+    hsupp
+    (fun a ha b hb => Set.mem_Ici.mpr (le_min (Set.mem_Ici.mp ha) (Set.mem_Ici.mp hb)))
+    (fun a ha b hb hor => by
+      rw [Set.mem_Ici] at ha hb
+      rw [Set.mem_singleton_iff]
+      rcases hor with h1 | h1 <;> rw [Set.mem_singleton_iff] at h1 <;> subst h1
+      · exact min_eq_left hb
+      · exact min_eq_right ha)
+    (by rw [prob_singleton]; exact hp) k
+  rwa [prob_singleton] at h
+
+/-- Dual of `amplify_min_success`: keep the largest answer of a
+never-overshooting algorithm. -/
+theorem amplify_max_success
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {β : Type} [LinearOrder β] {m : M β} {v : β} {p : ℝ≥0∞}
+    (hsupp : ∀ b ∈ (𝒟[m]).support, b ≤ v)
+    (hp : p ≤ ℙ[m = v]) (k : ℕ) :
+    1 - (1 - p) ^ k ≤ ℙ[amplify max k m = v] := by
+  have h := amplify_success (best := max) (S := {v}) (V := Set.Iic v) (p := p)
+    hsupp
+    (fun a ha b hb => Set.mem_Iic.mpr (max_le (Set.mem_Iic.mp ha) (Set.mem_Iic.mp hb)))
+    (fun a ha b hb hor => by
+      rw [Set.mem_Iic] at ha hb
+      rw [Set.mem_singleton_iff]
+      rcases hor with h1 | h1 <;> rw [Set.mem_singleton_iff] at h1 <;> subst h1
+      · exact max_eq_left hb
+      · exact max_eq_right ha)
+    (by rw [prob_singleton]; exact hp) k
+  rwa [prob_singleton] at h
 
 /-! ## Cost: amplification is linear -/
 
@@ -282,14 +331,9 @@ theorem expected_cost_amplify
   induction k with
   | zero => simp only [zero_add, Nat.cast_zero, amplify_one, one_mul]
   | succ k ih =>
-    rw [amplify_succ_succ, expected_cost_toPMF_bind]
-    have hcont : ∀ tm : TimeM ℕ β,
-        expected_cost (inst.toPMF ((amplify best (k + 1) m >>= fun b =>
-          (pure (best tm.ret b) : TimeMT ℕ M β)).run)) =
-        𝔼_runtime[amplify best (k + 1) m] := fun tm =>
-      expected_cost_toPMF_bind_pure _ _
-    simp only [hcont, ih]
-    rw [ENNReal.tsum_mul_right, PMF.tsum_coe, one_mul]
+    rw [amplify_succ_succ,
+      expected_cost_toPMF_bind_const _ _ fun a => expected_cost_toPMF_bind_pure _ _,
+      ih]
     push_cast
     ring
 

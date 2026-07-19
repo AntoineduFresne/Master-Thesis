@@ -5,6 +5,7 @@ Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.RandVec
 import ARA.Infrastructure.Correctness
+import ARA.Infrastructure.TailBounds
 import Mathlib.Data.Matrix.Mul
 
 /-!
@@ -93,13 +94,12 @@ theorem freivalds_complete
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B = C) :
-    𝒟[freivalds A B C | M] true = 1 := by
+    ℙ[freivalds A B C = true | M] = 1 := by
   have hcheck : ∀ r, freivaldsCheck A B C r = true := fun r =>
     (freivaldsCheck_iff A B C r).mpr (by rw [h, sub_self, Matrix.zero_mulVec])
   rw [freivalds]
-  simp only [inst.toPMF_bind, LawfulMonadCost.toPMF_tick, pmf_bind_eq,
-    pmf_pure_eq, PMF.pure_bind, hcheck]
-  simp only [inst.toPMF_pure, pmf_pure_eq, PMF.bind_const, PMF.pure_apply]
+  simp only [toPMF_simp, hcheck]
+  simp only [PMF.bind_const, PMF.pure_apply]
   simp
 
 /-! ### Soundness: the pairing argument
@@ -169,18 +169,14 @@ theorem freivalds_sound
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B ≠ C) :
-    𝒟[freivalds A B C | M] true ≤ 1 / 2 := by
+    ℙ[freivalds A B C = true | M] ≤ 1 / 2 := by
   -- A nonzero witness entry of `D = A*B − C`.
   have hD : ∃ i j, (A * B - C) i j ≠ 0 := by
     by_contra hall
     push Not at hall
     exact h (by ext i j; simpa [sub_eq_zero] using hall i j)
   obtain ⟨i, j, hD⟩ := hD
-  rw [freivalds]
-  rw [inst.toPMF_bind]
-  simp only [LawfulMonadCost.toPMF_tick, pmf_bind_eq, pmf_pure_eq,
-    PMF.pure_bind]
-  rw [toPMF_randVec_true]
+  rw [freivalds, toPMF_tick_bind, toPMF_randVec_true]
   -- The bit-flip at `j` is an involution pairing accept with reject.
   set F : (Fin n → Fin 2) → ENNReal :=
     fun v => if freivaldsCheck A B C (bitVec v) then 1 else 0 with hF

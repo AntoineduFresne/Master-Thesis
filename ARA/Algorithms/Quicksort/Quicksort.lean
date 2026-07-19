@@ -181,9 +181,9 @@ theorem quicksort_correct
     rw [quicksort_eq_bind]
     refine toPMF_randIdx_bind_dirac fun i => ?_
     unfold qs_branch
-    dirac_step
+    toPMF_step
     rw [ih1 i, ih2 i]
-    dirac_step
+    toPMF_step
     rw [← mergeSort_partition]
 
 /-- The output is a sorted permutation of the input (existential

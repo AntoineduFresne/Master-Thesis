@@ -5,6 +5,7 @@ Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.ExpectedCost
 import ARA.Infrastructure.Correctness
+import ARA.Infrastructure.TailBounds
 import ARA.Helpers.Partition
 import Mathlib.Data.List.Permutation
 
@@ -92,33 +93,12 @@ theorem support_shuffle
     intro out hout
     rw [shuffle.eq_2, support_toPMF_randIdx_bind] at hout
     obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hout
-    simp only [inst.toPMF_bind, inst.toPMF_pure, pmf_bind_eq, pmf_pure_eq] at hi
-    obtain ⟨rest, hrest, hout'⟩ := (PMF.mem_support_bind_iff _ _ _).mp hi
-    rw [PMF.support_pure, Set.mem_singleton_iff] at hout'
-    rw [hout']
+    obtain ⟨rest, hrest, rfl⟩ := mem_support_toPMF_bind_pure.mp hi
     exact ((ih i rest hrest).cons _).trans (perm_getElem_cons_eraseIdx _ i).symm
 
 /-!
 ## The exact distribution
 -/
-
-open Classical in
-/-- `bind`-then-`cons` pointwise: the probability of producing `h :: t`
-by consing `x` onto a random tail is the tail's probability of `t` when
-`h = x`, and `0` otherwise. -/
-private lemma pmf_bind_cons_apply (p : PMF (List α)) (x h : α) (t : List α) :
-    (p.bind fun rest => PMF.pure (x :: rest)) (h :: t) =
-      if h = x then p t else 0 := by
-  rw [PMF.bind_apply]
-  by_cases hx : h = x
-  · subst hx
-    rw [if_pos rfl, tsum_eq_single t fun rest hrest => ?_]
-    · rw [PMF.pure_apply, if_pos rfl, mul_one]
-    · rw [PMF.pure_apply, if_neg fun hc => hrest (List.cons_eq_cons.mp hc).2.symm,
-        mul_zero]
-  · rw [if_neg hx]
-    refine ENNReal.tsum_eq_zero.mpr fun rest => ?_
-    rw [PMF.pure_apply, if_neg fun hc => hx (List.cons_eq_cons.mp hc).1, mul_zero]
 
 open Classical in
 private lemma toPMF_shuffle_apply
@@ -145,18 +125,20 @@ private lemma toPMF_shuffle_apply
           if h = (x :: xs)[i] then 𝒟[shuffle ((x :: xs).eraseIdx i) | M] t
           else 0 := by
         intro i
-        rw [inst.toPMF_bind, pmf_bind_eq]
-        simp only [inst.toPMF_pure, pmf_pure_eq]
-        exact pmf_bind_cons_apply _ _ _ _
+        by_cases hx : h = (x :: xs)[i]
+        · rw [if_pos hx, hx]
+          exact toPMF_bind_pure_apply _ List.cons_injective t
+        · rw [if_neg hx]
+          exact toPMF_bind_pure_apply_eq_zero _
+            fun ⟨rest, hrest⟩ => hx (List.cons_eq_cons.mp hrest).1.symm
       simp only [hbranch]
       -- With no duplicates, exactly one pivot has head `h`.
       obtain ⟨j, hj, hLj⟩ := List.getElem_of_mem (hout.subset (List.mem_cons_self ..))
-      rw [Finset.sum_eq_single (⟨j, hj⟩ : Fin (x :: xs).length)
-        (fun i _ hne => by
+      rw [Fintype.sum_eq_single (⟨j, hj⟩ : Fin (x :: xs).length)
+        (fun i hne => by
           refine if_neg fun hh => hne ?_
           have hh2 : h = (x :: xs)[(i : ℕ)]'i.isLt := hh
-          exact Fin.ext (hnd.getElem_inj_iff.mp (hh2.symm.trans hLj.symm)))
-        (fun habs => absurd (Finset.mem_univ _) habs),
+          exact Fin.ext (hnd.getElem_inj_iff.mp (hh2.symm.trans hLj.symm))),
         if_pos (show h = (x :: xs)[(⟨j, hj⟩ : Fin (x :: xs).length)] from hLj.symm)]
       -- The recursive call: the tail is a permutation of the rest.
       have hperm' : t.Perm ((x :: xs).eraseIdx ((⟨j, hj⟩ : Fin (x :: xs).length) : ℕ)) := by
@@ -181,7 +163,7 @@ the exchangeability lemma of the shuffle. -/
 theorem shuffle_perm_apply
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {L out : List α} (hnd : L.Nodup) (hperm : out.Perm L) :
-    𝒟[shuffle L | M] out = ((L.length ! : ℕ) : ENNReal)⁻¹ :=
+    ℙ[shuffle L = out | M] = ((L.length ! : ℕ) : ENNReal)⁻¹ :=
   toPMF_shuffle_apply L hnd out hperm
 
 /-- **Fisher–Yates samples uniformly.** On a duplicate-free list the
