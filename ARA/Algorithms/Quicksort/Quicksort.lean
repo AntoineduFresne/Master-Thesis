@@ -3,8 +3,8 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.ExpectedCost
-import ARA.Infrastructure.Correctness
+import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Correctness.Correctness
 import ARA.Helpers.Partition
 import Mathlib.NumberTheory.Harmonic.Defs
 
@@ -43,7 +43,7 @@ serves as:
 
 The expected runtime of a timed computation is written with the
 `𝔼_runtime[e | M]` (or `𝔼ℝ_runtime[e | M]` for a real value) notation
-from `ARA.Infrastructure.ExpectedCost`. For example:
+from `ARA.Infrastructure.Complexity.ExpectedCost`. For example:
 
   `𝔼ℝ_runtime[Quicksort L | M]`
 
@@ -95,7 +95,7 @@ def Quicksort
 -- ----------------------------------------
 
 -- IO version (executable, untimed; `RandMonad IO` comes from
--- `ARA.Infrastructure.LawfulRandMonad`)
+-- `ARA.Infrastructure.Randomness.LawfulRandMonad`)
 def Quicksort_IO : List ℕ → IO (List ℕ) := Quicksort
 
 #eval Quicksort_IO [8,4,1,2]
@@ -109,7 +109,7 @@ noncomputable def Quicksort_PMF :
 -- ----------------------------------------
 
 -- IO timed version (executable; `RandMonad (TimeMT ℕ M)` comes from
--- `ARA.Infrastructure.ExpectedCost`)
+-- `ARA.Infrastructure.Complexity.ExpectedCost`)
 def Quicksort_IO_Timed : List ℕ → TimeMT ℕ IO (List ℕ) := Quicksort
 
 #eval (Quicksort_IO_Timed [5, 4, 2, 1, 3, 6, 2, 1, 24, 6]).run

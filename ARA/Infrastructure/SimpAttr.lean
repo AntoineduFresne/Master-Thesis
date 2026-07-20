@@ -19,7 +19,7 @@ constraints.
   `runtime` through `TimeMT` combinators (`pure`, `bind`, `tick`, `lift`).
 * `toPMF_simp` — lemmas that push `toPMF` through an algorithm branch
   (`toPMF_bind`, `toPMF_pure`, lawful `tick`, monad laws); the engine
-  of the `toPMF_step` tactic in `ARA.Infrastructure.Correctness`.
+  of the `toPMF_step` tactic in `ARA.Infrastructure.Correctness.Correctness`.
   Tier-agnostic: the same set drives Dirac, distributional and
   support proofs.
 * `spec_transport` — per-algorithm lemmas stating how a specification

@@ -3,8 +3,8 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.ExpectedCost
-import ARA.Infrastructure.Correctness
+import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Correctness.Correctness
 import ARA.Helpers.Partition
 import Mathlib.Data.List.GetD
 import Mathlib.NumberTheory.Harmonic.Defs
@@ -83,7 +83,7 @@ def Quickselect
 -- ----------------------------------------
 
 -- IO version (executable, untimed; `RandMonad IO` comes from
--- `ARA.Infrastructure.LawfulRandMonad`)
+-- `ARA.Infrastructure.Randomness.LawfulRandMonad`)
 def Quickselect_IO : List ℕ → ℕ → IO ℕ := Quickselect
 
 #eval Quickselect_IO [5, 3, 8, 1, 9, 2] 2
@@ -97,7 +97,7 @@ noncomputable example : List ℕ → ℕ → PMF ℕ := Quickselect
 -- ----------------------------------------
 
 -- IO timed version (executable; `RandMonad (TimeMT ℕ M)` comes from
--- `ARA.Infrastructure.ExpectedCost`)
+-- `ARA.Infrastructure.Complexity.ExpectedCost`)
 def Quickselect_IO_Timed : List ℕ → ℕ → TimeMT ℕ IO ℕ := Quickselect
 
 #eval (Quickselect_IO_Timed [5, 3, 8, 1, 9, 2] 2).run

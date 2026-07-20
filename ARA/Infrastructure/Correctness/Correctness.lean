@@ -3,8 +3,8 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.LawfulRandMonad
-import ARA.Infrastructure.MonadCost
+import ARA.Infrastructure.Randomness.LawfulRandMonad
+import ARA.Infrastructure.Complexity.MonadCost
 
 /-!
 # Correctness recipes for randomized algorithms
@@ -122,62 +122,6 @@ theorem support_toPMF_randIdx_bind
   have : Nonempty (Fin L.length) := ⟨⟨0, hL⟩⟩
   rw [inst.toPMF_bind, inst.toPMF_randIdx, pmf_bind_eq, PMF.support_bind]
   simp [PMF.support_uniformOfFintype]
-
-/-- Pure post-processing along an **injective** function transports
-probabilities pointwise: the probability of `f a` is the probability
-of `a`. Generic form of "the trailing `return (f x)` is invisible". -/
-lemma toPMF_bind_pure_apply
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {α β : Type} (m : M α) {f : α → β} (hf : Function.Injective f) (a : α) :
-    inst.toPMF (m >>= fun x => pure (f x)) (f a) = inst.toPMF m a := by
-  rw [inst.toPMF_bind, pmf_bind_eq]
-  simp only [inst.toPMF_pure, pmf_pure_eq]
-  rw [PMF.bind_apply, tsum_eq_single a fun x hx => ?_]
-  · rw [PMF.pure_apply, if_pos rfl, mul_one]
-  · rw [PMF.pure_apply, if_neg fun hc => hx (hf hc).symm, mul_zero]
-
-/-- Off the range of `f`, the post-processed computation has
-probability zero. -/
-lemma toPMF_bind_pure_apply_eq_zero
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {α β : Type} (m : M α) {f : α → β} {b : β} (hb : b ∉ Set.range f) :
-    inst.toPMF (m >>= fun x => pure (f x)) b = 0 := by
-  rw [inst.toPMF_bind, pmf_bind_eq]
-  simp only [inst.toPMF_pure, pmf_pure_eq]
-  rw [PMF.bind_apply]
-  refine ENNReal.tsum_eq_zero.mpr fun x => ?_
-  rw [PMF.pure_apply, if_neg fun hc => hb ⟨x, hc.symm⟩, mul_zero]
-
-/-- `toPMF_bind_pure_apply` in the `<$>` spelling. -/
-lemma toPMF_map_apply
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {α β : Type} (m : M α) {f : α → β} (hf : Function.Injective f) (a : α) :
-    inst.toPMF (f <$> m) (f a) = inst.toPMF m a := by
-  rw [map_eq_bind_pure_comp]
-  exact toPMF_bind_pure_apply m hf a
-
-/-- `toPMF_bind_pure_apply_eq_zero` in the `<$>` spelling. -/
-lemma toPMF_map_apply_eq_zero
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {α β : Type} (m : M α) {f : α → β} {b : β} (hb : b ∉ Set.range f) :
-    inst.toPMF (f <$> m) b = 0 := by
-  rw [map_eq_bind_pure_comp]
-  exact toPMF_bind_pure_apply_eq_zero m hb
-
-/-- The support of a post-processed computation is the image of the
-support: one lemma for the
-`mem_support_bind_iff`/`support_pure`/`subst` unpacking dance. Use
-with an `⟨a, ha, rfl⟩` pattern. -/
-lemma mem_support_toPMF_bind_pure
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {α β : Type} {m : M α} {f : α → β} {b : β} :
-    b ∈ (inst.toPMF (m >>= fun a => pure (f a))).support ↔
-      ∃ a ∈ (inst.toPMF m).support, b = f a := by
-  rw [inst.toPMF_bind, pmf_bind_eq]
-  simp only [inst.toPMF_pure, pmf_pure_eq]
-  rw [PMF.mem_support_bind_iff]
-  exact exists_congr fun a => and_congr_right fun _ => by
-    rw [PMF.support_pure, Set.mem_singleton_iff]
 
 /-! ### Automation -/
 

@@ -24,7 +24,6 @@ namespace ARA
 
 open ENNReal PMF
 
-
 /-! ================================================================
     LAYER A: simp/grind tags
     ================================================================
@@ -68,7 +67,6 @@ lemma ennreal_inv_nsmul_cancel {n : ℕ} [NeZero n] (t : ENNReal) :
   · exact_mod_cast NeZero.ne n
   · exact ENNReal.natCast_ne_top n
 
-
 /-! ##### A.2  PMF Monad Laws (@[simp] — safe normalization) -/
 
 attribute [simp] PMF.pure_bind    -- `pure a >>= f = f a`
@@ -101,7 +99,6 @@ attribute [grind =] PMF.bind_map
 attribute [grind =] PMF.map_bind
 attribute [grind =] PMF.bind_pure_comp
 
-
 /-! ##### A.4  Do-notation Desugaring
 
   do-notation desugars `←` to `Bind.bind`, `return` to `Pure.pure`, and
@@ -115,7 +112,6 @@ attribute [grind =] PMF.bind_pure_comp
 -/
 macro "unfold_do" : tactic => `(tactic| dsimp only [Bind.bind, Pure.pure, Functor.map])
 
-
 /-! ##### A.5  Support & bindOnSupport -/
 
 attribute [grind =] PMF.support_uniformOfFintype
@@ -126,7 +122,6 @@ attribute [grind =] PMF.support_bind
 attribute [grind =] PMF.mem_support_uniformOfFinset_iff
 attribute [grind =] PMF.pure_bindOnSupport
 attribute [grind =] PMF.bindOnSupport_apply
-
 
 /-! ================================================================
     LAYER B: pmf_simp — concrete probability computation
@@ -178,7 +173,6 @@ macro "pmf_norm" : tactic =>
     | pmf_simp
     | (simp only [pmf_simp_attr]; omega)
     | (simp only [pmf_simp_attr]; ring_nf; norm_num))
-
 
 /-! ================================================================
     LAYER C: Reusable Derived Lemmas
@@ -247,5 +241,19 @@ lemma pmf_uniform_fin_bind_const_prob {β : Type*} {n : ℕ} [NeZero n]
   rw [pmf_uniform_fin_bind_apply]
   simp only [hv, Finset.mul_sum]
   exact ennreal_inv_nsmul_cancel v
+
+/-- Division comparison in `ℝ≥0∞` for natural fractions, by
+cross-multiplication in `ℕ`. -/
+lemma ennreal_div_le_div_nat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)
+    (h : a * d ≤ c * b) :
+    (a : ENNReal) / (b : ENNReal) ≤ (c : ENNReal) / (d : ENNReal) := by
+  rw [ENNReal.div_le_iff (by exact_mod_cast hb.ne' : (b : ENNReal) ≠ 0)
+    (ENNReal.natCast_ne_top b)]
+  rw [show (c : ENNReal) / (d : ENNReal) * (b : ENNReal) =
+      (c : ENNReal) * (b : ENNReal) / (d : ENNReal) by
+    rw [div_eq_mul_inv, div_eq_mul_inv]; ring]
+  rw [ENNReal.le_div_iff_mul_le (Or.inl (by exact_mod_cast hd.ne'))
+    (Or.inl (ENNReal.natCast_ne_top d))]
+  exact_mod_cast h
 
 end ARA

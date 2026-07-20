@@ -3,8 +3,8 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.ExpectedCost
-import ARA.Infrastructure.Correctness
+import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Correctness.Correctness
 import ARA.Helpers.Partition
 
 /-!
@@ -233,7 +233,7 @@ theorem randMax_cost_exact
       push_cast
       ring
     -- …so the average of `n` copies of `n` is `n`.
-    rw [Finset.sum_congr rfl fun i _ => hterm i, uniform_avg_const (by simp)]
+    rw [Finset.sum_congr rfl fun i _ => hterm i, uniform_avg_const _]
 
 /-!
 ## Where to go from here
@@ -250,7 +250,7 @@ theorem randMax_cost_exact
   descend to `ℝ` with `toReal_uniform_avg` — see
   `quickselect_cost_le_quadratic`.
 * Monte-Carlo correctness? `support_toPMF_randIdx_bind` and
-  `le_toPMF_randIdx_bind` in `ARA.Infrastructure.Correctness` — see `Karger`.
+  `le_toPMF_randIdx_bind` in `ARA.Infrastructure.Correctness.Correctness` — see `Karger`.
 -/
 
 end ARA

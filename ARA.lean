@@ -3,16 +3,20 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.TimeMT
 import ARA.Infrastructure.SimpAttr
 import ARA.Infrastructure.Tactics
-import ARA.Infrastructure.MonadCost
-import ARA.Infrastructure.LawfulRandMonad
-import ARA.Infrastructure.ExpectedCost
-import ARA.Infrastructure.TailBounds
-import ARA.Infrastructure.Amplify
-import ARA.Infrastructure.RandVec
-import ARA.Infrastructure.Correctness
+import ARA.Infrastructure.Randomness.LawfulRandMonad
+import ARA.Infrastructure.Randomness.Prob
+import ARA.Infrastructure.Randomness.RandVec
+import ARA.Infrastructure.Randomness.Geometric
+import ARA.Infrastructure.Complexity.TimeMT
+import ARA.Infrastructure.Complexity.MonadCost
+import ARA.Infrastructure.Complexity.TimedSemantics
+import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Complexity.Variance
+import ARA.Infrastructure.Complexity.TailBounds
+import ARA.Infrastructure.Correctness.Correctness
+import ARA.Infrastructure.Correctness.Amplify
 import ARA.Helpers.Partition
 import ARA.Helpers.HarmonicSums
 import ARA.Algorithms.Tutorial
@@ -21,6 +25,8 @@ import ARA.Algorithms.Quickselect.Quickselect
 import ARA.Algorithms.Karger.Karger
 import ARA.Algorithms.ReservoirSampling.ReservoirSampling
 import ARA.Algorithms.Freivalds.Freivalds
+import ARA.Algorithms.SchwartzZippel.SchwartzZippel
+import ARA.Algorithms.CouponCollector.CouponCollector
 import ARA.Algorithms.FisherYates.FisherYates
 import ARA.Algorithms.Treap.Treap
 

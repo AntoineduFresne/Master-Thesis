@@ -3,9 +3,9 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.ExpectedCost
-import ARA.Infrastructure.Correctness
-import ARA.Infrastructure.TailBounds
+import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Correctness.Correctness
+import ARA.Infrastructure.Complexity.TailBounds
 import ARA.Helpers.Partition
 import Mathlib.Data.List.Permutation
 

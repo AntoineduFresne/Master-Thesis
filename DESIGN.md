@@ -103,18 +103,32 @@ finiteness supplied by the coarse bound. On top of expectations sits
 the tail-bound tier (`TailBounds.lean`): Markov's inequality upgrades
 any expected-cost theorem to `ℙ_runtime[m > k] ≤ 𝔼_runtime[m]/(k+1)`
 for free — since costs are `ℕ`-valued, the strict form divides by
-`k + 1` and needs no `k ≠ 0` hypothesis.
+`k + 1` and needs no `k ≠ 0` hypothesis. The second-moment upgrade is
+`Variance.lean` (`Var = E[g²] − E[g]²` and Chebyshev, with the
+`ℝ≥0∞`-symmetric deviation `absSub`), and beyond the expectation the
+running time has a *law*: `costPMF` — the coupon collector is the
+first case study analyzed at that tier (its retry stages are
+`geometric` laws composed by `bind`).
 
 ## Module dependency structure
 
+Folders are thematic (`Randomness/` = semantics, `Correctness/`,
+`Complexity/`); the *file* DAG stays acyclic and strictly downward:
+
 ```
-cslib.TimeM ← TimeMT ← MonadCost ─┐
-Mathlib.PMF ← SimpAttr ← Tactics ← LawfulRandMonad ← ExpectedCost ← TailBounds ← Amplify
-                                                   ←            ← RandVec
-                                                   ← Correctness ← Amplify (too)
+cslib.TimeM ← Complexity/TimeMT ← Complexity/MonadCost ─────────────┐
+Mathlib.PMF ← SimpAttr ← Tactics ← Randomness/LawfulRandMonad ← Randomness/TimedSemantics
+                                       │                                 │
+                                       ├← Correctness/Correctness       └← Complexity/ExpectedCost
+                                       │       │                              ├← Randomness/RandVec
+                                       │       │                              ├← Randomness/Geometric
+                                       │       │                              └← Complexity/TailBounds
+                                       │       │                                    ├← Complexity/Variance
+                                       │       └──────────────────────────────────← Correctness/Amplify
 Helpers/*     ← Mathlib only (pure mathematics, no Infrastructure)
 Algorithms/*  ← Infrastructure + Helpers + fine-grained Mathlib extras
-                (Treap consumes the Fisher–Yates shuffle)
+                (Treap consumes the Fisher–Yates shuffle; SchwartzZippel
+                consumes Mathlib's `MvPolynomial.schwartz_zippel_totalDegree`)
 ```
 
 ## Known limitations

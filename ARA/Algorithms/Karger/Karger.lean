@@ -3,8 +3,8 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.ExpectedCost
-import ARA.Infrastructure.Amplify
+import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Correctness.Amplify
 import Mathlib.Order.Lattice.Nat
 
 /-!
@@ -549,18 +549,9 @@ private lemma sum_map_ite_zero {β : Type} (p : β → Prop) [DecidablePred p]
           (l.length - (l.countP fun e => decide (p e))) + 1 := by omega
       rw [h1, Nat.cast_add, Nat.cast_one, add_mul, one_mul, add_comm]
 
-/-- Division comparison in `ℝ≥0∞` for natural fractions, by
-cross-multiplication. -/
-private lemma ennreal_div_le_div_nat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)
-    (h : a * d ≤ c * b) :
-    (a : ℝ≥0∞) / (b : ℝ≥0∞) ≤ (c : ℝ≥0∞) / (d : ℝ≥0∞) := by
-  rw [ENNReal.div_le_iff (by exact_mod_cast hb.ne' : (b : ℝ≥0∞) ≠ 0)
-    (ENNReal.natCast_ne_top b)]
-  rw [show (c : ℝ≥0∞) / (d : ℝ≥0∞) * (b : ℝ≥0∞) = (c : ℝ≥0∞) * (b : ℝ≥0∞) / (d : ℝ≥0∞) by
-    rw [div_eq_mul_inv, div_eq_mul_inv]; ring]
-  rw [ENNReal.le_div_iff_mul_le (Or.inl (by exact_mod_cast hd.ne'))
-    (Or.inl (ENNReal.natCast_ne_top d))]
-  exact_mod_cast h
+-- `ennreal_div_le_div_nat` (natural-fraction comparison by
+-- cross-multiplication) now lives in `ARA.Infrastructure.Tactics`;
+-- Schwartz–Zippel is its second client.
 
 /-- The arithmetic core of Karger's induction step: if the current
 graph has `m > 0` edges and `k + 3` vertices, and the fixed minimum cut

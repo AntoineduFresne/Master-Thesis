@@ -35,20 +35,29 @@ tiers, known limitations): see [`DESIGN.md`](DESIGN.md).
 
 ```
 ARA/
-├── Infrastructure/ 
-│   ├── TimeMT.lean            cost transformer over any monad
-│   ├── MonadCost.lean         abstract `tick` (no-op by default)
-│   ├── LawfulRandMonad.lean   `RandMonad` (uniform `randFin`) + `toPMF` semantics
-│   ├── ExpectedCost.lean      𝔼_runtime[e | M], cost_step, uniform-step lemmas,
-│   │                          `expVal` (expectations of output functionals)
-│   ├── TailBounds.lean        ℙ_runtime[e > k | M] + Markov's inequality, and the
-│   │                          success-probability notation ℙ[e = v | M], ℙ[e ∈ S | M]
-│   ├── Amplify.lean           `amplify best k m`: k independent runs, keep the
-│   │                          best — ℙ[success] ≥ 1 − (1−p)^k, cost linear in k
-│   ├── RandVec.lean           randBit/randVec 0/1 entropy source and the
-│   │                          counting principle #accepting / 2^n
-│   ├── Correctness.lean       Dirac / distributional / support correctness recipes,
-│   │                          `toPMF_step`, `dirac_finish`, `@[spec_transport]`
+├── Infrastructure/
+│   ├── Randomness/     the semantic layer: what a random program *means*
+│   │   ├── LawfulRandMonad.lean   `RandMonad` (uniform `randFin`) + `toPMF`
+│   │   │                          semantics, 𝒟[e | M], post-processing lemmas
+│   │   ├── TimedSemantics.lean    clock erasure, `LawfulRandMonad (TimeMT ℕ M)`,
+│   │   │                          `LawfulMonadCost` (ticks invisible to `toPMF`)
+│   │   ├── RandVec.lean           0/1 and finite-grid entropy sources
+│   │   │                          (`randBit`/`randVec`, `randElem`/`randVecOn`)
+│   │   │                          with the counting principles #accepting / |grid|
+│   │   └── Geometric.lean         the geometric law (retry cost), E = q/(1−q)
+│   ├── Correctness/    proving what comes out
+│   │   ├── Correctness.lean       Dirac / distributional / support recipes,
+│   │   │                          `toPMF_step`, `dirac_finish`, `@[spec_transport]`
+│   │   └── Amplify.lean           `amplify best k m`: k independent runs, keep
+│   │                              the best — ℙ[success] ≥ 1 − (1−p)^k
+│   ├── Complexity/     proving what it costs
+│   │   ├── TimeMT.lean            cost transformer over any monad
+│   │   ├── MonadCost.lean         abstract `tick` (no-op by default)
+│   │   ├── ExpectedCost.lean      𝔼_runtime[e | M], cost_step, uniform-step
+│   │   │                          lemmas, `expVal`, `costPMF` (the cost law)
+│   │   ├── TailBounds.lean        the event algebra `prob`, ℙ[e = v | M],
+│   │   │                          ℙ_runtime[e > k | M] + Markov's inequality
+│   │   └── Variance.lean          `variance`, Var = E[g²] − E[g]², Chebyshev
 │   ├── SimpAttr.lean          the registered simp sets
 │   └── Tactics.lean           `pmf_simp`, PMF bridges, derived lemmas
 ├── Helpers/            shared mathematics
@@ -59,7 +68,7 @@ ARA/
     ├── Tutorial.lean          ← start here
     ├── Quicksort/             Quickselect/       Karger/
     ├── ReservoirSampling/     Freivalds/         Treap/
-    ├── FisherYates/           uniform shuffle (sampler for Treap)
+    ├── FisherYates/           SchwartzZippel/    CouponCollector/
     │
     │   Each algorithm folder holds X.lean (the formal development)
     │   and X.md — the same algorithm in plain English and standard
@@ -80,6 +89,8 @@ analysis; together they are the proof that the framework is usable.
 | **Karger** | one-sided error (support) | success probability `≥ 2/(n(n−1))`; amplified: `k` runs fail with prob. `≤ (1−2/(n(n−1)))^k`; cost `≤ (n−2)·m` |
 | **Reservoir sampling** | exact output distribution: `P[a] = count a / n` | exactly `n − 1` coins, single pass |
 | **Fisher–Yates** | exact output distribution: uniform over all `n!` permutations | free — a sampler, no ticks |
+| **Schwartz–Zippel** | complete + sound (`≤ deg/\|S\|`, any integral domain) | one wholesale evaluation |
+| **Coupon collector** | (cost-law case study) | exactly `n·H(n)` expected draws |
 | **Freivalds** | complete + sound (`≤ 1/2`, any `CommRing`) | exactly `3n²` vs `n³` |
 | **Treap** | every output a valid BST | **`E[height] ≤ 3·log₂(n+3) + 4`** via `E[2^H] ≤ C(n+3,3)` |
 

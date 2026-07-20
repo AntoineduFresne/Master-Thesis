@@ -3,9 +3,9 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.RandVec
-import ARA.Infrastructure.Correctness
-import ARA.Infrastructure.TailBounds
+import ARA.Infrastructure.Randomness.RandVec
+import ARA.Infrastructure.Correctness.Correctness
+import ARA.Infrastructure.Complexity.TailBounds
 import Mathlib.Data.Matrix.Mul
 
 /-!
@@ -13,7 +13,7 @@ import Mathlib.Data.Matrix.Mul
 
 Given `n × n` matrices `A, B, C`, decide whether `A * B = C` in
 `O(n²)` ring operations by picking a uniformly random `0/1` vector `r`
-(`randVec`, from `ARA.Infrastructure.RandVec`) and testing
+(`randVec`, from `ARA.Infrastructure.Randomness.RandVec`) and testing
 `A (B r) = C r`.
 
 ## Architecture

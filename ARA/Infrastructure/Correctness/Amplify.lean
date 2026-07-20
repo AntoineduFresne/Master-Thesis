@@ -3,8 +3,8 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.TailBounds
-import ARA.Infrastructure.Correctness
+import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Correctness.Correctness
 
 /-!
 # Amplification
@@ -34,9 +34,6 @@ correctness theorem ("every output is at least the minimum cut"):
 ## Main declarations
 
 * `amplify` — `k` independent runs combined with `best`
-* `prob_singleton`, `prob_compl_eq_one_sub`, `prob_bind`, … —
-  event-probability API extending `prob` from
-  `ARA.Infrastructure.TailBounds`
 * `support_amplify_subset` — one-sided correctness survives
   amplification
 * `prob_amplify_compl_le` — the failure product `q ^ k`
@@ -48,7 +45,7 @@ correctness theorem ("every output is at least the minimum cut"):
 * `expected_cost_amplify` — `k + 1` runs cost `k + 1` times one run
 
 Statements are phrased with the `ℙ[m ∈ S]` / `ℙ[m = v]` notation from
-`ARA.Infrastructure.TailBounds`.
+`ARA.Infrastructure.Complexity.TailBounds`.
 -/
 
 namespace ARA
@@ -82,85 +79,6 @@ lemma amplify_succ_succ {M} [Monad M] {β : Type} (best : β → β → β)
     amplify best (k + 1 + 1) m =
       m >>= fun a => amplify best (k + 1) m >>= fun b => pure (best a b) :=
   rfl
-
-/-!
-## Event-probability API
-
-`prob` (from `ARA.Infrastructure.TailBounds`) with the lemmas an
-amplification argument needs: singletons, complements, `bind`, `pure`.
--/
-
-/-- The probability of a singleton event is the point probability. -/
-@[simp] lemma prob_singleton {α : Type*} (p : PMF α) (a : α) :
-    prob p {a} = p a := by
-  unfold prob
-  refine (tsum_eq_single a fun b hb => ?_).trans (Set.indicator_of_mem rfl ⇑p)
-  exact Set.indicator_of_notMem (fun h : b ∈ ({a} : Set α) => hb h) ⇑p
-
-/-- An event and its complement split the total mass. -/
-lemma prob_add_compl {α : Type*} (p : PMF α) (s : Set α) :
-    prob p s + prob p sᶜ = 1 := by
-  unfold prob
-  rw [← ENNReal.tsum_add,
-    show ∑' a, (s.indicator (⇑p) a + sᶜ.indicator (⇑p) a) = ∑' a, p a from
-      tsum_congr fun a => by
-        by_cases h : a ∈ s
-        · rw [Set.indicator_of_mem h, Set.indicator_of_notMem (by simpa using h),
-            add_zero]
-        · rw [Set.indicator_of_notMem h, Set.indicator_of_mem (by simpa using h),
-            zero_add]]
-  exact p.tsum_coe
-
-/-- Success probability via the failure probability. -/
-lemma prob_eq_one_sub_compl {α : Type*} (p : PMF α) (s : Set α) :
-    prob p s = 1 - prob p sᶜ :=
-  ENNReal.eq_sub_of_add_eq
-    (ne_top_of_le_ne_top ENNReal.one_ne_top (prob_le_one p sᶜ))
-    (prob_add_compl p s)
-
-/-- Failure probability via the success probability. -/
-lemma prob_compl_eq_one_sub {α : Type*} (p : PMF α) (s : Set α) :
-    prob p sᶜ = 1 - prob p s :=
-  ENNReal.eq_sub_of_add_eq
-    (ne_top_of_le_ne_top ENNReal.one_ne_top (prob_le_one p s))
-    (by rw [add_comm]; exact prob_add_compl p s)
-
-/-- Total probability through a `bind`. -/
-lemma prob_bind {α β : Type*} (p : PMF α) (f : α → PMF β) (s : Set β) :
-    prob (p.bind f) s = ∑' a, p a * prob (f a) s := by
-  unfold prob
-  rw [show ∑' b, s.indicator (⇑(p.bind f)) b =
-      ∑' b, ∑' a, p a * s.indicator (⇑(f a)) b from
-    tsum_congr fun b => by
-      by_cases hb : b ∈ s
-      · rw [Set.indicator_of_mem hb, PMF.bind_apply]
-        exact tsum_congr fun a => by rw [Set.indicator_of_mem hb]
-      · rw [Set.indicator_of_notMem hb]
-        symm
-        simp only [Set.indicator_of_notMem hb, mul_zero, tsum_zero],
-    ENNReal.tsum_comm]
-  exact tsum_congr fun a => ENNReal.tsum_mul_left
-
-/-- A point mass assigns probability `1` to any event containing it. -/
-lemma prob_pure_of_mem {α : Type*} {a : α} {s : Set α} (h : a ∈ s) :
-    prob (PMF.pure a) s = 1 := by
-  unfold prob
-  rw [tsum_eq_single a fun b hb => ?_, Set.indicator_of_mem h,
-    PMF.pure_apply, if_pos rfl]
-  by_cases hb' : b ∈ s
-  · rw [Set.indicator_of_mem hb', PMF.pure_apply, if_neg hb]
-  · exact Set.indicator_of_notMem hb' _
-
-/-- A point mass assigns probability `0` to any event avoiding it. -/
-lemma prob_pure_of_notMem {α : Type*} {a : α} {s : Set α} (h : a ∉ s) :
-    prob (PMF.pure a) s = 0 := by
-  unfold prob
-  rw [ENNReal.tsum_eq_zero]
-  intro b
-  by_cases hb : b ∈ s
-  · rw [Set.indicator_of_mem hb, PMF.pure_apply,
-      if_neg (fun hba : b = a => h (hba ▸ hb))]
-  · exact Set.indicator_of_notMem hb _
 
 /-! ## The failure product -/
 
