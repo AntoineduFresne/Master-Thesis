@@ -65,7 +65,7 @@ random `0/1` vector accepts with probability
 lemma toPMF_randVec_true
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
     ∀ (n : ℕ) (p : (Fin n → R) → Bool),
-    inst.toPMF ((randVec n : M (Fin n → R)) >>= fun r => pure (p r)) true =
+    ℙ[(randVec n : M (Fin n → R)) >>= fun r => pure (p r) = true] =
       (∑ v : Fin n → Fin 2, if p (bitVec v) then (1 : ENNReal) else 0) /
         2 ^ n := by
   intro n
@@ -217,11 +217,12 @@ lemma toPMF_randVecOn_apply {M} [Monad M] [LawfulMonad M]
 /-- `randVecOn` samples **uniformly from the grid**: its law is the
 uniform distribution on `piFinset (fun _ => s) = sⁿ`. -/
 lemma toPMF_randVecOn {M} [Monad M] [LawfulMonad M]
-    [inst : LawfulRandMonad M] {α : Type} [DecidableEq α]
+    [inst : LawfulRandMonad M] {α : Type}
     (s : Finset α) (hs : s.Nonempty) (n : ℕ) :
     𝒟[randVecOn s hs n | M] =
       PMF.uniformOfFinset (Fintype.piFinset fun _ : Fin n => s)
         ⟨fun _ => hs.choose, Fintype.mem_piFinset.mpr fun _ => hs.choose_spec⟩ := by
+  classical
   ext f
   rw [toPMF_randVecOn_apply]
   by_cases hf : f ∈ Fintype.piFinset (fun _ : Fin n => s)
@@ -252,10 +253,9 @@ on a uniform sample from the grid `sⁿ` accepts with probability
 `#accepting / #s ^ n` — the `Finset` generalization of
 `toPMF_randVec_true`; `SchwartzZippel` is the client. -/
 lemma toPMF_randVecOn_true {M} [Monad M] [LawfulMonad M]
-    [inst : LawfulRandMonad M] {α : Type} [DecidableEq α]
+    [inst : LawfulRandMonad M] {α : Type}
     (s : Finset α) (hs : s.Nonempty) (n : ℕ) (pred : (Fin n → α) → Bool) :
-    inst.toPMF ((randVecOn s hs n : M (Fin n → α)) >>= fun r => pure (pred r))
-      true =
+    ℙ[(randVecOn s hs n : M (Fin n → α)) >>= fun r => pure (pred r) = true] =
       (((Fintype.piFinset fun _ : Fin n => s).filter fun f => pred f).card :
         ENNReal) / (s.card : ENNReal) ^ n := by
   rw [inst.toPMF_bind, pmf_bind_eq]
