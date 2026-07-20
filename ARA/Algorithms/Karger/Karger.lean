@@ -5,8 +5,7 @@ Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Amplify
-import Mathlib.Order.Lattice.Nat
-import Mathlib.Data.Sym.Sym2.Order
+import ARA.Helpers.MultiGraph
 
 /-!
 # Karger's randomized minimum-cut algorithm
@@ -101,489 +100,6 @@ open scoped ENNReal
 
 variable {α : Type} [DecidableEq α]
 
-/-! ## The multigraph model -/
-
-/-- An **undirected** multigraph: a vertex set plus an edge list, with
-parallel edges repeated (one entry per copy) and no loops.
-
-Endpoints are a `Sym2 α`, Mathlib's unordered pair, matching GraphLib's
-`Edge.endpoints` (`GraphLib/Graph/Basic.lean`) and Weixuan's
-`abbrev Edge := Sym2`. Orientation is therefore not merely irrelevant,
-it is *inexpressible*: `s(u, v)` and `s(v, u)` are the same term.
-
-We diverge from GraphLib on multiplicity only. GraphLib distinguishes
-parallel edges by an `edgeLabel` and stores edges in a `Set`, which is
-noncomputable; here an edge is repeated once per copy in a `List`, so
-that drawing an edge uniformly *with multiplicity* is just
-`randFin edges.length` and the development stays executable. Our
-`List (Sym2 α)` is exactly GraphLib's `Set (Edge α (Fin m))` with the
-list position playing the role of the label. -/
-structure MultiGraph (α : Type) where
-  /-- The (super)vertices currently present. -/
-  verts : Finset α
-  /-- The edge list; each parallel edge is listed once per copy. -/
-  edges : List (Sym2 α)
-
-namespace MultiGraph
-
-/-- Well-formedness: every edge joins two *distinct* vertices of the
-graph. Field names follow GraphLib's `incidence` / `loopless`. -/
-structure WF (g : MultiGraph α) : Prop where
-  /-- Every endpoint of an edge is a vertex. -/
-  incidence : ∀ e ∈ g.edges, ∀ v ∈ e, v ∈ g.verts
-  /-- No edge is a loop. -/
-  loopless : ∀ e ∈ g.edges, ¬ e.IsDiag
-
-/-! ### Cuts
-
-Ported from GraphLib's `Cuts/Basic.lean` (`Cut`, `weight`,
-`isSTCut`, `stMinCutValue`), specialized to unweighted multigraphs:
-the weight of a cut is the number of crossing edges, counted with
-multiplicity. -/
-
-/-- The crossing test, as a `Bool`, built with `Sym2.lift`. The
-symmetry argument is the *well-definedness obligation* of the lift, so
-a direction-sensitive crossing predicate cannot even be written down —
-this is what makes the model undirected by construction rather than by
-after-the-fact proof. -/
-def crossingB (S : Finset α) : Sym2 α → Bool :=
-  Sym2.lift ⟨fun a b => decide (a ∈ S) != decide (b ∈ S), fun _ _ => bne_comm ..⟩
-
-/-- Edge `e` crosses the vertex set `S` if exactly one endpoint lies
-in `S`. -/
-def Crossing (S : Finset α) (e : Sym2 α) : Prop := crossingB S e = true
-
-instance (S : Finset α) : DecidablePred (Crossing S) :=
-  fun e => inferInstanceAs (Decidable (crossingB S e = true))
-
-@[simp] lemma crossing_mk (S : Finset α) (a b : α) :
-    Crossing S s(a, b) ↔ ¬(a ∈ S ↔ b ∈ S) := by
-  show (decide (a ∈ S) != decide (b ∈ S)) = true ↔ _
-  simp only [bne_iff_ne, ne_eq, decide_eq_decide]
-
-/-- The value of the cut induced by `S`: the number of crossing edges,
-counted with multiplicity (GraphLib's `Cut.weight` with unit weights). -/
-def cutValue (g : MultiGraph α) (S : Finset α) : ℕ :=
-  g.edges.countP fun e => decide (Crossing S e)
-
-/-- `S` induces a (proper, global) cut of `g`: it consists of vertices,
-and both sides are nonempty. -/
-structure IsCut (g : MultiGraph α) (S : Finset α) : Prop where
-  /-- The cut set consists of vertices. -/
-  subset : S ⊆ g.verts
-  /-- The near side is nonempty. -/
-  nonempty : S.Nonempty
-  /-- The far side is nonempty. -/
-  proper : ∃ v ∈ g.verts, v ∉ S
-
-/-- The global minimum-cut value (GraphLib's `stMinCutValue` pattern:
-an `sInf` over achievable cut values, quantified over all cuts instead
-of `s`-`t` separators). -/
-noncomputable def minCutValue (g : MultiGraph α) : ℕ :=
-  sInf {c : ℕ | ∃ S : Finset α, g.IsCut S ∧ g.cutValue S = c}
-
-lemma minCutValue_le {g : MultiGraph α} {S : Finset α} (h : g.IsCut S) :
-    g.minCutValue ≤ g.cutValue S :=
-  Nat.sInf_le ⟨S, h, rfl⟩
-
-omit [DecidableEq α] in
-/-- Any graph with at least two vertices has a cut (a singleton). -/
-lemma exists_isCut (g : MultiGraph α) (h2 : 2 ≤ g.verts.card) :
-    ∃ S : Finset α, g.IsCut S := by
-  obtain ⟨a, b, ha, hb, hab⟩ :=
-    Finset.one_lt_card_iff.mp (show 1 < g.verts.card by omega)
-  refine ⟨{a}, Finset.singleton_subset_iff.mpr ha, Finset.singleton_nonempty a, b, hb, ?_⟩
-  simp [hab.symm]
-
-/-- The minimum cut value is achieved by some cut. -/
-lemma exists_minCut (g : MultiGraph α) (h2 : 2 ≤ g.verts.card) :
-    ∃ S : Finset α, g.IsCut S ∧ g.cutValue S = g.minCutValue := by
-  obtain ⟨S, hS⟩ := exists_isCut g h2
-  have hne : {c : ℕ | ∃ S : Finset α, g.IsCut S ∧ g.cutValue S = c}.Nonempty :=
-    ⟨g.cutValue S, S, hS, rfl⟩
-  exact Nat.sInf_mem hne
-
-lemma cutValue_le_length (g : MultiGraph α) (S : Finset α) :
-    g.cutValue S ≤ g.edges.length :=
-  List.countP_le_length
-
-/-- The minimum cut is at most the total edge count. -/
-lemma minCutValue_le_length (g : MultiGraph α) (h2 : 2 ≤ g.verts.card) :
-    g.minCutValue ≤ g.edges.length := by
-  obtain ⟨S, hS⟩ := exists_isCut g h2
-  exact le_trans (minCutValue_le hS) (cutValue_le_length g S)
-
-/-! ### Degrees and the handshake bound
-
-The key quantitative fact behind Karger's analysis: every vertex
-degree is at least the minimum-cut value (its singleton is a cut), so
-`n * minCut ≤ Σ deg = 2 * m`. Note `degree` is the *incidence* degree
-— `v ∈ e` for the unordered edge `e` — which is why the handshake
-identity below reads `2 * m` and not `m`. -/
-
-/-- The degree of `v`: the number of incident edges, with multiplicity. -/
-def degree (g : MultiGraph α) (v : α) : ℕ :=
-  g.edges.countP fun e => decide (v ∈ e)
-
-/-- In a loopless graph, the cut of a singleton is the degree. -/
-lemma cutValue_singleton (g : MultiGraph α) (hwf : g.WF) (v : α) :
-    g.cutValue {v} = g.degree v := by
-  unfold cutValue degree
-  refine List.countP_congr fun e he => ?_
-  have hnd := hwf.loopless e he
-  clear he
-  revert hnd
-  induction e with
-  | _ a b =>
-    intro hnd
-    rw [Sym2.mk_isDiag_iff] at hnd
-    simp only [crossing_mk, Finset.mem_singleton, Sym2.mem_iff]
-    grind
-
-/-- Each edge contributes exactly `2` to the sum of degrees: it has two
-distinct endpoints, both vertices. -/
-private lemma sum_incident_eq_two {V : Finset α} {e : Sym2 α}
-    (hmem : ∀ v ∈ e, v ∈ V) (hnd : ¬ e.IsDiag) :
-    (∑ v ∈ V, if v ∈ e then 1 else 0) = 2 := by
-  revert hmem hnd
-  induction e with
-  | _ a b =>
-    intro hmem hnd
-    rw [Sym2.mk_isDiag_iff] at hnd
-    have ha : a ∈ V := hmem a (Sym2.mem_mk_left a b)
-    have hb : b ∈ V := hmem b (Sym2.mem_mk_right a b)
-    have hfilter : {v ∈ V | v ∈ s(a, b)} = ({a, b} : Finset α) := by
-      ext x
-      simp only [Finset.mem_filter, Finset.mem_insert, Finset.mem_singleton,
-        Sym2.mem_iff]
-      constructor
-      · rintro ⟨-, h⟩; exact h
-      · rintro (rfl | rfl) <;> simp [ha, hb]
-    simp only [Finset.sum_boole, Nat.cast_id]
-    rw [hfilter, Finset.card_insert_of_notMem (by simp [hnd]),
-      Finset.card_singleton]
-
-private lemma sum_degree_aux (V : Finset α) (l : List (Sym2 α))
-    (hl : ∀ e ∈ l, (∀ v ∈ e, v ∈ V) ∧ ¬ e.IsDiag) :
-    (∑ v ∈ V, l.countP fun e => decide (v ∈ e)) = 2 * l.length := by
-  induction l with
-  | nil => simp
-  | cons e l ih =>
-    have he := hl e (by simp)
-    have hl' : ∀ e' ∈ l, (∀ v ∈ e', v ∈ V) ∧ ¬ e'.IsDiag :=
-      fun e' he' => hl e' (by simp [he'])
-    simp only [List.countP_cons, decide_eq_true_eq]
-    rw [Finset.sum_add_distrib, ih hl', sum_incident_eq_two he.1 he.2,
-      List.length_cons]
-    omega
-
-/-- **Handshake identity**: degrees sum to twice the edge count. -/
-lemma sum_degree (g : MultiGraph α) (hwf : g.WF) :
-    ∑ v ∈ g.verts, g.degree v = 2 * g.edges.length :=
-  sum_degree_aux g.verts g.edges fun e he =>
-    ⟨hwf.incidence e he, hwf.loopless e he⟩
-
-/-- Every degree bounds the minimum cut from above. -/
-lemma minCutValue_le_degree (g : MultiGraph α) (hwf : g.WF)
-    (h2 : 2 ≤ g.verts.card) {v : α} (hv : v ∈ g.verts) :
-    g.minCutValue ≤ g.degree v := by
-  rw [← cutValue_singleton g hwf v]
-  refine minCutValue_le ⟨Finset.singleton_subset_iff.mpr hv,
-    Finset.singleton_nonempty v, ?_⟩
-  obtain ⟨a, b, ha, hb, hab⟩ :=
-    Finset.one_lt_card_iff.mp (show 1 < g.verts.card by omega)
-  by_cases hav : a = v
-  · subst hav
-    exact ⟨b, hb, by simp [hab.symm]⟩
-  · exact ⟨a, ha, by simp [hav]⟩
-
-/-- The Karger counting bound: `n * minCut ≤ 2 * m`. -/
-lemma card_mul_minCutValue_le (g : MultiGraph α) (hwf : g.WF)
-    (h2 : 2 ≤ g.verts.card) :
-    g.verts.card * g.minCutValue ≤ 2 * g.edges.length := by
-  calc g.verts.card * g.minCutValue
-      = ∑ _v ∈ g.verts, g.minCutValue := by
-        rw [Finset.sum_const, smul_eq_mul]
-    _ ≤ ∑ v ∈ g.verts, g.degree v :=
-        Finset.sum_le_sum fun v hv => minCutValue_le_degree g hwf h2 hv
-    _ = 2 * g.edges.length := sum_degree g hwf
-
-/-! ### Contraction
-
-Ported from GraphLib's `Contractions/Basic.lean`: `redirect` is
-`redirectEdge` and `contractEdge` is `contract` (minus the parallel-
-edge deduplication, which Karger's multigraph analysis must not do).
-Redirection acts on endpoints through `Sym2.map`, exactly as in
-Weixuan's `Contractions.lean` (`def mapEdge : Edge α → Edge β :=
-Sym2.map π`); we merge one vertex into another instead of quotienting
-by a `Setoid`, so that the vertex *type* does not change and the
-contraction loop stays a plain recursion. -/
-
-/-- Redirect a vertex: `v` becomes `u`, everything else is unchanged
-(GraphLib's `redirectEdge`, per endpoint). -/
-def redirect (u v x : α) : α := if x = v then u else x
-
-lemma redirect_mem_erase {V : Finset α} {u v x : α}
-    (hu : u ∈ V) (hne : u ≠ v) (hx : x ∈ V) :
-    redirect u v x ∈ V.erase v := by
-  unfold redirect
-  split_ifs with h
-  · exact Finset.mem_erase.mpr ⟨hne, hu⟩
-  · exact Finset.mem_erase.mpr ⟨h, hx⟩
-
-/-- **Contract** `v` into `u`: remove `v` from the vertex set, redirect
-every edge touching `v` to `u`, and drop the resulting loops (the
-parallel copies of `s(u, v)` itself). Parallel edges are kept. -/
-def contractEdge (g : MultiGraph α) (u v : α) : MultiGraph α where
-  verts := g.verts.erase v
-  edges := (g.edges.map (Sym2.map (redirect u v))).filter fun e => !e.IsDiag
-
-@[simp] lemma verts_contractEdge (g : MultiGraph α) (u v : α) :
-    (g.contractEdge u v).verts = g.verts.erase v := rfl
-
-@[simp] lemma edges_contractEdge (g : MultiGraph α) (u v : α) :
-    (g.contractEdge u v).edges =
-      (g.edges.map (Sym2.map (redirect u v))).filter fun e => !e.IsDiag := rfl
-
-/-- Contraction preserves well-formedness. -/
-theorem WF.contractEdge {g : MultiGraph α} (hwf : g.WF) {u v : α}
-    (hu : u ∈ g.verts) (hne : u ≠ v) : (g.contractEdge u v).WF := by
-  constructor
-  · intro e' he' w hw
-    simp only [edges_contractEdge, List.mem_filter, List.mem_map] at he'
-    obtain ⟨⟨e, he, rfl⟩, -⟩ := he'
-    obtain ⟨x, hx, rfl⟩ := Sym2.mem_map.mp hw
-    exact redirect_mem_erase hu hne (hwf.incidence e he x hx)
-  · intro e' he'
-    simp only [edges_contractEdge, List.mem_filter] at he'
-    simpa using he'.2
-
-/-- Contraction removes exactly one vertex. -/
-lemma card_verts_contractEdge (g : MultiGraph α) {u v : α} (hv : v ∈ g.verts) :
-    (g.contractEdge u v).verts.card + 1 = g.verts.card := by
-  rw [verts_contractEdge]
-  exact Finset.card_erase_add_one hv
-
-/-- Contraction never increases the edge count. -/
-lemma length_edges_contractEdge_le (g : MultiGraph α) (u v : α) :
-    (g.contractEdge u v).edges.length ≤ g.edges.length :=
-  le_trans (List.length_filter_le _ _) (le_of_eq (List.length_map ..))
-
-/-- Transport of cut values along contraction: if membership in `S'`
-after redirection agrees pointwise with membership in `S`, the two cuts
-have the same value. Crossing edges are never dropped (a loop cannot
-cross), and dropped edges never cross. -/
-private lemma cutValue_contractEdge_of_pointwise {g : MultiGraph α}
-    (hwf : g.WF) {u v : α} {S' S : Finset α}
-    (hpt : ∀ x : α, redirect u v x ∈ S' ↔ x ∈ S) :
-    (g.contractEdge u v).cutValue S' = g.cutValue S := by
-  unfold cutValue
-  rw [edges_contractEdge, List.countP_filter, List.countP_map]
-  refine List.countP_congr fun e he => ?_
-  have hnd := hwf.loopless e he
-  clear he
-  revert hnd
-  induction e with
-  | _ a b =>
-    intro hnd
-    rw [Sym2.mk_isDiag_iff] at hnd
-    have h1 := hpt a
-    have h2 := hpt b
-    simp only [Function.comp_apply, Bool.and_eq_true, decide_eq_true_eq,
-      Sym2.map_mk, crossing_mk, Bool.not_eq_true', decide_eq_false_iff_not,
-      Sym2.mk_isDiag_iff]
-    grind
-
-/-- **Cut lifting** (soundness of contraction): every cut of the
-contracted graph comes from a cut of `g` with the *same* value. Hence
-contraction can only increase the minimum-cut value. -/
-lemma exists_isCut_lift {g : MultiGraph α} (hwf : g.WF) {u v : α}
-    (hv : v ∈ g.verts) {S' : Finset α}
-    (h : (g.contractEdge u v).IsCut S') :
-    ∃ S : Finset α, g.IsCut S ∧ g.cutValue S = (g.contractEdge u v).cutValue S' := by
-  have hsub : S' ⊆ g.verts.erase v := h.subset
-  have hvS' : v ∉ S' := fun hmem => Finset.notMem_erase v g.verts (hsub hmem)
-  obtain ⟨w, hw, hwS'⟩ := h.proper
-  rw [verts_contractEdge] at hw
-  have hw' := Finset.mem_erase.mp hw
-  by_cases hu' : u ∈ S'
-  · refine ⟨insert v S', ⟨?_, ⟨v, Finset.mem_insert_self v S'⟩, w, hw'.2, ?_⟩, ?_⟩
-    · exact Finset.insert_subset_iff.mpr
-        ⟨hv, hsub.trans (Finset.erase_subset ..)⟩
-    · simp [Finset.mem_insert, hw'.1, hwS']
-    · refine (cutValue_contractEdge_of_pointwise hwf fun x => ?_).symm
-      by_cases hxv : x = v <;>
-        simp [redirect, hxv, hu', Finset.mem_insert, hvS']
-  · refine ⟨S', ⟨hsub.trans (Finset.erase_subset ..), h.nonempty, w, hw'.2, hwS'⟩, ?_⟩
-    refine (cutValue_contractEdge_of_pointwise hwf fun x => ?_).symm
-    by_cases hxv : x = v <;> simp [redirect, hxv, hu', hvS']
-
-/-- **Cut survival**: contracting an edge that does *not* cross `S`
-keeps `S` a cut of the same value (with `v` removed from it). -/
-lemma isCut_contractEdge_of_notCrossing {g : MultiGraph α} (hwf : g.WF)
-    {u v : α} (hu : u ∈ g.verts) (hne : u ≠ v) {S : Finset α}
-    (hS : g.IsCut S) (hnc : ¬Crossing S s(u, v)) :
-    (g.contractEdge u v).IsCut (S.erase v) ∧
-      (g.contractEdge u v).cutValue (S.erase v) = g.cutValue S := by
-  have hiff : u ∈ S ↔ v ∈ S := by simpa using hnc
-  constructor
-  · refine ⟨?_, ?_, ?_⟩
-    · rw [verts_contractEdge]
-      exact Finset.erase_subset_erase v hS.subset
-    · by_cases hvS : v ∈ S
-      · exact ⟨u, Finset.mem_erase.mpr ⟨hne, hiff.mpr hvS⟩⟩
-      · rw [Finset.erase_eq_of_notMem hvS]; exact hS.nonempty
-    · obtain ⟨w, hw, hwS⟩ := hS.proper
-      rw [verts_contractEdge]
-      by_cases hwv : w = v
-      · subst hwv
-        exact ⟨u, Finset.mem_erase.mpr ⟨hne, hu⟩,
-          fun hmem => hwS (hiff.mp (Finset.mem_of_mem_erase hmem))⟩
-      · exact ⟨w, Finset.mem_erase.mpr ⟨hwv, hw⟩,
-          fun hmem => hwS (Finset.mem_of_mem_erase hmem)⟩
-  · refine cutValue_contractEdge_of_pointwise hwf fun x => ?_
-    by_cases hxv : x = v <;>
-      simp [redirect, hxv, Finset.mem_erase, hne, hiff]
-
-/-- Contraction never decreases the minimum-cut value. -/
-lemma minCutValue_le_contractEdge {g : MultiGraph α} (hwf : g.WF) {u v : α}
-    (hv : v ∈ g.verts) (h3 : 3 ≤ g.verts.card) :
-    g.minCutValue ≤ (g.contractEdge u v).minCutValue := by
-  have h2' : 2 ≤ (g.contractEdge u v).verts.card := by
-    have := card_verts_contractEdge (u := u) g hv
-    omega
-  obtain ⟨S', hS', hval⟩ := exists_minCut _ h2'
-  obtain ⟨S, hS, hval2⟩ := exists_isCut_lift hwf hv hS'
-  rw [← hval, ← hval2]
-  exact minCutValue_le hS
-
-/-- Contracting an edge that avoids a fixed minimum cut preserves the
-minimum-cut value exactly. -/
-lemma minCutValue_contractEdge_of_notCrossing {g : MultiGraph α} (hwf : g.WF)
-    {u v : α} (hu : u ∈ g.verts) (hv : v ∈ g.verts) (hne : u ≠ v)
-    (h3 : 3 ≤ g.verts.card) {S : Finset α} (hS : g.IsCut S)
-    (hmin : g.cutValue S = g.minCutValue) (hnc : ¬Crossing S s(u, v)) :
-    (g.contractEdge u v).minCutValue = g.minCutValue := by
-  obtain ⟨hcut', hval'⟩ := isCut_contractEdge_of_notCrossing hwf hu hne hS hnc
-  refine le_antisymm ?_ (minCutValue_le_contractEdge hwf hv h3)
-  calc (g.contractEdge u v).minCutValue
-      ≤ (g.contractEdge u v).cutValue (S.erase v) := minCutValue_le hcut'
-    _ = g.cutValue S := hval'
-    _ = g.minCutValue := hmin
-
-/-! ### Two-vertex graphs
-
-When two supervertices remain, *every* edge crosses *every* cut, so the
-edge count is exactly the minimum-cut value. -/
-
-/-- In a well-formed graph on two vertices, every cut consists of all
-the edges. -/
-lemma cutValue_of_card_two {g : MultiGraph α} (hwf : g.WF)
-    (hcard : g.verts.card = 2) {S : Finset α} (hS : g.IsCut S) :
-    g.cutValue S = g.edges.length := by
-  unfold cutValue
-  rw [List.countP_eq_length]
-  intro e he
-  have hmem := hwf.incidence e he
-  have hnd := hwf.loopless e he
-  clear he
-  revert hmem hnd
-  induction e with
-  | _ a b =>
-    intro hmem hnd
-    rw [Sym2.mk_isDiag_iff] at hnd
-    have h1 : a ∈ g.verts := hmem a (Sym2.mem_mk_left a b)
-    have h2 : b ∈ g.verts := hmem b (Sym2.mem_mk_right a b)
-    obtain ⟨x, y, hxy, hV⟩ := Finset.card_eq_two.mp hcard
-    obtain ⟨s, hsS⟩ := hS.nonempty
-    obtain ⟨w, hwV, hwS⟩ := hS.proper
-    have hsV := hS.subset hsS
-    rw [hV] at h1 h2 hsV hwV
-    simp only [Finset.mem_insert, Finset.mem_singleton] at h1 h2 hsV hwV
-    simp only [decide_eq_true_eq, crossing_mk]
-    grind
-
-/-- On two vertices the edge count *is* the minimum-cut value. -/
-lemma length_eq_minCutValue_of_card_two {g : MultiGraph α} (hwf : g.WF)
-    (hcard : g.verts.card = 2) :
-    g.edges.length = g.minCutValue := by
-  obtain ⟨S, hS, hval⟩ := exists_minCut g (le_of_eq hcard.symm)
-  rw [← hval, cutValue_of_card_two hwf hcard hS]
-
-/-! ### Contraction of a listed edge
-
-Contracting `s(u, v)` has to keep one of the two endpoints, and the two
-choices give *isomorphic but not equal* graphs — so contraction is not
-a function of the unordered edge alone. GraphLib resolves this by
-quotienting the vertex type by a `Setoid`, which changes the vertex
-type at every round and would stop the contraction loop from being a
-plain recursion. We instead fix the survivor with the linear order on
-`α` (keep `inf`, merge away `sup`). Only this executable layer needs
-`[LinearOrder α]`; the cut theory above needs just `[DecidableEq α]`. -/
-
-section Indexed
-variable [LinearOrder α]
-
-omit [DecidableEq α] in
-/-- An edge is recovered from its endpoints in order. -/
-theorem sym2_mk_inf_sup (e : Sym2 α) : s(e.inf, e.sup) = e := by
-  induction e with
-  | _ a b =>
-    rcases le_total a b with h | h <;>
-      simp [Sym2.inf_mk, Sym2.sup_mk, h, Sym2.eq_swap]
-
-omit [DecidableEq α] in
-theorem sym2_inf_mem (e : Sym2 α) : e.inf ∈ e := by
-  induction e with
-  | _ a b => rcases le_total a b with h | h <;> simp [Sym2.inf_mk, h]
-
-omit [DecidableEq α] in
-theorem sym2_sup_mem (e : Sym2 α) : e.sup ∈ e := by
-  induction e with
-  | _ a b => rcases le_total a b with h | h <;> simp [Sym2.sup_mk, h]
-
-omit [DecidableEq α] in
-theorem sym2_inf_ne_sup {e : Sym2 α} (h : ¬ e.IsDiag) : e.inf ≠ e.sup := by
-  induction e with
-  | _ a b =>
-    rw [Sym2.mk_isDiag_iff] at h
-    rcases lt_or_gt_of_ne h with hlt | hlt <;>
-      simp [Sym2.inf_mk, Sym2.sup_mk] <;> exact h
-
-/-- Contract the undirected edge `e`, merging its larger endpoint into
-its smaller one. -/
-def contract' (g : MultiGraph α) (e : Sym2 α) : MultiGraph α :=
-  g.contractEdge e.inf e.sup
-
-/-- Contract the `i`-th edge of the list. -/
-def contract (g : MultiGraph α) (i : Fin g.edges.length) : MultiGraph α :=
-  g.contract' g.edges[(i : ℕ)]
-
-lemma WF.contract {g : MultiGraph α} (hwf : g.WF) (i : Fin g.edges.length) :
-    (g.contract i).WF :=
-  hwf.contractEdge
-    (hwf.incidence _ (List.getElem_mem _) _ (sym2_inf_mem _))
-    (sym2_inf_ne_sup (hwf.loopless _ (List.getElem_mem _)))
-
-lemma card_verts_contract {g : MultiGraph α} (hwf : g.WF)
-    (i : Fin g.edges.length) :
-    (g.contract i).verts.card + 1 = g.verts.card :=
-  card_verts_contractEdge g
-    (hwf.incidence _ (List.getElem_mem _) _ (sym2_sup_mem _))
-
-lemma length_edges_contract_le (g : MultiGraph α) (i : Fin g.edges.length) :
-    (g.contract i).edges.length ≤ g.edges.length :=
-  length_edges_contractEdge_le g _ _
-
-lemma minCutValue_le_contract {g : MultiGraph α} (hwf : g.WF)
-    (i : Fin g.edges.length) (h3 : 3 ≤ g.verts.card) :
-    g.minCutValue ≤ (g.contract i).minCutValue :=
-  minCutValue_le_contractEdge hwf
-    (hwf.incidence _ (List.getElem_mem _) _ (sym2_sup_mem _)) h3
-
-end Indexed
-
-end MultiGraph
 
 /-! ## Algorithm -/
 
@@ -644,28 +160,22 @@ lemma contractAuxT_fst {M} [Monad M] [LawfulMonad M] [RandMonad M]
     · simp only [contractAuxT, contractAux, dif_pos h, map_bind, ih]
     · simp [contractAuxT, contractAux, dif_neg h]
 
-/-- The cut reported by a finished run: the set of original vertices
-that were merged into the same supervertex as the smallest vertex.
-(The complementary fibre induces the same cut.) -/
-def cutOf (g : MultiGraph α) (r : α → α) : Finset α :=
-  if h : g.verts.Nonempty then
-    g.verts.filter fun x => r x = r (g.verts.min' h)
-  else ∅
 
 /-- **Karger's algorithm.** Contract uniformly random edges until two
 supervertices remain, then return the **cut** they induce: the set of
 original vertices merged into one of the two surviving supervertices.
 This is the textbook statement — the algorithm finds a cut, and
-`cutValue` of it is the value reported by `kargerValue`. -/
+`cutValue` of it is the value reported by `valueRun`. -/
 def Karger {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
-    (g : MultiGraph α) : M (Finset α) := do
-  let (_, r) ← contractAuxT (g.verts.card - 2) g id
-  pure (cutOf g r)
+    (g : MultiGraph α) : M (Finset α × ℕ) := do
+  let p ← contractAuxT (g.verts.card - 2) g id
+  pure (cutOf g p.2, p.1.edges.length)
 
-/-- The value-only version: report the number of surviving edges. This
-is the engine the analysis runs on; `Karger` adds the bookkeeping that
-turns the number into an actual cut. -/
-def kargerValue {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
+/-- The value-only run: the number of surviving edges, with the cut
+bookkeeping erased. This is the form the analysis inducts over;
+`karger_value_eq` identifies it with the second component of `Karger`,
+and `contractAuxT_fst` is what lets every bound proved here transfer. -/
+private def valueRun {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     (g : MultiGraph α) : M ℕ := do
   let g' ← contractAux (g.verts.card - 2) g
   pure g'.edges.length
@@ -675,7 +185,7 @@ def kargerValue {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
 -- ----------------------------------------
 
 -- IO version (executable, untimed)
-def kargerValue_IO : MultiGraph ℕ → IO ℕ := kargerValue
+def Karger_IO : MultiGraph ℕ → IO (Finset ℕ × ℕ) := Karger
 
 /-- Demo graph: two triangles joined by a single bridge — the global
 minimum cut is `1` (the bridge). -/
@@ -683,22 +193,22 @@ def kargerDemo : MultiGraph ℕ where
   verts := {0, 1, 2, 3, 4, 5}
   edges := [s(0, 1), s(1, 2), s(2, 0), s(3, 4), s(4, 5), s(5, 3), s(2, 3)]
 
-#eval kargerValue_IO kargerDemo
+#eval Karger_IO kargerDemo
 
 -- PMF version (noncomputable specification)
-noncomputable example : MultiGraph ℕ → PMF ℕ := kargerValue
+noncomputable example : MultiGraph ℕ → PMF (Finset ℕ × ℕ) := Karger
 
 -- ----------------------------------------
 -- Monad transformer version (timed)
 -- ----------------------------------------
 
 -- IO timed version (executable)
-def kargerValue_IO_Timed : MultiGraph ℕ → TimeMT ℕ IO ℕ := kargerValue
+def Karger_IO_Timed : MultiGraph ℕ → TimeMT ℕ IO (Finset ℕ × ℕ) := Karger
 
-#eval (kargerValue_IO_Timed kargerDemo).run
+#eval (Karger_IO_Timed kargerDemo).run
 
 -- PMF timed version (noncomputable specification)
-noncomputable example : MultiGraph ℕ → TimeMT ℕ PMF ℕ := kargerValue
+noncomputable example : MultiGraph ℕ → TimeMT ℕ PMF (Finset ℕ × ℕ) := Karger
 
 /-! ## Helper lemmas for the analysis
 
@@ -741,12 +251,12 @@ private lemma sum_map_ite_zero {β : Type} (p : β → Prop) [DecidablePred p]
 -- cross-multiplication) now lives in `ARA.Infrastructure.Tactics`;
 -- Schwartz–Zippel is its second client.
 
-/-- The arithmetic core of kargerValue's induction step: if the current
+/-- The arithmetic core of valueRun's induction step: if the current
 graph has `m > 0` edges and `k + 3` vertices, and the fixed minimum cut
 has `c ≤ m` crossing edges with `c * (k + 3) ≤ 2 * m` (the counting
 bound), then picking a non-crossing edge and succeeding afterwards with
 probability `2 / ((k+2)(k+1))` beats `2 / ((k+3)(k+2))`. -/
-private lemma kargerValue_step_bound {m c k : ℕ} (hm : 0 < m) (hc : c ≤ m)
+private lemma valueRun_step_bound {m c k : ℕ} (hm : 0 < m) (hc : c ≤ m)
     (hbound : c * (k + 3) ≤ 2 * m) :
     (2 : ℝ≥0∞) / (((k + 3) * (k + 2) : ℕ) : ℝ≥0∞) ≤
       ((m : ℕ) : ℝ≥0∞)⁻¹ *
@@ -774,11 +284,11 @@ private lemma kargerValue_step_bound {m c k : ℕ} (hm : 0 < m) (hc : c ≤ m)
     _ ≤ 2 * (k + 2) * (d * (k + 3)) := h2
     _ = d * 2 * ((k + 3) * (k + 2)) := by ring
 
-/-! ## Correctness: kargerValue never undershoots
+/-! ## Correctness: valueRun never undershoots
 
-The output of `kargerValue` is always the value of *some* cut of the input
+The output of `valueRun` is always the value of *some* cut of the input
 graph, hence at least the minimum-cut value. Together with the success
-probability below, this makes `kargerValue` a one-sided Monte Carlo
+probability below, this makes `valueRun` a one-sided Monte Carlo
 algorithm: taking the minimum over repetitions only improves the
 estimate and equals `minCutValue` with high probability. -/
 
@@ -809,24 +319,62 @@ private lemma support_contractAux
       exact minCutValue_le_length g (by omega)
 
 /-- **Correctness (one-sided error).** Over any `LawfulRandMonad`,
-every value `kargerValue` can output is at least the true minimum-cut value:
+every value `valueRun` can output is at least the true minimum-cut value:
 the algorithm never undershoots. -/
-theorem kargerValue_correct
+private theorem valueRun_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    ∀ c ∈ 𝒟[kargerValue g | M].support,
+    ∀ c ∈ 𝒟[valueRun g | M].support,
       g.minCutValue ≤ c := by
   intro c hc
-  unfold kargerValue at hc
+  unfold valueRun at hc
   obtain ⟨g', hg', rfl⟩ := mem_support_toPMF_bind_pure.mp hc
   exact support_contractAux (g.verts.card - 2) g hwf (by omega) g' hg'
 
-/-- Correctness at `M = PMF`. -/
-theorem kargerValue_correct_pmf (g : MultiGraph α) (hwf : g.WF)
-    (h2 : 2 ≤ g.verts.card) :
-    ∀ c ∈ (kargerValue g : PMF ℕ).support, g.minCutValue ≤ c :=
-  kargerValue_correct (M := PMF) g hwf h2
+/-! ## The cut that Karger returns
+
+`valueRun` bounds a *number*; the theorems below promote it to the
+*cut* that `Karger` actually outputs. Everything rests on one bridge
+(`cutValue_cutOf`): the cut a run returns has exactly the value that
+run reports. The probability statements then transfer verbatim. -/
+
+/-- The tracking invariant survives the whole contraction loop. -/
+private lemma support_contractAuxT
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α} (hwf₀ : g₀.WF) :
+    ∀ (k : ℕ) (g : MultiGraph α) (r : α → α), g.WF → g.verts.card = k + 2 →
+      Tracks g₀ g r →
+      ∀ p ∈ (inst.toPMF (contractAuxT k g r : M (MultiGraph α × (α → α)))).support,
+        p.1.WF ∧ 2 ≤ p.1.verts.card ∧ (p.1.verts.card = 2 ∨ p.1.edges = []) ∧
+          Tracks g₀ p.1 p.2 := by
+  intro k
+  induction k with
+  | zero =>
+    intro g r hwf hcard ht p hp
+    rw [contractAuxT.eq_1, inst.toPMF_pure, pmf_pure_eq] at hp
+    obtain rfl : p = (g, r) := by simpa [PMF.support_pure] using hp
+    show g.WF ∧ 2 ≤ g.verts.card ∧ (g.verts.card = 2 ∨ g.edges = []) ∧
+      Tracks g₀ g r
+    exact ⟨hwf, by omega, Or.inl hcard, ht⟩
+  | succ k ih =>
+    intro g r hwf hcard ht p hp
+    by_cases hm : 0 < g.edges.length
+    · rw [contractAuxT.eq_2, dif_pos hm] at hp
+      simp only [toPMF_simp, inst.toPMF_randFin] at hp
+      obtain ⟨i, -, hi⟩ := (PMF.mem_support_bind_iff _ _ _).mp hp
+      have hu : (g.edges[(i : ℕ)]).inf ∈ g.verts :=
+        hwf.incidence _ (List.getElem_mem _) _ (sym2_inf_mem _)
+      have hne : (g.edges[(i : ℕ)]).inf ≠ (g.edges[(i : ℕ)]).sup :=
+        sym2_inf_ne_sup (hwf.loopless _ (List.getElem_mem _))
+      exact ih (g.contract i) _ (hwf.contract i)
+        (by have := card_verts_contract hwf i; omega)
+        (ht.contractEdge hwf₀ hwf hu hne) p hi
+    · rw [contractAuxT.eq_2, dif_neg hm, inst.toPMF_pure, pmf_pure_eq] at hp
+      obtain rfl : p = (g, r) := by simpa [PMF.support_pure] using hp
+      show g.WF ∧ 2 ≤ g.verts.card ∧ (g.verts.card = 2 ∨ g.edges = []) ∧
+        Tracks g₀ g r
+      exact ⟨hwf, by omega, Or.inr (List.eq_nil_of_length_eq_zero (by omega)), ht⟩
 
 /-! ## Success probability -/
 
@@ -924,7 +472,7 @@ private lemma success_contractAux
         rw [hcard] at this
         calc g.minCutValue * (k + 3) = (k + 1 + 2) * g.minCutValue := by ring
           _ ≤ 2 * g.edges.length := this
-      have := kargerValue_step_bound hm hc_le hbound
+      have := valueRun_step_bound hm hc_le hbound
       rw [show ((k + 1 + 2) * (k + 1 + 1) : ℕ) = ((k + 3) * (k + 2) : ℕ) by ring]
       exact this
     · -- No edges left: the graph is edgeless, so its min cut is `0` and
@@ -939,17 +487,17 @@ private lemma success_contractAux
         (ENNReal.natCast_ne_top _), one_mul]
       exact_mod_cast (by nlinarith : 2 ≤ (k + 1 + 2) * (k + 1 + 1))
 
-/-- **Success probability of kargerValue's algorithm.** Over any
+/-- **Success probability of valueRun's algorithm.** Over any
 `LawfulRandMonad`, a single run outputs the exact minimum-cut value
 with probability at least `2 / (n (n - 1))`, where `n = g.verts.card`.
 Consequently `O(n² log n)` independent repetitions find a minimum cut
 with high probability. -/
-theorem kargerValue_success_prob
+private theorem valueRun_success_prob
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      ℙ[kargerValue g = g.minCutValue | M] := by
+      ℙ[valueRun g = g.minCutValue | M] := by
   have hmain := success_contractAux (M := M) (g.verts.card - 2) g hwf (by omega)
   have harith : (g.verts.card - 2 + 2) * (g.verts.card - 2 + 1) =
       g.verts.card * (g.verts.card - 1) := by
@@ -958,12 +506,85 @@ theorem kargerValue_success_prob
   rw [harith] at hmain
   exact hmain
 
-/-- Success probability at `M = PMF`. -/
-theorem kargerValue_success_prob_pmf (g : MultiGraph α) (hwf : g.WF)
-    (h2 : 2 ≤ g.verts.card) :
+/-! ### Karger returns a minimum cut
+
+The two theorems the textbook states. Both are obtained from the
+`valueRun` analysis by *transport*, not by re-induction: `Karger`
+and `valueRun` are two read-outs of the same run
+(`contractAuxT`), and `cutValue_cutOf` says they agree on its
+support, so `prob_map_congr_of_support` moves the bound across. -/
+
+private lemma karger_eq_map {M} [Monad M] [LawfulMonad M] [RandMonad M]
+    [MonadCost ℕ M] (g : MultiGraph α) :
+    (Karger g : M (Finset α × ℕ))
+      = (fun p => (cutOf g p.2, p.1.edges.length)) <$>
+          contractAuxT (g.verts.card - 2) g id := by
+  rw [map_eq_bind_pure_comp]
+  rfl
+
+private lemma valueRun_eq_map {M} [Monad M] [LawfulMonad M] [RandMonad M]
+    [MonadCost ℕ M] (g : MultiGraph α) :
+    (valueRun g : M ℕ)
+      = (fun p => p.1.edges.length) <$> contractAuxT (g.verts.card - 2) g id := by
+  calc (valueRun g : M ℕ)
+      = contractAux (g.verts.card - 2) g >>= fun g' => pure g'.edges.length := rfl
+    _ = (Prod.fst <$> contractAuxT (g.verts.card - 2) g id) >>=
+          fun g' => pure g'.edges.length := by rw [contractAuxT_fst]
+    _ = (fun p => p.1.edges.length) <$>
+          contractAuxT (g.verts.card - 2) g id := by
+        simp only [map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_def]
+
+/-- Everything a single run guarantees, unconditionally: the first
+component is a genuine cut of `g`, the second is its value, and that
+value never undershoots the minimum. -/
+theorem karger_isCut
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
+    (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
+    ∀ o ∈ 𝒟[Karger g | M].support,
+      g.IsCut o.1 ∧ g.cutValue o.1 = o.2 ∧ g.minCutValue ≤ o.2 := by
+  intro o ho
+  unfold Karger at ho
+  obtain ⟨p, hp, rfl⟩ := mem_support_toPMF_bind_pure.mp ho
+  obtain ⟨hwf', h2', hend, ht⟩ :=
+    support_contractAuxT hwf (g.verts.card - 2) g id hwf (by omega)
+      (Tracks.refl g hwf) p hp
+  have hne : g.verts.Nonempty := Finset.card_pos.mp (by omega)
+  have hcut := isCut_cutOf ht h2' hne
+  have hval := cutValue_cutOf hwf' ht hend hne
+  exact ⟨hcut, hval, hval ▸ minCutValue_le hcut⟩
+
+/-- **Karger's theorem.** A single run returns an actual *minimum cut*
+with probability at least `2 / (n (n - 1))`. -/
+theorem karger_success_prob
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
+    (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      (kargerValue g : PMF ℕ) g.minCutValue :=
-  kargerValue_success_prob (M := PMF) g hwf h2
+      ℙ[Karger g ∈ {o | o.2 = g.minCutValue} | M] := by
+  rw [karger_eq_map]
+  rw [prob_map_congr_of_support (t := ({g.minCutValue} : Set ℕ))
+    (h := fun p => p.1.edges.length) _ ?_]
+  · rw [← valueRun_eq_map, prob_singleton]
+    exact valueRun_success_prob g hwf h2
+  · intro p hp
+    rw [Set.mem_setOf_eq, Set.mem_singleton_iff]
+
+/-- **Amplified Karger.** Run the algorithm `k` times and keep the
+cut of smallest value: the result is an actual minimum cut with
+probability at least `1 − (1 − 2/(n(n−1)))^k`, so `O(n² log n)`
+repetitions find one with high probability. Selecting by the reported
+value (`argmin Prod.snd`) costs nothing — the run already computed it. -/
+theorem karger_amplified
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
+    (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (k : ℕ) :
+    1 - (1 - 2 / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞)) ^ k ≤
+      ℙ[amplify (argmin Prod.snd) k (Karger g)
+          ∈ {o | o.2 = g.minCutValue} | M] :=
+  amplify_argmin_success
+    (fun o ho => (karger_isCut g hwf h2 o ho).2.2)
+    (karger_success_prob g hwf h2) k
 
 /-! ## Complexity
 
@@ -1010,69 +631,68 @@ private lemma expected_cost_contractAux
     · rw [contractAux.eq_2, dif_neg hm, expected_cost_toPMF_pure]
       exact bot_le
 
-/-- **Expected complexity of kargerValue's algorithm.** With one tick per
-edge scanned during a contraction pass, running `kargerValue` on a graph
+/-- The tracked loop costs exactly what the untracked one costs:
+bookkeeping is pure post-processing (`expected_cost_toPMF_map`). -/
+private lemma expected_cost_contractAuxT
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (k : ℕ) (g : MultiGraph α) (r : α → α) :
+    𝔼_runtime[(contractAuxT k g r : TimeMT ℕ M (MultiGraph α × (α → α)))] ≤
+      (k : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
+  rw [← expected_cost_toPMF_map Prod.fst
+    (contractAuxT k g r : TimeMT ℕ M (MultiGraph α × (α → α)))]
+  rw [show (Prod.fst <$> (contractAuxT k g r : TimeMT ℕ M _)) =
+      (contractAux k g : TimeMT ℕ M (MultiGraph α)) from contractAuxT_fst k g r]
+  exact expected_cost_contractAux k g
+
+/-- **Expected complexity of Karger's algorithm.** With one tick per
+edge scanned during a contraction pass, running `Karger` on a graph
 with `n` vertices and `m` edges costs at most `(n - 2) * m` in
 expectation — for arbitrary inputs. -/
-theorem kargerValue_cost_le
+theorem karger_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) :
-    𝔼_runtime[kargerValue g | M] ≤
+    𝔼_runtime[Karger g | M] ≤
       ((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
-  unfold kargerValue
+  unfold Karger
   rw [expected_cost_toPMF_bind]
   simp only [expected_cost_toPMF_pure, mul_zero, tsum_zero, add_zero]
-  exact expected_cost_contractAux _ g
+  exact expected_cost_contractAuxT _ g _
 
 /-- Finiteness of the expected cost — a free corollary of the
 `(n - 2) m` bound. -/
-lemma expected_cost_kargerValue_ne_top
+lemma expected_cost_karger_ne_top
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (g : MultiGraph α) :
-    𝔼_runtime[kargerValue g | M] ≠ ⊤ :=
+    𝔼_runtime[Karger g | M] ≠ ⊤ :=
   ne_top_of_le_ne_top
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
-    (kargerValue_cost_le g)
+    (karger_cost_le g)
 
 /-- Real-valued corollary: the expected cost is at most `(n - 2) * m`. -/
-theorem kargerValue_cost_le_real
+theorem karger_cost_le_real
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (g : MultiGraph α) :
-    𝔼ℝ_runtime[kargerValue g | M] ≤
+    𝔼ℝ_runtime[Karger g | M] ≤
       ((g.verts.card - 2 : ℕ) : ℝ) * (g.edges.length : ℝ) := by
   have := ENNReal.toReal_mono
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
-    (kargerValue_cost_le (M := M) g)
+    (karger_cost_le (M := M) g)
   rw [ENNReal.toReal_mul, ENNReal.toReal_natCast, ENNReal.toReal_natCast] at this
   exact this
 
 /-! ## Amplification: repetition finds the minimum cut
 
 A single contraction run succeeds with probability only `Ω(1/n²)`, but
-kargerValue is one-sided — outputs never undershoot — so the *minimum* over
-independent runs succeeds as soon as any single run does. The generic
-`amplify` combinator turns this into a theorem. -/
-
-/-- **Amplified kargerValue.** Run the contraction algorithm `k` times and
-keep the smallest cut value found: the result is the exact minimum-cut
-value with probability at least `1 − (1 − 2/(n(n−1)))^k`, so the
-failure probability decays geometrically and `O(n² log n)` repetitions
-find a minimum cut with high probability. -/
-theorem kargerValue_amplified
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
-    (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (k : ℕ) :
-    1 - (1 - 2 / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞)) ^ k ≤
-      ℙ[amplify min k (kargerValue g) = g.minCutValue | M] :=
-  amplify_min_success (fun c hc => kargerValue_correct g hwf h2 c hc)
-    (kargerValue_success_prob g hwf h2) k
+Karger is one-sided — the reported value never undershoots — so keeping
+the best cut over independent runs succeeds as soon as any single run
+does. The generic `amplify` combinator turns this into a theorem. -/
 
 /-- Amplified cost: `k + 1` runs cost at most `k + 1` times the
 single-run bound `(n − 2) m`. -/
-theorem kargerValue_amplified_cost_le
+theorem karger_amplified_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) (k : ℕ) :
-    𝔼_runtime[amplify min (k + 1) (kargerValue g) | M] ≤
+    𝔼_runtime[amplify (argmin Prod.snd) (k + 1) (Karger g) | M] ≤
       (k + 1 : ℝ≥0∞) * (((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞)) := by
   rw [expected_cost_amplify]
-  exact mul_le_mul' le_rfl (kargerValue_cost_le g)
+  exact mul_le_mul' le_rfl (karger_cost_le g)
 
 end ARA

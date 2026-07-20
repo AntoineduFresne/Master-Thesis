@@ -18,6 +18,7 @@ import ARA.Infrastructure.Complexity.TailBounds
 import ARA.Infrastructure.Correctness.Correctness
 import ARA.Infrastructure.Correctness.Amplify
 import ARA.Helpers.Partition
+import ARA.Helpers.MultiGraph
 import ARA.Helpers.HarmonicSums
 import ARA.Algorithms.Tutorial
 import ARA.Algorithms.Quicksort.Quicksort

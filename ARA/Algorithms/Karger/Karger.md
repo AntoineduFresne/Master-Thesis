@@ -54,12 +54,17 @@ proportional to its multiplicity.
 1. Repeat $n - 2$ times (stopping early if no edge remains): draw an
    edge $e$ uniformly from the current edge multiset and replace the
    current graph by its contraction along $e$.
-2. Return the number of remaining edges.
+2. Return the **cut** induced by the surviving supervertices together
+   with its value: the pair $(S, c)$ where $S \subseteq V$ is the set
+   of original vertices merged into one of the two remaining
+   supervertices, and $c$ is the number of remaining edges.
 
-When no early stop occurs, two supervertices remain; each
-supervertex is a set of original vertices, and the surviving edges
-are exactly the original edges crossing that two-set partition — so
-the returned number is the value of a cut of $G$.
+Each supervertex is a set of original vertices, and when two remain
+the surviving edges are exactly the original edges crossing that
+two-set partition — so the reported $c$ *is* $w(S)$ (Lemma 1' below),
+computed for free rather than recounted. The analysis inducts on $c$
+and the bridge promotes every statement about it to a statement about
+the cut $S$ itself.
 
 **Cost model.** Each contraction round costs the number of edges of
 the current graph (the pass that redirects and filters the edge
@@ -78,9 +83,23 @@ loops (copies of $\{u,v\}$) never cross: $w_G(S) = w_{G/e}(S')$. Both
 sides of $S$ are nonempty because both sides of $S'$ are.
 $\blacksquare$
 
-**Theorem 1 (never undershoots).** Every value the algorithm can
-output is $\ge \lambda(G)$: for all $c$,
-$$\Pr[\mathrm{Karger}(G) = c] > 0 \implies c \ge \lambda(G).$$
+**Theorem 1 (the output is a cut).** On every run the output $(S,c)$
+satisfies: $S$ is a genuine cut of $G$ ($\emptyset \ne S \subsetneq V$),
+$c = w(S)$, and $c \ge \lambda(G)$ — the algorithm never undershoots.
+
+**Lemma 1' (the bridge).** Let $\rho : V \to V$ send each original
+vertex to the supervertex holding it at the end of a run. Then every
+cut $S'$ of the final graph pulls back along $\rho$ to a cut of $G$
+of the *same value*, and consequently
+$$w(S) = c$$
+on every run: the returned cut has exactly the value the run reports.
+
+*Proof.* Induction on the rounds. The base case is $\rho = \mathrm{id}$.
+For the step, contracting $\{u,v\}$ replaces $\rho$ by
+$(\text{redirect } v \mapsto u) \circ \rho$, and Lemma 1 applied to
+the pullback of $S'$ gives equality of the two cut values. At the end
+two supervertices remain, so by Section 2 every cut of the final graph
+has value equal to its edge count. $\blacksquare$
 
 *Proof.* By induction on the number of rounds, using Lemma 1: the
 minimum cut value never decreases under contraction, and at the end
@@ -101,9 +120,12 @@ cross $S$, then (the image of) $S$ is a cut of $G/e$ with the same
 value. Together with Lemma 1: contracting a non-crossing edge
 preserves $\lambda$ exactly when $S$ is minimum.
 
-**Theorem 2 (success probability).** For $n \ge 2$,
-$$\Pr\bigl[\mathrm{Karger}(G) = \lambda(G)\bigr]
+**Theorem 2 (success probability).** For $n \ge 2$, the algorithm
+returns an actual *minimum cut* with probability
+$$\Pr\bigl[w(\mathrm{Karger}(G)) = \lambda(G)\bigr]
  \;\ge\; \frac{2}{n(n-1)} .$$
+By Lemma 1' it suffices to prove the same bound for the reported
+value $c$, which is what the induction below does.
 
 *Proof.* Fix a minimum cut $S$, $w(S) = \lambda =: c$. We show by
 induction on $n$ that the $n-2$ contraction rounds avoid all $c$
@@ -132,13 +154,15 @@ Because the algorithm never undershoots (Theorem 1), taking the
 run does.
 
 **Theorem 3 (amplified success).** For $n \ge 2$ and $k \ge 1$
-independent runs, with $p := 2/(n(n-1))$:
-$$\Pr\Bigl[\min_{1 \le i \le k} \mathrm{Karger}_i(G) = \lambda(G)\Bigr]
- \;\ge\; 1 - (1 - p)^k .$$
+independent runs, with $p := 2/(n(n-1))$, keeping the run whose cut has
+the smallest value:
+$$\Pr\Bigl[\min_{1 \le i \le k} c_i = \lambda(G)\Bigr]
+ \;\ge\; 1 - (1 - p)^k ,$$
+where $(S_i, c_i)$ is the output of run $i$ and the kept pair is the
+one with smallest $c_i$ (no recomputation: $c_i$ is already there).
 
-*Proof.* Every run outputs a value $\ge \lambda(G)$ almost surely, so
-the minimum equals $\lambda(G)$ iff at least one run outputs
-$\lambda(G)$. The runs are independent and each fails with
+*Proof.* Every run outputs a cut, hence a value $\ge \lambda(G)$, so
+the kept cut has value $\lambda(G)$ iff at least one run achieves it. The runs are independent and each fails with
 probability $\le 1 - p$, so all fail with probability
 $\le (1-p)^k$. $\blacksquare$
 

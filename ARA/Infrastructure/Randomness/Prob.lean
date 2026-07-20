@@ -304,6 +304,61 @@ theorem prob_ge_le_expVal_div {α : Type*} (p : PMF α)
   exact mul_prob_ge_le_expVal p g k
 
 /-!
+## Post-processing transfer
+
+An algorithm often has two legitimate read-outs of the same run: the
+*witness* it computes and the *number* the analysis bounds (Karger
+returns a cut; the analysis bounds the cut's value). `prob_map` and
+`prob_congr_of_support` let a probability statement proved for one
+read-out be reused verbatim for the other, with no re-induction: the
+only obligation is that the two read-outs agree on the run's support.
+-/
+
+/-- Probability of an event under a pushforward is the probability of
+its preimage. -/
+lemma prob_map {α β : Type*} (p : PMF α) (f : α → β) (s : Set β) :
+    prob (p.map f) s = prob p (f ⁻¹' s) := by
+  rw [prob_eq_toOuterMeasure, prob_eq_toOuterMeasure,
+    PMF.toOuterMeasure_map_apply]
+
+/-- **Post-processing transfer.** Two read-outs of the same
+computation — possibly into *different* types — that succeed together
+on the support have the same success probability. -/
+lemma prob_congr_of_support {α β γ : Type*} (p : PMF α)
+    {f : α → β} {h : α → γ} {s : Set β} {t : Set γ}
+    (hfh : ∀ a ∈ p.support, (f a ∈ s ↔ h a ∈ t)) :
+    prob (p.map f) s = prob (p.map h) t := by
+  rw [prob_map, prob_map]
+  unfold prob
+  refine tsum_congr fun a => ?_
+  by_cases ha : a ∈ p.support
+  · by_cases hf : f a ∈ s
+    · rw [Set.indicator_of_mem (show a ∈ f ⁻¹' s from hf),
+        Set.indicator_of_mem (show a ∈ h ⁻¹' t from (hfh a ha).mp hf)]
+    · rw [Set.indicator_of_notMem (show a ∉ f ⁻¹' s from hf),
+        Set.indicator_of_notMem
+          (show a ∉ h ⁻¹' t from fun hc => hf ((hfh a ha).mpr hc))]
+  · have h0 : p a = 0 := (PMF.apply_eq_zero_iff p a).mpr ha
+    have hz : ∀ u : Set α, u.indicator (⇑p) a = 0 := by
+      intro u
+      by_cases hu : a ∈ u
+      · rw [Set.indicator_of_mem hu, h0]
+      · rw [Set.indicator_of_notMem hu]
+    rw [hz, hz]
+
+/-- `prob_congr_of_support` at the level of a random monad: transfer a
+success probability from one read-out of an algorithm to another. -/
+lemma prob_map_congr_of_support
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {β γ δ : Type} (m : M β) {f : β → γ} {h : β → δ}
+    {s : Set γ} {t : Set δ}
+    (hfh : ∀ b ∈ (LawfulRandMonad.toPMF m).support, (f b ∈ s ↔ h b ∈ t)) :
+    prob (LawfulRandMonad.toPMF (f <$> m : M γ)) s
+      = prob (LawfulRandMonad.toPMF (h <$> m : M δ)) t := by
+  rw [LawfulRandMonad.toPMF_map, LawfulRandMonad.toPMF_map]
+  exact prob_congr_of_support _ hfh
+
+/-!
 ## Success probability of outputs
 
 `ℙ[e = v | M]` / `ℙ[e ∈ S | M]` are the correctness twins of

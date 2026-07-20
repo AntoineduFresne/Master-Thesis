@@ -195,6 +195,41 @@ theorem amplify_success
       ≤ 1 - prob (𝒟[amplify best k m]) Sᶜ := tsub_le_tsub_left hfail 1
     _ = prob (𝒟[amplify best k m]) S := (prob_eq_one_sub_compl _ _).symm
 
+/-- Keep whichever answer has the smaller *measure* `f`. -/
+def argmin {β γ : Type} [LinearOrder γ] (f : β → γ) (a b : β) : β :=
+  if f a ≤ f b then a else b
+
+/-- **`amplify_success` for one-sided algorithms that return a
+witness.** If every output of `m` has measure at least `c` and `m`
+attains `c` with probability at least `p`, then keeping the
+smallest-measure answer over `k` independent runs attains `c` with
+probability at least `1 − (1 − p) ^ k`.
+
+This is the shape a Monte-Carlo algorithm that returns a *witness*
+(Karger returns a cut, not a number) needs; `amplify_min_success` is
+the special case `f = id`, where the witness is its own measure. -/
+theorem amplify_argmin_success
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {β γ : Type} [LinearOrder γ] {f : β → γ} {m : M β} {c : γ} {p : ℝ≥0∞}
+    (hsupp : ∀ b ∈ (𝒟[m]).support, c ≤ f b)
+    (hp : p ≤ ℙ[m ∈ {b | f b = c}]) (k : ℕ) :
+    1 - (1 - p) ^ k ≤ ℙ[amplify (argmin f) k m ∈ {b | f b = c}] :=
+  amplify_success (best := argmin f) (S := {b | f b = c}) (V := {b | c ≤ f b})
+    hsupp
+    (fun a ha b hb => by
+      unfold argmin; split_ifs with h
+      · exact ha
+      · exact hb)
+    (fun a ha b hb hor => by
+      simp only [Set.mem_setOf_eq] at ha hb ⊢
+      unfold argmin
+      rcases hor with h1 | h1 <;> simp only [Set.mem_setOf_eq] at h1
+      · rw [if_pos (h1 ▸ hb)]; exact h1
+      · split_ifs with h
+        · exact le_antisymm (h1 ▸ h) ha
+        · exact h1)
+    hp k
+
 /-- `amplify_success` for the ubiquitous "keep the smallest answer"
 case: if every output of `m` is at least `v` (one-sided error) and
 `m` hits `v` with probability at least `p`, the minimum over `k`
@@ -207,17 +242,12 @@ theorem amplify_min_success
     (hsupp : ∀ b ∈ (𝒟[m]).support, v ≤ b)
     (hp : p ≤ ℙ[m = v]) (k : ℕ) :
     1 - (1 - p) ^ k ≤ ℙ[amplify min k m = v] := by
-  have h := amplify_success (best := min) (S := {v}) (V := Set.Ici v) (p := p)
-    hsupp
-    (fun a ha b hb => Set.mem_Ici.mpr (le_min (Set.mem_Ici.mp ha) (Set.mem_Ici.mp hb)))
-    (fun a ha b hb hor => by
-      rw [Set.mem_Ici] at ha hb
-      rw [Set.mem_singleton_iff]
-      rcases hor with h1 | h1 <;> rw [Set.mem_singleton_iff] at h1 <;> subst h1
-      · exact min_eq_left hb
-      · exact min_eq_right ha)
-    (by rw [prob_singleton]; exact hp) k
-  rwa [prob_singleton] at h
+  have hmin : (min : β → β → β) = argmin id := by
+    funext a b; simp [argmin, min_def]
+  have h := amplify_argmin_success (f := id) (c := v) hsupp
+    (by simpa [Set.setOf_eq_eq_singleton, prob_singleton] using hp) k
+  rw [hmin]
+  simpa [Set.setOf_eq_eq_singleton, prob_singleton] using h
 
 /-- Dual of `amplify_min_success`: keep the largest answer of a
 never-overshooting algorithm. -/
