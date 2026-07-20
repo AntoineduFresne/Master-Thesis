@@ -609,10 +609,63 @@ def contractAux {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
     else
       pure g
 
+/-- The contraction loop **tracking the merge map**. `rep x` is the
+supervertex that the original vertex `x` has been merged into; the
+fibres of `rep` over the final vertex set are exactly the
+supervertices, so they are what the algorithm reports.
+
+This is `contractAux` with bookkeeping attached: `contractAuxT_fst`
+says erasing the bookkeeping recovers `contractAux` exactly, so the
+entire probability analysis is shared rather than redone. -/
+def contractAuxT {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
+    ℕ → MultiGraph α → (α → α) → M (MultiGraph α × (α → α))
+  | 0, g, rep => pure (g, rep)
+  | k + 1, g, rep =>
+    if h : 0 < g.edges.length then do
+      MonadCost.tick g.edges.length
+      let i ← (haveI : NeZero g.edges.length := ⟨h.ne'⟩
+        RandMonad.randFin g.edges.length)
+      contractAuxT k (g.contract i)
+        (redirect (g.edges[(i : ℕ)]).inf (g.edges[(i : ℕ)]).sup ∘ rep)
+    else
+      pure (g, rep)
+
+/-- Erasing the bookkeeping recovers the untracked loop. -/
+lemma contractAuxT_fst {M} [Monad M] [LawfulMonad M] [RandMonad M]
+    [MonadCost ℕ M] :
+    ∀ (k : ℕ) (g : MultiGraph α) (r : α → α),
+      (Prod.fst <$> contractAuxT k g r : M (MultiGraph α)) = contractAux k g := by
+  intro k
+  induction k with
+  | zero => intro g r; simp [contractAuxT, contractAux]
+  | succ k ih =>
+    intro g r
+    by_cases h : 0 < g.edges.length
+    · simp only [contractAuxT, contractAux, dif_pos h, map_bind, ih]
+    · simp [contractAuxT, contractAux, dif_neg h]
+
+/-- The cut reported by a finished run: the set of original vertices
+that were merged into the same supervertex as the smallest vertex.
+(The complementary fibre induces the same cut.) -/
+def cutOf (g : MultiGraph α) (r : α → α) : Finset α :=
+  if h : g.verts.Nonempty then
+    g.verts.filter fun x => r x = r (g.verts.min' h)
+  else ∅
+
 /-- **Karger's algorithm.** Contract uniformly random edges until two
-supervertices remain, then report the number of surviving edges — the
-value of the cut induced by the two supervertices. -/
+supervertices remain, then return the **cut** they induce: the set of
+original vertices merged into one of the two surviving supervertices.
+This is the textbook statement — the algorithm finds a cut, and
+`cutValue` of it is the value reported by `kargerValue`. -/
 def Karger {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
+    (g : MultiGraph α) : M (Finset α) := do
+  let (_, r) ← contractAuxT (g.verts.card - 2) g id
+  pure (cutOf g r)
+
+/-- The value-only version: report the number of surviving edges. This
+is the engine the analysis runs on; `Karger` adds the bookkeeping that
+turns the number into an actual cut. -/
+def kargerValue {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     (g : MultiGraph α) : M ℕ := do
   let g' ← contractAux (g.verts.card - 2) g
   pure g'.edges.length
@@ -622,7 +675,7 @@ def Karger {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
 -- ----------------------------------------
 
 -- IO version (executable, untimed)
-def Karger_IO : MultiGraph ℕ → IO ℕ := Karger
+def kargerValue_IO : MultiGraph ℕ → IO ℕ := kargerValue
 
 /-- Demo graph: two triangles joined by a single bridge — the global
 minimum cut is `1` (the bridge). -/
@@ -630,22 +683,22 @@ def kargerDemo : MultiGraph ℕ where
   verts := {0, 1, 2, 3, 4, 5}
   edges := [s(0, 1), s(1, 2), s(2, 0), s(3, 4), s(4, 5), s(5, 3), s(2, 3)]
 
-#eval Karger_IO kargerDemo
+#eval kargerValue_IO kargerDemo
 
 -- PMF version (noncomputable specification)
-noncomputable example : MultiGraph ℕ → PMF ℕ := Karger
+noncomputable example : MultiGraph ℕ → PMF ℕ := kargerValue
 
 -- ----------------------------------------
 -- Monad transformer version (timed)
 -- ----------------------------------------
 
 -- IO timed version (executable)
-def Karger_IO_Timed : MultiGraph ℕ → TimeMT ℕ IO ℕ := Karger
+def kargerValue_IO_Timed : MultiGraph ℕ → TimeMT ℕ IO ℕ := kargerValue
 
-#eval (Karger_IO_Timed kargerDemo).run
+#eval (kargerValue_IO_Timed kargerDemo).run
 
 -- PMF timed version (noncomputable specification)
-noncomputable example : MultiGraph ℕ → TimeMT ℕ PMF ℕ := Karger
+noncomputable example : MultiGraph ℕ → TimeMT ℕ PMF ℕ := kargerValue
 
 /-! ## Helper lemmas for the analysis
 
@@ -688,12 +741,12 @@ private lemma sum_map_ite_zero {β : Type} (p : β → Prop) [DecidablePred p]
 -- cross-multiplication) now lives in `ARA.Infrastructure.Tactics`;
 -- Schwartz–Zippel is its second client.
 
-/-- The arithmetic core of Karger's induction step: if the current
+/-- The arithmetic core of kargerValue's induction step: if the current
 graph has `m > 0` edges and `k + 3` vertices, and the fixed minimum cut
 has `c ≤ m` crossing edges with `c * (k + 3) ≤ 2 * m` (the counting
 bound), then picking a non-crossing edge and succeeding afterwards with
 probability `2 / ((k+2)(k+1))` beats `2 / ((k+3)(k+2))`. -/
-private lemma karger_step_bound {m c k : ℕ} (hm : 0 < m) (hc : c ≤ m)
+private lemma kargerValue_step_bound {m c k : ℕ} (hm : 0 < m) (hc : c ≤ m)
     (hbound : c * (k + 3) ≤ 2 * m) :
     (2 : ℝ≥0∞) / (((k + 3) * (k + 2) : ℕ) : ℝ≥0∞) ≤
       ((m : ℕ) : ℝ≥0∞)⁻¹ *
@@ -721,11 +774,11 @@ private lemma karger_step_bound {m c k : ℕ} (hm : 0 < m) (hc : c ≤ m)
     _ ≤ 2 * (k + 2) * (d * (k + 3)) := h2
     _ = d * 2 * ((k + 3) * (k + 2)) := by ring
 
-/-! ## Correctness: Karger never undershoots
+/-! ## Correctness: kargerValue never undershoots
 
-The output of `Karger` is always the value of *some* cut of the input
+The output of `kargerValue` is always the value of *some* cut of the input
 graph, hence at least the minimum-cut value. Together with the success
-probability below, this makes `Karger` a one-sided Monte Carlo
+probability below, this makes `kargerValue` a one-sided Monte Carlo
 algorithm: taking the minimum over repetitions only improves the
 estimate and equals `minCutValue` with high probability. -/
 
@@ -756,24 +809,24 @@ private lemma support_contractAux
       exact minCutValue_le_length g (by omega)
 
 /-- **Correctness (one-sided error).** Over any `LawfulRandMonad`,
-every value `Karger` can output is at least the true minimum-cut value:
+every value `kargerValue` can output is at least the true minimum-cut value:
 the algorithm never undershoots. -/
-theorem karger_correct
+theorem kargerValue_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    ∀ c ∈ 𝒟[Karger g | M].support,
+    ∀ c ∈ 𝒟[kargerValue g | M].support,
       g.minCutValue ≤ c := by
   intro c hc
-  unfold Karger at hc
+  unfold kargerValue at hc
   obtain ⟨g', hg', rfl⟩ := mem_support_toPMF_bind_pure.mp hc
   exact support_contractAux (g.verts.card - 2) g hwf (by omega) g' hg'
 
 /-- Correctness at `M = PMF`. -/
-theorem karger_correct_pmf (g : MultiGraph α) (hwf : g.WF)
+theorem kargerValue_correct_pmf (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
-    ∀ c ∈ (Karger g : PMF ℕ).support, g.minCutValue ≤ c :=
-  karger_correct (M := PMF) g hwf h2
+    ∀ c ∈ (kargerValue g : PMF ℕ).support, g.minCutValue ≤ c :=
+  kargerValue_correct (M := PMF) g hwf h2
 
 /-! ## Success probability -/
 
@@ -871,7 +924,7 @@ private lemma success_contractAux
         rw [hcard] at this
         calc g.minCutValue * (k + 3) = (k + 1 + 2) * g.minCutValue := by ring
           _ ≤ 2 * g.edges.length := this
-      have := karger_step_bound hm hc_le hbound
+      have := kargerValue_step_bound hm hc_le hbound
       rw [show ((k + 1 + 2) * (k + 1 + 1) : ℕ) = ((k + 3) * (k + 2) : ℕ) by ring]
       exact this
     · -- No edges left: the graph is edgeless, so its min cut is `0` and
@@ -886,17 +939,17 @@ private lemma success_contractAux
         (ENNReal.natCast_ne_top _), one_mul]
       exact_mod_cast (by nlinarith : 2 ≤ (k + 1 + 2) * (k + 1 + 1))
 
-/-- **Success probability of Karger's algorithm.** Over any
+/-- **Success probability of kargerValue's algorithm.** Over any
 `LawfulRandMonad`, a single run outputs the exact minimum-cut value
 with probability at least `2 / (n (n - 1))`, where `n = g.verts.card`.
 Consequently `O(n² log n)` independent repetitions find a minimum cut
 with high probability. -/
-theorem karger_success_prob
+theorem kargerValue_success_prob
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      ℙ[Karger g = g.minCutValue | M] := by
+      ℙ[kargerValue g = g.minCutValue | M] := by
   have hmain := success_contractAux (M := M) (g.verts.card - 2) g hwf (by omega)
   have harith : (g.verts.card - 2 + 2) * (g.verts.card - 2 + 1) =
       g.verts.card * (g.verts.card - 1) := by
@@ -906,11 +959,11 @@ theorem karger_success_prob
   exact hmain
 
 /-- Success probability at `M = PMF`. -/
-theorem karger_success_prob_pmf (g : MultiGraph α) (hwf : g.WF)
+theorem kargerValue_success_prob_pmf (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      (Karger g : PMF ℕ) g.minCutValue :=
-  karger_success_prob (M := PMF) g hwf h2
+      (kargerValue g : PMF ℕ) g.minCutValue :=
+  kargerValue_success_prob (M := PMF) g hwf h2
 
 /-! ## Complexity
 
@@ -957,69 +1010,69 @@ private lemma expected_cost_contractAux
     · rw [contractAux.eq_2, dif_neg hm, expected_cost_toPMF_pure]
       exact bot_le
 
-/-- **Expected complexity of Karger's algorithm.** With one tick per
-edge scanned during a contraction pass, running `Karger` on a graph
+/-- **Expected complexity of kargerValue's algorithm.** With one tick per
+edge scanned during a contraction pass, running `kargerValue` on a graph
 with `n` vertices and `m` edges costs at most `(n - 2) * m` in
 expectation — for arbitrary inputs. -/
-theorem karger_cost_le
+theorem kargerValue_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) :
-    𝔼_runtime[Karger g | M] ≤
+    𝔼_runtime[kargerValue g | M] ≤
       ((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
-  unfold Karger
+  unfold kargerValue
   rw [expected_cost_toPMF_bind]
   simp only [expected_cost_toPMF_pure, mul_zero, tsum_zero, add_zero]
   exact expected_cost_contractAux _ g
 
 /-- Finiteness of the expected cost — a free corollary of the
 `(n - 2) m` bound. -/
-lemma expected_cost_karger_ne_top
+lemma expected_cost_kargerValue_ne_top
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (g : MultiGraph α) :
-    𝔼_runtime[Karger g | M] ≠ ⊤ :=
+    𝔼_runtime[kargerValue g | M] ≠ ⊤ :=
   ne_top_of_le_ne_top
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
-    (karger_cost_le g)
+    (kargerValue_cost_le g)
 
 /-- Real-valued corollary: the expected cost is at most `(n - 2) * m`. -/
-theorem karger_cost_le_real
+theorem kargerValue_cost_le_real
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (g : MultiGraph α) :
-    𝔼ℝ_runtime[Karger g | M] ≤
+    𝔼ℝ_runtime[kargerValue g | M] ≤
       ((g.verts.card - 2 : ℕ) : ℝ) * (g.edges.length : ℝ) := by
   have := ENNReal.toReal_mono
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
-    (karger_cost_le (M := M) g)
+    (kargerValue_cost_le (M := M) g)
   rw [ENNReal.toReal_mul, ENNReal.toReal_natCast, ENNReal.toReal_natCast] at this
   exact this
 
 /-! ## Amplification: repetition finds the minimum cut
 
 A single contraction run succeeds with probability only `Ω(1/n²)`, but
-Karger is one-sided — outputs never undershoot — so the *minimum* over
+kargerValue is one-sided — outputs never undershoot — so the *minimum* over
 independent runs succeeds as soon as any single run does. The generic
 `amplify` combinator turns this into a theorem. -/
 
-/-- **Amplified Karger.** Run the contraction algorithm `k` times and
+/-- **Amplified kargerValue.** Run the contraction algorithm `k` times and
 keep the smallest cut value found: the result is the exact minimum-cut
 value with probability at least `1 − (1 − 2/(n(n−1)))^k`, so the
 failure probability decays geometrically and `O(n² log n)` repetitions
 find a minimum cut with high probability. -/
-theorem karger_amplified
+theorem kargerValue_amplified
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (k : ℕ) :
     1 - (1 - 2 / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞)) ^ k ≤
-      ℙ[amplify min k (Karger g) = g.minCutValue | M] :=
-  amplify_min_success (fun c hc => karger_correct g hwf h2 c hc)
-    (karger_success_prob g hwf h2) k
+      ℙ[amplify min k (kargerValue g) = g.minCutValue | M] :=
+  amplify_min_success (fun c hc => kargerValue_correct g hwf h2 c hc)
+    (kargerValue_success_prob g hwf h2) k
 
 /-- Amplified cost: `k + 1` runs cost at most `k + 1` times the
 single-run bound `(n − 2) m`. -/
-theorem karger_amplified_cost_le
+theorem kargerValue_amplified_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) (k : ℕ) :
-    𝔼_runtime[amplify min (k + 1) (Karger g) | M] ≤
+    𝔼_runtime[amplify min (k + 1) (kargerValue g) | M] ≤
       (k + 1 : ℝ≥0∞) * (((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞)) := by
   rw [expected_cost_amplify]
-  exact mul_le_mul' le_rfl (karger_cost_le g)
+  exact mul_le_mul' le_rfl (kargerValue_cost_le g)
 
 end ARA
