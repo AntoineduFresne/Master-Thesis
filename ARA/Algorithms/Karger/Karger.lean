@@ -21,26 +21,13 @@ The algorithm operates on an executable multigraph `MultiGraph α`:
 a `Finset` of vertices plus a `List` of edges, parallel edges
 repeated (one list entry per copy). Sampling an edge uniformly from
 the list therefore picks an edge with probability proportional to its
-multiplicity, so no weighted-choice primitive is needed.
+multiplicity.
 
-The graph is **undirected**, and this is enforced by the types rather
-than argued after the fact: an edge is a `Sym2 α`, so `s(u, v)` and
-`s(v, u)` are literally the same term and no orientation exists to be
-invariant under. `Crossing` is built with `Sym2.lift`, whose
-well-definedness obligation *is* the symmetry proof — a
-direction-sensitive crossing predicate cannot be written down. This
-matters: the `2 / (n (n - 1))` bound is false for digraphs, where a
-set can have no outgoing edge while every edge is incident on it, so
-the "a random edge crosses the cut with probability `≤ 2/n`" step
-fails.
-
-`Sym2 α` is also the endpoint type used by GraphLib — `Edge.endpoints`
-in `GraphLib/Graph/Basic.lean` on `main`, and `abbrev Edge := Sym2` in
-Weixuan Yuan's `UndirectedGraphs/SimpleGraphs.lean` — so the graph
-notion here is the one we intend to import once the toolchains align.
-
-The cut/contraction theory itself is ported (not imported: those
-branches are on older toolchains, and `main` has no cut theory yet).
+The graph notion here (mostly cut/contraction) are imported form the
+Helpers and is an adapted mix of Basil and Weixuan branches from the
+GraphLib repository. Once the GraphLib main branch has stable version
+of the notion used here, they will be imported from GraphLib instead
+of the Helpers.
 
 Three deliberate adaptations:
 
@@ -56,10 +43,11 @@ Three deliberate adaptations:
   `randFin edges.length`.
 * GraphLib contracts by quotienting the vertex type with a `Setoid`
   (Weixuan's `Contractions.lean`), which changes the vertex type at
-  every round; we merge one endpoint into the other so the type is
-  preserved and the contraction loop is a plain recursion. That choice
-  of survivor is fixed by `[LinearOrder α]`, needed only for the
-  executable layer (`MultiGraph.contract'` onwards).
+  every round! This is bad in order to have a clean recursive algorithm,
+  we merge one endpoint into the other so the type is preserved and the
+  contraction loop is a plain recursion. That choice of survivor is fixed
+  by `[LinearOrder α]`, needed only for the executable layer
+  (`MultiGraph.contract'` onwards).
 
 ## Architecture
 
