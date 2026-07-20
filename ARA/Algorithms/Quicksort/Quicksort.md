@@ -97,8 +97,7 @@ $$
 comparison, as it must.)*
 
 **Theorem 3 (quadratic bound, arbitrary lists).** For every list $L$
-(duplicates allowed), $\mathbb{E}[C(L)] \le \binom{n}{2}$, and this is
-attained when all entries are equal.
+(duplicates allowed), $\mathbb{E}[C(L)] \le \binom{n}{2}$.
 
 *Proof.* By strong induction on $n$. The call costs $n - 1$ and
 recurses on $L_<$ and $L_\ge$ with $|L_<| + |L_\ge| = n - 1$. By the
@@ -106,9 +105,12 @@ induction hypothesis and monotonicity of $\binom{\cdot}{2}$,
 $$\mathbb{E}[C(L)] \le (n-1) + \binom{|L_<|}{2} + \binom{|L_\ge|}{2}
   \le (n-1) + \binom{n-1}{2} = \binom{n}{2},$$
 using $\binom{a}{2} + \binom{b}{2} \le \binom{a+b}{2}$ (a standard
-convexity fact; proof omitted). When all entries are equal, $L_< = ()$
-and $L_\ge = R$ in every call, so the cost is deterministically
-$(n-1) + (n-2) + \dots + 1 = \binom{n}{2}$. $\blacksquare$
+convexity fact; proof omitted). $\blacksquare$
+
+*Remark (tightness).* The bound is attained: when all entries are
+equal, $L_< = ()$ and $L_\ge = R$ in every call, so the cost is
+deterministically $(n-1) + (n-2) + \dots + 1 = \binom{n}{2}$.
+(Observation only — the formalization proves the inequality.)
 
 ## 5. Auxiliary facts used (stated, not proved)
 
@@ -116,3 +118,8 @@ $(n-1) + (n-2) + \dots + 1 = \binom{n}{2}$. $\blacksquare$
 * $\sum_{d=1}^{n-1} \frac{1}{d+1} = H_n - 1$.
 * $\binom{a}{2} + \binom{b}{2} \le \binom{a+b}{2}$ for all
   $a, b \in \mathbb{N}$.
+
+*Note on Theorem 2.* The pair-indicator argument above is the classical
+one. The formalization establishes the same constant
+$2(n+1)H_n - 4n$ by the equivalent route: induction on the
+uniform-pivot recurrence, closed by telescoping the harmonic sums.

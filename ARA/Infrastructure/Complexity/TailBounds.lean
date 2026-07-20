@@ -105,11 +105,32 @@ theorem runtime_markov_gt
   rw [hset]
   simpa using h
 
+/-- **Chebyshev tail bound for runtimes**: the running time deviates
+from its mean by `k` or more with probability at most `Var/k²` — the
+second-moment sharpening of `runtime_markov`, and the entry point of
+the variance tier for cost analyses. -/
+theorem runtime_chebyshev
+    {M : Type → Type} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    {β : Type} (m : TimeMT ℕ M β) {k : ENNReal} (hk0 : k ≠ 0) (hktop : k ≠ ⊤) :
+    prob (TimedPMF m) {tm | k ≤ (tm.time : ENNReal) ⊖ 𝔼_runtime[m]} ≤
+      variance (TimedPMF m) (fun tm => (tm.time : ENNReal)) / k ^ 2 := by
+  have h := chebyshev (TimedPMF m) (fun tm => (tm.time : ENNReal)) hk0 hktop
+  rwa [← expected_cost_eq_expVal] at h
+
 -- Smoke test: the notation elaborates and a tail bound is one line.
 example {M : Type → Type} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (m : TimeMT ℕ M Unit) :
     ℙ_runtime[m > 9] ≤ 𝔼_runtime[m] / 10 := by
   have h := runtime_markov_gt m 9
+  norm_num at h
+  exact h
+
+-- Smoke test: the second-moment bound instantiates just as cheaply.
+example {M : Type → Type} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    (m : TimeMT ℕ M Unit) :
+    prob (TimedPMF m) {tm | 3 ≤ (tm.time : ENNReal) ⊖ 𝔼_runtime[m]} ≤
+      variance (TimedPMF m) (fun tm => (tm.time : ENNReal)) / 9 := by
+  have h := runtime_chebyshev m (k := 3) (by norm_num) (by norm_num)
   norm_num at h
   exact h
 

@@ -20,8 +20,8 @@ this is `|x − y|`.
 
 ## Main declarations
 
-* `absSub` — `|x − y|` in `ℝ≥0∞`
-* `variance` — `Var[g] = E[|g − E[g]|²]`
+* `absSub x y` (`x ⊖ y`) — `|x − y|` in `ℝ≥0∞`
+* `variance` — `Var[g] = E[(g ⊖ E[g])²]`
 * `variance_add_sq_mean` / `variance_eq_sub` — the classical identity
   `Var[g] = E[g²] − E[g]²` (no hypothesis beyond a finite mean)
 * `chebyshev` — `ℙ(|g − E[g]| ≥ k) ≤ Var[g] / k²`
@@ -34,8 +34,12 @@ open ENNReal
 /-! ## The symmetric distance -/
 
 /-- `|x − y|` in `ℝ≥0∞`: truncated subtraction in both directions —
-exactly one summand is nonzero. -/
+exactly one summand is nonzero. Written `x ⊖ y`. -/
 noncomputable def absSub (x y : ℝ≥0∞) : ℝ≥0∞ := (x - y) + (y - x)
+
+/-- `x ⊖ y` — the symmetric distance `|x − y|` in `ℝ≥0∞`, where
+ordinary subtraction truncates. -/
+scoped notation:70 x " ⊖ " y => absSub x y
 
 lemma absSub_comm (x y : ℝ≥0∞) : absSub x y = absSub y x := by
   rw [absSub, absSub, add_comm]
@@ -84,14 +88,14 @@ lemma absSub_sq_add_two_mul (x y : ℝ≥0∞) :
 
 /-- **Variance**: the expected squared deviation from the mean. -/
 noncomputable def variance {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) : ℝ≥0∞ :=
-  expVal p (fun a => absSub (g a) (expVal p g) ^ 2)
+  expVal p (fun a => (g a ⊖ expVal p g) ^ 2)
 
 /-- The variance identity in cancellation-free form —
 `Var[g] + 2·E[g]² = E[g²] + E[g]²` — valid with **no** hypotheses. -/
 lemma variance_add_sq_mean {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) :
     variance p g + 2 * expVal p g ^ 2 =
       expVal p (fun a => g a ^ 2) + expVal p g ^ 2 := by
-  have hpt : ∀ a, absSub (g a) (expVal p g) ^ 2 + 2 * expVal p g * g a
+  have hpt : ∀ a, (g a ⊖ expVal p g) ^ 2 + 2 * expVal p g * g a
       = g a ^ 2 + expVal p g ^ 2 := fun a => by
     rw [show 2 * expVal p g * g a = 2 * g a * expVal p g from by ring]
     exact absSub_sq_add_two_mul (g a) (expVal p g)
@@ -121,7 +125,7 @@ theorem variance_eq_sub {α : Type*} (p : PMF α) (g : α → ℝ≥0∞)
 its mean by at least `k` is at most `Var[g] / k²`. -/
 theorem chebyshev {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) {k : ℝ≥0∞}
     (hk0 : k ≠ 0) (hktop : k ≠ ⊤) :
-    prob p {a | k ≤ absSub (g a) (expVal p g)} ≤ variance p g / k ^ 2 := by
+    prob p {a | k ≤ g a ⊖ expVal p g} ≤ variance p g / k ^ 2 := by
   have h := prob_ge_le_expVal_div p
     (fun a => absSub (g a) (expVal p g) ^ 2) (k := k ^ 2)
     (pow_ne_zero 2 hk0) (ENNReal.pow_ne_top hktop)

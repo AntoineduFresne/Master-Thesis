@@ -174,6 +174,14 @@ lemma sorted_inorder_foldl (L : List ℕ) (t : Tree)
     rw [List.foldl_cons]
     exact ih _ (sorted_inorder_insert t x hs)
 
+/-- The in-order traversal lists exactly the nodes. -/
+lemma length_inorder (t : Tree) : t.inorder.length = t.size := by
+  induction t with
+  | leaf => simp [inorder, size]
+  | node l x r ihl ihr =>
+    simp only [inorder, size, List.length_append, List.length_cons, ihl, ihr]
+    omega
+
 /-- Height is bounded by the number of nodes. -/
 lemma height_le_size (t : Tree) : t.height ≤ t.size := by
   induction t with
@@ -601,6 +609,19 @@ theorem treap_correct
       have hpart := perm_filter_partition (x :: xs) i
       rw [List.append_assoc, List.singleton_append] at hpart
       exact List.Perm.trans (hpl.append (hpr.cons _)) hpart
+
+/-- **Deterministic height bound (recursive model).** Every tree the
+recursive sampler can output has height at most the number of keys —
+the twin of `randomBST_height_le` for the other model. -/
+theorem treap_height_le
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (L : List ℕ) (hnd : L.Nodup) (t : Tree)
+    (ht : t ∈ 𝒟[treap L | M].support) :
+    t.height ≤ L.length := by
+  obtain ⟨-, hperm⟩ := treap_correct L hnd t ht
+  calc t.height ≤ t.size := Tree.height_le_size t
+    _ = t.inorder.length := (Tree.length_inorder t).symm
+    _ = L.length := hperm.length_eq
 
 /-- Correctness of the recursive model at `M = PMF`. -/
 theorem treap_correct_pmf (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)

@@ -6,6 +6,7 @@ Authors: Antoine du Fresne von Hohenesche
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Amplify
 import Mathlib.Order.Lattice.Nat
+import Mathlib.Data.Sym.Sym2.Order
 
 /-!
 # Karger's randomized minimum-cut algorithm
@@ -23,17 +24,43 @@ repeated (one list entry per copy). Sampling an edge uniformly from
 the list therefore picks an edge with probability proportional to its
 multiplicity, so no weighted-choice primitive is needed.
 
-The cut/contraction theory is ported from Basil Rohner's GraphLib
-branch until they are merged to the main branch.
+The graph is **undirected**, and this is enforced by the types rather
+than argued after the fact: an edge is a `Sym2 α`, so `s(u, v)` and
+`s(v, u)` are literally the same term and no orientation exists to be
+invariant under. `Crossing` is built with `Sym2.lift`, whose
+well-definedness obligation *is* the symmetry proof — a
+direction-sensitive crossing predicate cannot be written down. This
+matters: the `2 / (n (n - 1))` bound is false for digraphs, where a
+set can have no outgoing edge while every edge is incident on it, so
+the "a random edge crosses the cut with probability `≤ 2/n`" step
+fails.
 
-Two deliberate adaptations:
+`Sym2 α` is also the endpoint type used by GraphLib — `Edge.endpoints`
+in `GraphLib/Graph/Basic.lean` on `main`, and `abbrev Edge := Sym2` in
+Weixuan Yuan's `UndirectedGraphs/SimpleGraphs.lean` — so the graph
+notion here is the one we intend to import once the toolchains align.
+
+The cut/contraction theory itself is ported (not imported: those
+branches are on older toolchains, and `main` has no cut theory yet).
+
+Three deliberate adaptations:
 
 * GraphLib's `contract` deduplicates parallel edges to stay inside
   simple graphs; here parallel edges are kept, since Karger's
-  success-probability analysis is valid on multigraphs.
+  success-probability analysis is valid on multigraphs. GraphLib
+  distinguishes parallel edges with an `Edge.edgeLabel`; we repeat the
+  edge in a `List`, so `List (Sym2 α)` is GraphLib's
+  `Set (Edge α (Fin m))` with the list position as the label.
 * GraphLib's `Set`-based graphs are noncomputable; `MultiGraph` is
   executable, so the same definition runs under `IO` and is analyzed
-  under `PMF`.
+  under `PMF`, and drawing a uniform edge *with multiplicity* is just
+  `randFin edges.length`.
+* GraphLib contracts by quotienting the vertex type with a `Setoid`
+  (Weixuan's `Contractions.lean`), which changes the vertex type at
+  every round; we merge one endpoint into the other so the type is
+  preserved and the contraction loop is a plain recursion. That choice
+  of survivor is fixed by `[LinearOrder α]`, needed only for the
+  executable layer (`MultiGraph.contract'` onwards).
 
 ## Architecture
 
@@ -76,27 +103,36 @@ variable {α : Type} [DecidableEq α]
 
 /-! ## The multigraph model -/
 
-/-- A multigraph: a vertex set plus an edge list, with parallel edges
-repeated (one entry per copy) and no loops. This is the executable
-counterpart of GraphLib's weighted `SimpleGraph`; multiplicities are
-realized by repetition instead of weights. -/
+/-- An **undirected** multigraph: a vertex set plus an edge list, with
+parallel edges repeated (one entry per copy) and no loops.
+
+Endpoints are a `Sym2 α`, Mathlib's unordered pair, matching GraphLib's
+`Edge.endpoints` (`GraphLib/Graph/Basic.lean`) and Weixuan's
+`abbrev Edge := Sym2`. Orientation is therefore not merely irrelevant,
+it is *inexpressible*: `s(u, v)` and `s(v, u)` are the same term.
+
+We diverge from GraphLib on multiplicity only. GraphLib distinguishes
+parallel edges by an `edgeLabel` and stores edges in a `Set`, which is
+noncomputable; here an edge is repeated once per copy in a `List`, so
+that drawing an edge uniformly *with multiplicity* is just
+`randFin edges.length` and the development stays executable. Our
+`List (Sym2 α)` is exactly GraphLib's `Set (Edge α (Fin m))` with the
+list position playing the role of the label. -/
 structure MultiGraph (α : Type) where
   /-- The (super)vertices currently present. -/
   verts : Finset α
   /-- The edge list; each parallel edge is listed once per copy. -/
-  edges : List (α × α)
+  edges : List (Sym2 α)
 
 namespace MultiGraph
 
 /-- Well-formedness: every edge joins two *distinct* vertices of the
-graph. All analysis lemmas assume it; `contractEdge` preserves it. -/
+graph. Field names follow GraphLib's `incidence` / `loopless`. -/
 structure WF (g : MultiGraph α) : Prop where
-  /-- First endpoints are vertices. -/
-  mem_fst : ∀ e ∈ g.edges, e.1 ∈ g.verts
-  /-- Second endpoints are vertices. -/
-  mem_snd : ∀ e ∈ g.edges, e.2 ∈ g.verts
-  /-- No loops. -/
-  ne_of_mem : ∀ e ∈ g.edges, e.1 ≠ e.2
+  /-- Every endpoint of an edge is a vertex. -/
+  incidence : ∀ e ∈ g.edges, ∀ v ∈ e, v ∈ g.verts
+  /-- No edge is a loop. -/
+  loopless : ∀ e ∈ g.edges, ¬ e.IsDiag
 
 /-! ### Cuts
 
@@ -105,12 +141,25 @@ Ported from GraphLib's `Cuts/Basic.lean` (`Cut`, `weight`,
 the weight of a cut is the number of crossing edges, counted with
 multiplicity. -/
 
+/-- The crossing test, as a `Bool`, built with `Sym2.lift`. The
+symmetry argument is the *well-definedness obligation* of the lift, so
+a direction-sensitive crossing predicate cannot even be written down —
+this is what makes the model undirected by construction rather than by
+after-the-fact proof. -/
+def crossingB (S : Finset α) : Sym2 α → Bool :=
+  Sym2.lift ⟨fun a b => decide (a ∈ S) != decide (b ∈ S), fun _ _ => bne_comm ..⟩
+
 /-- Edge `e` crosses the vertex set `S` if exactly one endpoint lies
 in `S`. -/
-def Crossing (S : Finset α) (e : α × α) : Prop := ¬(e.1 ∈ S ↔ e.2 ∈ S)
+def Crossing (S : Finset α) (e : Sym2 α) : Prop := crossingB S e = true
 
-instance (S : Finset α) : DecidablePred (Crossing S) := fun e => by
-  unfold Crossing; infer_instance
+instance (S : Finset α) : DecidablePred (Crossing S) :=
+  fun e => inferInstanceAs (Decidable (crossingB S e = true))
+
+@[simp] lemma crossing_mk (S : Finset α) (a b : α) :
+    Crossing S s(a, b) ↔ ¬(a ∈ S ↔ b ∈ S) := by
+  show (decide (a ∈ S) != decide (b ∈ S)) = true ↔ _
+  simp only [bne_iff_ne, ne_eq, decide_eq_decide]
 
 /-- The value of the cut induced by `S`: the number of crossing edges,
 counted with multiplicity (GraphLib's `Cut.weight` with unit weights). -/
@@ -168,56 +217,71 @@ lemma minCutValue_le_length (g : MultiGraph α) (h2 : 2 ≤ g.verts.card) :
 
 The key quantitative fact behind Karger's analysis: every vertex
 degree is at least the minimum-cut value (its singleton is a cut), so
-`n * minCut ≤ Σ deg = 2 * m`. -/
+`n * minCut ≤ Σ deg = 2 * m`. Note `degree` is the *incidence* degree
+— `v ∈ e` for the unordered edge `e` — which is why the handshake
+identity below reads `2 * m` and not `m`. -/
 
 /-- The degree of `v`: the number of incident edges, with multiplicity. -/
 def degree (g : MultiGraph α) (v : α) : ℕ :=
-  g.edges.countP fun e => decide (e.1 = v ∨ e.2 = v)
+  g.edges.countP fun e => decide (v ∈ e)
 
 /-- In a loopless graph, the cut of a singleton is the degree. -/
 lemma cutValue_singleton (g : MultiGraph α) (hwf : g.WF) (v : α) :
     g.cutValue {v} = g.degree v := by
   unfold cutValue degree
   refine List.countP_congr fun e he => ?_
-  have hne := hwf.ne_of_mem e he
-  simp only [decide_eq_true_eq, Crossing, Finset.mem_singleton]
-  grind
+  have hnd := hwf.loopless e he
+  clear he
+  revert hnd
+  induction e with
+  | _ a b =>
+    intro hnd
+    rw [Sym2.mk_isDiag_iff] at hnd
+    simp only [crossing_mk, Finset.mem_singleton, Sym2.mem_iff]
+    grind
 
-private lemma sum_degree_aux (V : Finset α) (l : List (α × α))
-    (hl : ∀ e ∈ l, e.1 ∈ V ∧ e.2 ∈ V ∧ e.1 ≠ e.2) :
-    (∑ v ∈ V, l.countP fun e => decide (e.1 = v ∨ e.2 = v)) = 2 * l.length := by
+/-- Each edge contributes exactly `2` to the sum of degrees: it has two
+distinct endpoints, both vertices. -/
+private lemma sum_incident_eq_two {V : Finset α} {e : Sym2 α}
+    (hmem : ∀ v ∈ e, v ∈ V) (hnd : ¬ e.IsDiag) :
+    (∑ v ∈ V, if v ∈ e then 1 else 0) = 2 := by
+  revert hmem hnd
+  induction e with
+  | _ a b =>
+    intro hmem hnd
+    rw [Sym2.mk_isDiag_iff] at hnd
+    have ha : a ∈ V := hmem a (Sym2.mem_mk_left a b)
+    have hb : b ∈ V := hmem b (Sym2.mem_mk_right a b)
+    have hfilter : {v ∈ V | v ∈ s(a, b)} = ({a, b} : Finset α) := by
+      ext x
+      simp only [Finset.mem_filter, Finset.mem_insert, Finset.mem_singleton,
+        Sym2.mem_iff]
+      constructor
+      · rintro ⟨-, h⟩; exact h
+      · rintro (rfl | rfl) <;> simp [ha, hb]
+    simp only [Finset.sum_boole, Nat.cast_id]
+    rw [hfilter, Finset.card_insert_of_notMem (by simp [hnd]),
+      Finset.card_singleton]
+
+private lemma sum_degree_aux (V : Finset α) (l : List (Sym2 α))
+    (hl : ∀ e ∈ l, (∀ v ∈ e, v ∈ V) ∧ ¬ e.IsDiag) :
+    (∑ v ∈ V, l.countP fun e => decide (v ∈ e)) = 2 * l.length := by
   induction l with
   | nil => simp
   | cons e l ih =>
     have he := hl e (by simp)
-    have hl' : ∀ e' ∈ l, e'.1 ∈ V ∧ e'.2 ∈ V ∧ e'.1 ≠ e'.2 :=
+    have hl' : ∀ e' ∈ l, (∀ v ∈ e', v ∈ V) ∧ ¬ e'.IsDiag :=
       fun e' he' => hl e' (by simp [he'])
     simp only [List.countP_cons, decide_eq_true_eq]
-    rw [Finset.sum_add_distrib, ih hl']
-    -- The indicator of incidence sums to `2`: each edge has exactly two
-    -- distinct endpoints, both in `V`.
-    have hfilter : {v ∈ V | e.1 = v ∨ e.2 = v} = ({e.1, e.2} : Finset α) := by
-      ext x
-      simp only [Finset.mem_filter, Finset.mem_insert, Finset.mem_singleton]
-      constructor
-      · rintro ⟨-, h | h⟩
-        · exact Or.inl h.symm
-        · exact Or.inr h.symm
-      · rintro (rfl | rfl)
-        · exact ⟨he.1, Or.inl rfl⟩
-        · exact ⟨he.2.1, Or.inr rfl⟩
-    have hind : (∑ v ∈ V, if e.1 = v ∨ e.2 = v then 1 else 0) = 2 := by
-      simp only [Finset.sum_boole, Nat.cast_id]
-      rw [hfilter, Finset.card_insert_of_notMem (by simp [he.2.2]),
-        Finset.card_singleton]
-    rw [hind, List.length_cons]
+    rw [Finset.sum_add_distrib, ih hl', sum_incident_eq_two he.1 he.2,
+      List.length_cons]
     omega
 
 /-- **Handshake identity**: degrees sum to twice the edge count. -/
 lemma sum_degree (g : MultiGraph α) (hwf : g.WF) :
     ∑ v ∈ g.verts, g.degree v = 2 * g.edges.length :=
   sum_degree_aux g.verts g.edges fun e he =>
-    ⟨hwf.mem_fst e he, hwf.mem_snd e he, hwf.ne_of_mem e he⟩
+    ⟨hwf.incidence e he, hwf.loopless e he⟩
 
 /-- Every degree bounds the minimum cut from above. -/
 lemma minCutValue_le_degree (g : MultiGraph α) (hwf : g.WF)
@@ -248,7 +312,12 @@ lemma card_mul_minCutValue_le (g : MultiGraph α) (hwf : g.WF)
 
 Ported from GraphLib's `Contractions/Basic.lean`: `redirect` is
 `redirectEdge` and `contractEdge` is `contract` (minus the parallel-
-edge deduplication, which Karger's multigraph analysis must not do). -/
+edge deduplication, which Karger's multigraph analysis must not do).
+Redirection acts on endpoints through `Sym2.map`, exactly as in
+Weixuan's `Contractions.lean` (`def mapEdge : Edge α → Edge β :=
+Sym2.map π`); we merge one vertex into another instead of quotienting
+by a `Setoid`, so that the vertex *type* does not change and the
+contraction loop stays a plain recursion. -/
 
 /-- Redirect a vertex: `v` becomes `u`, everything else is unchanged
 (GraphLib's `redirectEdge`, per endpoint). -/
@@ -264,31 +333,30 @@ lemma redirect_mem_erase {V : Finset α} {u v x : α}
 
 /-- **Contract** `v` into `u`: remove `v` from the vertex set, redirect
 every edge touching `v` to `u`, and drop the resulting loops (the
-parallel copies of `(u, v)` itself). Parallel edges are kept. -/
+parallel copies of `s(u, v)` itself). Parallel edges are kept. -/
 def contractEdge (g : MultiGraph α) (u v : α) : MultiGraph α where
   verts := g.verts.erase v
-  edges := (g.edges.map fun e => (redirect u v e.1, redirect u v e.2)).filter
-    fun e => decide (e.1 ≠ e.2)
+  edges := (g.edges.map (Sym2.map (redirect u v))).filter fun e => !e.IsDiag
 
 @[simp] lemma verts_contractEdge (g : MultiGraph α) (u v : α) :
     (g.contractEdge u v).verts = g.verts.erase v := rfl
 
 @[simp] lemma edges_contractEdge (g : MultiGraph α) (u v : α) :
     (g.contractEdge u v).edges =
-      (g.edges.map fun e => (redirect u v e.1, redirect u v e.2)).filter
-        fun e => decide (e.1 ≠ e.2) := rfl
+      (g.edges.map (Sym2.map (redirect u v))).filter fun e => !e.IsDiag := rfl
 
 /-- Contraction preserves well-formedness. -/
 theorem WF.contractEdge {g : MultiGraph α} (hwf : g.WF) {u v : α}
     (hu : u ∈ g.verts) (hne : u ≠ v) : (g.contractEdge u v).WF := by
-  refine ⟨?_, ?_, ?_⟩ <;> intro e' he' <;>
-    · simp only [edges_contractEdge, List.mem_filter, List.mem_map,
-        decide_eq_true_eq] at he'
-      obtain ⟨⟨e, he, rfl⟩, hne'⟩ := he'
-      first
-        | exact redirect_mem_erase hu hne (hwf.mem_fst e he)
-        | exact redirect_mem_erase hu hne (hwf.mem_snd e he)
-        | exact hne'
+  constructor
+  · intro e' he' w hw
+    simp only [edges_contractEdge, List.mem_filter, List.mem_map] at he'
+    obtain ⟨⟨e, he, rfl⟩, -⟩ := he'
+    obtain ⟨x, hx, rfl⟩ := Sym2.mem_map.mp hw
+    exact redirect_mem_erase hu hne (hwf.incidence e he x hx)
+  · intro e' he'
+    simp only [edges_contractEdge, List.mem_filter] at he'
+    simpa using he'.2
 
 /-- Contraction removes exactly one vertex. -/
 lemma card_verts_contractEdge (g : MultiGraph α) {u v : α} (hv : v ∈ g.verts) :
@@ -312,11 +380,19 @@ private lemma cutValue_contractEdge_of_pointwise {g : MultiGraph α}
   unfold cutValue
   rw [edges_contractEdge, List.countP_filter, List.countP_map]
   refine List.countP_congr fun e he => ?_
-  have hne := hwf.ne_of_mem e he
-  have h1 := hpt e.1
-  have h2 := hpt e.2
-  simp only [Function.comp_apply, Bool.and_eq_true, decide_eq_true_eq, Crossing]
-  grind
+  have hnd := hwf.loopless e he
+  clear he
+  revert hnd
+  induction e with
+  | _ a b =>
+    intro hnd
+    rw [Sym2.mk_isDiag_iff] at hnd
+    have h1 := hpt a
+    have h2 := hpt b
+    simp only [Function.comp_apply, Bool.and_eq_true, decide_eq_true_eq,
+      Sym2.map_mk, crossing_mk, Bool.not_eq_true', decide_eq_false_iff_not,
+      Sym2.mk_isDiag_iff]
+    grind
 
 /-- **Cut lifting** (soundness of contraction): every cut of the
 contracted graph comes from a cut of `g` with the *same* value. Hence
@@ -346,10 +422,10 @@ lemma exists_isCut_lift {g : MultiGraph α} (hwf : g.WF) {u v : α}
 keeps `S` a cut of the same value (with `v` removed from it). -/
 lemma isCut_contractEdge_of_notCrossing {g : MultiGraph α} (hwf : g.WF)
     {u v : α} (hu : u ∈ g.verts) (hne : u ≠ v) {S : Finset α}
-    (hS : g.IsCut S) (hnc : ¬Crossing S (u, v)) :
+    (hS : g.IsCut S) (hnc : ¬Crossing S s(u, v)) :
     (g.contractEdge u v).IsCut (S.erase v) ∧
       (g.contractEdge u v).cutValue (S.erase v) = g.cutValue S := by
-  have hiff : u ∈ S ↔ v ∈ S := by simpa [Crossing] using hnc
+  have hiff : u ∈ S ↔ v ∈ S := by simpa using hnc
   constructor
   · refine ⟨?_, ?_, ?_⟩
     · rw [verts_contractEdge]
@@ -386,7 +462,7 @@ minimum-cut value exactly. -/
 lemma minCutValue_contractEdge_of_notCrossing {g : MultiGraph α} (hwf : g.WF)
     {u v : α} (hu : u ∈ g.verts) (hv : v ∈ g.verts) (hne : u ≠ v)
     (h3 : 3 ≤ g.verts.card) {S : Finset α} (hS : g.IsCut S)
-    (hmin : g.cutValue S = g.minCutValue) (hnc : ¬Crossing S (u, v)) :
+    (hmin : g.cutValue S = g.minCutValue) (hnc : ¬Crossing S s(u, v)) :
     (g.contractEdge u v).minCutValue = g.minCutValue := by
   obtain ⟨hcut', hval'⟩ := isCut_contractEdge_of_notCrossing hwf hu hne hS hnc
   refine le_antisymm ?_ (minCutValue_le_contractEdge hwf hv h3)
@@ -408,17 +484,24 @@ lemma cutValue_of_card_two {g : MultiGraph α} (hwf : g.WF)
   unfold cutValue
   rw [List.countP_eq_length]
   intro e he
-  have h1 := hwf.mem_fst e he
-  have h2 := hwf.mem_snd e he
-  have h3 := hwf.ne_of_mem e he
-  obtain ⟨x, y, hxy, hV⟩ := Finset.card_eq_two.mp hcard
-  obtain ⟨s, hsS⟩ := hS.nonempty
-  obtain ⟨w, hwV, hwS⟩ := hS.proper
-  have hsV := hS.subset hsS
-  rw [hV] at h1 h2 hsV hwV
-  simp only [Finset.mem_insert, Finset.mem_singleton] at h1 h2 hsV hwV
-  simp only [decide_eq_true_eq, Crossing]
-  grind
+  have hmem := hwf.incidence e he
+  have hnd := hwf.loopless e he
+  clear he
+  revert hmem hnd
+  induction e with
+  | _ a b =>
+    intro hmem hnd
+    rw [Sym2.mk_isDiag_iff] at hnd
+    have h1 : a ∈ g.verts := hmem a (Sym2.mem_mk_left a b)
+    have h2 : b ∈ g.verts := hmem b (Sym2.mem_mk_right a b)
+    obtain ⟨x, y, hxy, hV⟩ := Finset.card_eq_two.mp hcard
+    obtain ⟨s, hsS⟩ := hS.nonempty
+    obtain ⟨w, hwV, hwS⟩ := hS.proper
+    have hsV := hS.subset hsS
+    rw [hV] at h1 h2 hsV hwV
+    simp only [Finset.mem_insert, Finset.mem_singleton] at h1 h2 hsV hwV
+    simp only [decide_eq_true_eq, crossing_mk]
+    grind
 
 /-- On two vertices the edge count *is* the minimum-cut value. -/
 lemma length_eq_minCutValue_of_card_two {g : MultiGraph α} (hwf : g.WF)
@@ -427,22 +510,66 @@ lemma length_eq_minCutValue_of_card_two {g : MultiGraph α} (hwf : g.WF)
   obtain ⟨S, hS, hval⟩ := exists_minCut g (le_of_eq hcard.symm)
   rw [← hval, cutValue_of_card_two hwf hcard hS]
 
-/-! ### Contraction of a listed edge -/
+/-! ### Contraction of a listed edge
 
-/-- Contract the `i`-th edge of the list: merge its second endpoint
-into its first. -/
+Contracting `s(u, v)` has to keep one of the two endpoints, and the two
+choices give *isomorphic but not equal* graphs — so contraction is not
+a function of the unordered edge alone. GraphLib resolves this by
+quotienting the vertex type by a `Setoid`, which changes the vertex
+type at every round and would stop the contraction loop from being a
+plain recursion. We instead fix the survivor with the linear order on
+`α` (keep `inf`, merge away `sup`). Only this executable layer needs
+`[LinearOrder α]`; the cut theory above needs just `[DecidableEq α]`. -/
+
+section Indexed
+variable [LinearOrder α]
+
+omit [DecidableEq α] in
+/-- An edge is recovered from its endpoints in order. -/
+theorem sym2_mk_inf_sup (e : Sym2 α) : s(e.inf, e.sup) = e := by
+  induction e with
+  | _ a b =>
+    rcases le_total a b with h | h <;>
+      simp [Sym2.inf_mk, Sym2.sup_mk, h, Sym2.eq_swap]
+
+omit [DecidableEq α] in
+theorem sym2_inf_mem (e : Sym2 α) : e.inf ∈ e := by
+  induction e with
+  | _ a b => rcases le_total a b with h | h <;> simp [Sym2.inf_mk, h]
+
+omit [DecidableEq α] in
+theorem sym2_sup_mem (e : Sym2 α) : e.sup ∈ e := by
+  induction e with
+  | _ a b => rcases le_total a b with h | h <;> simp [Sym2.sup_mk, h]
+
+omit [DecidableEq α] in
+theorem sym2_inf_ne_sup {e : Sym2 α} (h : ¬ e.IsDiag) : e.inf ≠ e.sup := by
+  induction e with
+  | _ a b =>
+    rw [Sym2.mk_isDiag_iff] at h
+    rcases lt_or_gt_of_ne h with hlt | hlt <;>
+      simp [Sym2.inf_mk, Sym2.sup_mk] <;> exact h
+
+/-- Contract the undirected edge `e`, merging its larger endpoint into
+its smaller one. -/
+def contract' (g : MultiGraph α) (e : Sym2 α) : MultiGraph α :=
+  g.contractEdge e.inf e.sup
+
+/-- Contract the `i`-th edge of the list. -/
 def contract (g : MultiGraph α) (i : Fin g.edges.length) : MultiGraph α :=
-  g.contractEdge (g.edges[(i : ℕ)]).1 (g.edges[(i : ℕ)]).2
+  g.contract' g.edges[(i : ℕ)]
 
 lemma WF.contract {g : MultiGraph α} (hwf : g.WF) (i : Fin g.edges.length) :
     (g.contract i).WF :=
-  hwf.contractEdge (hwf.mem_fst _ (List.getElem_mem _))
-    (hwf.ne_of_mem _ (List.getElem_mem _))
+  hwf.contractEdge
+    (hwf.incidence _ (List.getElem_mem _) _ (sym2_inf_mem _))
+    (sym2_inf_ne_sup (hwf.loopless _ (List.getElem_mem _)))
 
 lemma card_verts_contract {g : MultiGraph α} (hwf : g.WF)
     (i : Fin g.edges.length) :
     (g.contract i).verts.card + 1 = g.verts.card :=
-  card_verts_contractEdge g (hwf.mem_snd _ (List.getElem_mem _))
+  card_verts_contractEdge g
+    (hwf.incidence _ (List.getElem_mem _) _ (sym2_sup_mem _))
 
 lemma length_edges_contract_le (g : MultiGraph α) (i : Fin g.edges.length) :
     (g.contract i).edges.length ≤ g.edges.length :=
@@ -451,13 +578,21 @@ lemma length_edges_contract_le (g : MultiGraph α) (i : Fin g.edges.length) :
 lemma minCutValue_le_contract {g : MultiGraph α} (hwf : g.WF)
     (i : Fin g.edges.length) (h3 : 3 ≤ g.verts.card) :
     g.minCutValue ≤ (g.contract i).minCutValue :=
-  minCutValue_le_contractEdge hwf (hwf.mem_snd _ (List.getElem_mem _)) h3
+  minCutValue_le_contractEdge hwf
+    (hwf.incidence _ (List.getElem_mem _) _ (sym2_sup_mem _)) h3
+
+end Indexed
 
 end MultiGraph
 
 /-! ## Algorithm -/
 
 open MultiGraph
+
+-- The executable contraction loop fixes the surviving endpoint by the
+-- linear order (see `MultiGraph.contract'`), so everything below needs
+-- `[LinearOrder α]`. The cut theory above needs only `[DecidableEq α]`.
+variable [LinearOrder α]
 
 /-- Perform `fuel` uniformly-random edge contractions (stopping early
 if no edge remains). Each pass ticks once per edge: contracting
@@ -493,7 +628,7 @@ def Karger_IO : MultiGraph ℕ → IO ℕ := Karger
 minimum cut is `1` (the bridge). -/
 def kargerDemo : MultiGraph ℕ where
   verts := {0, 1, 2, 3, 4, 5}
-  edges := [(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)]
+  edges := [s(0, 1), s(1, 2), s(2, 0), s(3, 4), s(4, 5), s(5, 3), s(2, 3)]
 
 #eval Karger_IO kargerDemo
 
@@ -682,9 +817,9 @@ private lemma success_contractAux
       -- Fix a minimum cut `S`.
       obtain ⟨S, hS, hSval⟩ := exists_minCut g (by omega)
       -- The branch value as a function of the contracted edge.
-      set F : α × α → ℝ≥0∞ := fun e =>
+      set F : Sym2 α → ℝ≥0∞ := fun e =>
         inst.toPMF
-          ((contractAux k (g.contractEdge e.1 e.2) >>=
+          ((contractAux k (g.contract' e) >>=
             fun g' => pure g'.edges.length : M ℕ))
           g.minCutValue with hF
       have hsum : (∑ i : Fin g.edges.length,
@@ -703,17 +838,18 @@ private lemma success_contractAux
         by_cases hcr : Crossing S e
         · simp [hcr]
         · rw [if_neg hcr, hF]
-          have hu := hwf.mem_fst e he
-          have hv := hwf.mem_snd e he
-          have hene := hwf.ne_of_mem e he
+          have hu := hwf.incidence e he _ (sym2_inf_mem e)
+          have hv := hwf.incidence e he _ (sym2_sup_mem e)
+          have hene := sym2_inf_ne_sup (hwf.loopless e he)
           have hwf' := hwf.contractEdge hu hene
-          have hcard' : (g.contractEdge e.1 e.2).verts.card = k + 2 := by
-            have := card_verts_contractEdge (u := e.1) g hv
+          have hcard' : (g.contract' e).verts.card = k + 2 := by
+            show (g.contractEdge e.inf e.sup).verts.card = k + 2
+            have := card_verts_contractEdge (u := e.inf) g hv
             omega
-          have hmc : (g.contractEdge e.1 e.2).minCutValue = g.minCutValue :=
+          have hmc : (g.contract' e).minCutValue = g.minCutValue :=
             minCutValue_contractEdge_of_notCrossing hwf hu hv hene (by omega)
-              hS hSval (by simpa using hcr)
-          have := ih (g.contractEdge e.1 e.2) hwf' hcard'
+              hS hSval (by rwa [sym2_mk_inf_sup])
+          have := ih (g.contract' e) hwf' hcard'
           rw [hmc] at this
           exact this
       -- Count the non-crossing edges: `m - c` of them.

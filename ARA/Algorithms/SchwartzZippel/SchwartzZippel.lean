@@ -35,7 +35,9 @@ cross-multiplication (`ennreal_div_le_div_nat`).
 * `schwartzZippel_sound` — a nonzero `P` is accepted with probability
   at most `P.totalDegree / #S`, over any integral domain.
 * `schwartzZippel_cost_exact` — exactly one (wholesale-ticked)
-  polynomial evaluation per run.
+  polynomial evaluation per run, and `schwartzZippel_costPMF` — the
+  cost *law* is the point mass at `1`: deterministic, not just in
+  expectation.
 -/
 
 namespace ARA
@@ -120,6 +122,16 @@ theorem schwartzZippel_cost_exact
   rw [schwartzZippel]
   cost_step
   rw [expected_cost_randVecOn, add_zero]
+
+/-- **Deterministic cost.** The cost law is a point mass: *every* run
+costs exactly one evaluation, not merely one on average. -/
+theorem schwartzZippel_costPMF
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (P : MvPolynomial (Fin n) R) (S : Finset R) (hS : S.Nonempty) :
+    costPMF (schwartzZippel P S hS : TimeMT ℕ M Bool) = PMF.pure 1 := by
+  rw [schwartzZippel, MonadCost.tick_timeMT, costPMF_tick_bind,
+    costPMF_eq_pure_zero (by rw [expected_cost_toPMF_bind_pure]; exact expected_cost_randVecOn ..),
+    PMF.pure_map]
 
 /-! ## Named corollaries at `M = PMF` -/
 

@@ -106,30 +106,44 @@ for free — since costs are `ℕ`-valued, the strict form divides by
 `k + 1` and needs no `k ≠ 0` hypothesis. The second-moment upgrade is
 `Variance.lean` (`Var = E[g²] − E[g]²` and Chebyshev, with the
 `ℝ≥0∞`-symmetric deviation `absSub`), and beyond the expectation the
-running time has a *law*: `costPMF` — the coupon collector is the
-first case study analyzed at that tier (its retry stages are
-`geometric` laws composed by `bind`).
+running time has a *law*: `costPMF`. That third reading is what a
+*determinism* claim needs — `schwartzZippel_costPMF` and
+`costPMF_shuffle` say those algorithms cost `1` and `0` on **every**
+run, which no expectation can express — and the coupon collector
+studies the same tier from the other side, building a cost law
+directly out of `geometric` stages composed by `bind`.
 
 ## Module dependency structure
 
-Folders are thematic (`Randomness/` = semantics, `Correctness/`,
-`Complexity/`); the *file* DAG stays acyclic and strictly downward:
+Folders are thematic and the *folder* order is now strictly layered —
+`Randomness/` (what a random program means) below `Complexity/` (what
+it costs) below `Correctness/` (what it outputs, incl. amplification);
+the file DAG is acyclic and points strictly downward:
 
 ```
-cslib.TimeM ← Complexity/TimeMT ← Complexity/MonadCost ─────────────┐
-Mathlib.PMF ← SimpAttr ← Tactics ← Randomness/LawfulRandMonad ← Randomness/TimedSemantics
-                                       │                                 │
-                                       ├← Correctness/Correctness       └← Complexity/ExpectedCost
-                                       │       │                              ├← Randomness/RandVec
-                                       │       │                              ├← Randomness/Geometric
-                                       │       │                              └← Complexity/TailBounds
-                                       │       │                                    ├← Complexity/Variance
-                                       │       └──────────────────────────────────← Correctness/Amplify
+cslib.TimeM ← Complexity/TimeMT ← Complexity/MonadCost ──────┐
+Mathlib.PMF ← SimpAttr ← Tactics ← Randomness/LawfulRandMonad ┤
+                                        │                     │
+                                        ├← Randomness/Prob    └← Complexity/TimedSemantics
+                                        │      │                          │
+                                        │      ├← Randomness/Geometric    │
+                                        │      ├← Complexity/Variance     │
+                                        │      └← Complexity/ExpectedCost ┘
+                                        │                │
+                                        │                ├← Randomness/RandVec
+                                        │                ├← Complexity/TailBounds
+                                        └← Correctness/Correctness ← Correctness/Amplify
 Helpers/*     ← Mathlib only (pure mathematics, no Infrastructure)
 Algorithms/*  ← Infrastructure + Helpers + fine-grained Mathlib extras
                 (Treap consumes the Fisher–Yates shuffle; SchwartzZippel
                 consumes Mathlib's `MvPolynomial.schwartz_zippel_totalDegree`)
 ```
+
+`Prob.lean` is deliberately the lowest probability layer: a
+pure-distribution study (`Geometric`, `CouponCollector`) uses
+`expVal`, `𝔼[·]`, `prob` and the `ℙ[·]` notation without importing
+any cost machinery. `RandVec` sits above `ExpectedCost` only because
+it also proves its samplers free.
 
 ## Known limitations
 

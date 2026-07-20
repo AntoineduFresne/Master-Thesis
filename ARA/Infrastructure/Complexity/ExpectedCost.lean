@@ -30,7 +30,12 @@ representation of a timed result.
   `pure`, `bind`) composed with `LawfulRandMonad.toPMF` to
   `expected_cost` arithmetic
 * `costPMF` — the cost distribution itself, the third reading of a
-  cost analysis
+  cost analysis, with `costPMF_eq_pure_zero` / `costPMF_tick_bind`
+  for deterministic-cost claims
+* `𝔼_runtime[·]` / `𝔼ℝ_runtime[·]` notation and the `cost_step` /
+  `runtime_simp` tactics
+* the uniform-pivot recipes (`expected_cost_uniform_step`, the
+  `uniform_avg_*` closing lemmas)
 
 The generic probability functionals this file builds on (`expVal`,
 `prob`, the `ℙ[·]` notation) live one layer down, in
@@ -474,10 +479,13 @@ lemma toReal_uniform_avg {n : ℕ} {S : Fin n → ENNReal}
 
 Beyond its expectation (`𝔼_runtime`) and its tail bounds
 (`ℙ_runtime`), the running time of a computation has a *law*:
-`costPMF m`, the third reading of a cost analysis. The coupon
-collector is the first case study analyzed at this tier — it builds
-its cost law directly (geometric stages composed by `bind`), the
-shape `costPMF` extracts from a ticked program.
+`costPMF m`, the third reading of a cost analysis. It is what a
+*determinism* claim needs — `schwartzZippel_costPMF` and
+`costPMF_shuffle` state that those algorithms cost `1` and `0` on
+**every** run, not merely on average, which an expectation cannot
+say. `CouponCollector` studies the same tier from the other side: it
+builds a cost law directly (geometric stages composed by `bind`),
+being a process whose program form awaits the sub-probability layer.
 -/
 
 /-- The **cost distribution** of a timed computation: the law of its
@@ -485,6 +493,48 @@ running time. -/
 noncomputable def costPMF {M : Type → Type} [Monad M] [LawfulMonad M]
     [LawfulRandMonad M] {α : Type} (m : TimeMT ℕ M α) : PMF ℕ :=
   (TimedPMF m).map TimeM.time
+
+/-- **A vanishing mean forces a Dirac law at `0`.** Costs are
+`ℕ`-valued, so "free in expectation" and "free on every run" coincide:
+this upgrades any `𝔼_runtime[…] = 0` theorem (every sampler has one)
+to a statement about the cost *law*. -/
+lemma costPMF_eq_pure_zero {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M] {β : Type} {m : TimeMT ℕ M β}
+    (h : 𝔼_runtime[m] = 0) : costPMF m = PMF.pure 0 := by
+  have hzero : ∀ tm : TimeM ℕ β, tm.time ≠ 0 → TimedPMF m tm = 0 := by
+    intro tm hne
+    rcases mul_eq_zero.mp (ENNReal.tsum_eq_zero.mp h tm) with h1 | h2
+    · exact h1
+    · exact absurd (by exact_mod_cast h2 : tm.time = 0) hne
+  ext k
+  rw [costPMF, PMF.map_apply, PMF.pure_apply]
+  by_cases hk : k = 0
+  · subst hk
+    rw [if_pos rfl]
+    refine Eq.trans (tsum_congr fun tm => ?_) (PMF.tsum_coe (TimedPMF m))
+    by_cases ht : tm.time = 0
+    · rw [if_pos ht.symm]
+    · rw [if_neg fun hc => ht hc.symm, hzero tm ht]
+  · rw [if_neg hk]
+    refine ENNReal.tsum_eq_zero.mpr fun tm => ?_
+    by_cases ht : k = tm.time
+    · rw [if_pos ht, hzero tm (by omega)]
+    · rw [if_neg ht]
+
+/-- Prefixing a `tick t` shifts the whole cost law by `t`. -/
+lemma costPMF_tick_bind {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M] {β : Type} (t : ℕ) (f : Unit → TimeMT ℕ M β) :
+    costPMF ((TimeMT.tick t : TimeMT ℕ M Unit) >>= f) =
+      (costPMF (f ())).map (t + ·) := by
+  have h1 : TimedPMF ((TimeMT.tick t : TimeMT ℕ M Unit) >>= f) =
+      (TimedPMF (f ())).bind fun tm => PMF.pure ⟨tm.ret, t + tm.time⟩ := by
+    show inst.toPMF _ = _
+    simp only [TimeMT.run_bind, TimeMT.run_tick, inst.toPMF_bind, inst.toPMF_pure,
+      pmf_bind_eq, pmf_pure_eq, PMF.pure_bind]
+  rw [costPMF, costPMF, h1, PMF.map_bind]
+  simp only [PMF.pure_map]
+  rw [PMF.map_comp]
+  rfl
 
 /-- The expected cost is the mean of the cost distribution. -/
 lemma expected_cost_eq_expVal_costPMF {M} [Monad M] [LawfulMonad M]

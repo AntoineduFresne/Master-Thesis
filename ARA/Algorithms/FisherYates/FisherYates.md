@@ -90,9 +90,9 @@ on permutations.
 
 ## 5. Complexity
 
-**Theorem 4.** The shuffle draws exactly $n$ uniform indices and is
-charged cost $0$ in the cost model: it is a pure sampler.
-$\blacksquare$
+**Theorem 4.** The shuffle is charged cost $0$: its cost law is the
+point mass at $0$, so it is free on every run and not merely in
+expectation — a pure sampler. $\blacksquare$
 
 ## 6. Auxiliary facts used (stated, not proved)
 

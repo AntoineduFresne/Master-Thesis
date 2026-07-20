@@ -118,6 +118,51 @@ lemma expVal_toPMF_randIdx_bind
   rw [← Finset.mul_sum]
 
 /-!
+## The mean of a `ℕ`-valued distribution
+
+The special case of `expVal` that a *cost law* asks for. Naming it
+lets a statement read as its mathematics does — `𝔼[couponCollector n]`
+rather than `expVal (couponCollector n) (fun k => (k : ℝ≥0∞))`.
+-/
+
+/-- The mean of a distribution over `ℕ`. -/
+noncomputable def mean (p : PMF ℕ) : ENNReal := expVal p (fun k => (k : ENNReal))
+
+/-- `𝔼[p]` — the mean of the `ℕ`-valued distribution `p`. -/
+scoped notation "𝔼[" p "]" => mean p
+
+@[simp] lemma mean_pure (k : ℕ) : 𝔼[PMF.pure k] = (k : ENNReal) :=
+  expVal_pure k _
+
+/-- **Linearity of expectation** in the form a staged cost law uses
+it: drawing `a`, then independently `b`, and reporting `a + b` costs
+`𝔼[P] + 𝔼[Q]`. -/
+lemma mean_bind_add (P Q : PMF ℕ) :
+    𝔼[P.bind fun a => Q.bind fun b => PMF.pure (a + b)] = 𝔼[P] + 𝔼[Q] := by
+  unfold mean
+  rw [expVal_bind]
+  have hinner : ∀ a : ℕ,
+      expVal (Q.bind fun b => PMF.pure (a + b)) (fun k => (k : ENNReal)) =
+        (a : ENNReal) + expVal Q (fun k => (k : ENNReal)) := by
+    intro a
+    rw [expVal_bind]
+    simp only [expVal_pure]
+    rw [show (fun b : ℕ => ((a + b : ℕ) : ENNReal)) =
+        (fun b : ℕ => (a : ENNReal) + (b : ENNReal)) from funext fun b => by push_cast; ring,
+      expVal_add, expVal_const]
+  simp only [hinner]
+  rw [expVal_add, expVal_const]
+
+/-- The mean of a shifted law. -/
+lemma mean_map_add_one (P : PMF ℕ) :
+    𝔼[P.map (· + 1)] = 𝔼[P] + 1 := by
+  unfold mean
+  rw [expVal_map]
+  rw [show (fun a : ℕ => (((a + 1 : ℕ)) : ENNReal)) =
+      (fun a : ℕ => (a : ENNReal) + 1) from funext fun a => by push_cast; ring,
+    expVal_add, expVal_const]
+
+/-!
 ## Probability of an event
 -/
 
@@ -126,7 +171,8 @@ noncomputable def prob {α : Type*} (p : PMF α) (s : Set α) : ENNReal :=
   ∑' a, s.indicator p a
 
 /-- `prob` agrees with the outer measure induced by the `PMF`, giving
-access to the Mathlib measure-theory API when needed. -/
+access to the Mathlib measure-theory API when needed. (Kept as the
+escape hatch to measure theory; no in-repo client yet.) -/
 lemma prob_eq_toOuterMeasure {α : Type*} (p : PMF α) (s : Set α) :
     prob p s = p.toOuterMeasure s :=
   (p.toOuterMeasure_apply s).symm
@@ -209,7 +255,9 @@ lemma prob_bind {α β : Type*} (p : PMF α) (f : α → PMF β) (s : Set β) :
     ENNReal.tsum_comm]
   exact tsum_congr fun a => ENNReal.tsum_mul_left
 
-/-- A point mass assigns probability `1` to any event containing it. -/
+/-- A point mass assigns probability `1` to any event containing it.
+(Kept for symmetry with `prob_pure_of_notMem`, which the amplification
+argument uses.) -/
 lemma prob_pure_of_mem {α : Type*} {a : α} {s : Set α} (h : a ∈ s) :
     prob (PMF.pure a) s = 1 := by
   unfold prob

@@ -88,6 +88,11 @@ $\sum r H_r$ (stated below) yields the closed form. We omit the
 routine summation; the resulting polynomial-harmonic expression is
 exactly the displayed formula. $\blacksquare$
 
+*Note on Theorem 2.* The block/indicator argument above is the
+classical presentation; the formalization establishes the same closed
+form by induction on the uniform-pivot recurrence, splitting the rank
+sum at $k$ and telescoping each half against the identities below.
+
 **Corollary (minimum selection).** At $k = 0$ the formula collapses to
 $$\mathbb{E}[C(L,0)] = 2n - 2H_n .$$
 

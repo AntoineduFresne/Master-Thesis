@@ -7,11 +7,34 @@ a finite multiset $E$ of unordered pairs of *distinct* vertices
 (parallel edges allowed, no loops). Write $n := |V|$, $m := |E|$
 (counted with multiplicity).
 
-For $\emptyset \ne S \subsetneq V$, the **cut value** of $S$ is
-$$w(S) := \#\{\, e \in E : e \text{ has exactly one endpoint in } S \,\}$$
-(with multiplicity). The **minimum cut value** is
-$\lambda(G) := \min_{\emptyset \ne S \subsetneq V} w(S)$ (well defined
-for $n \ge 2$). The problem: compute $\lambda(G)$.
+*Formalization note.* In Lean an edge is a `Sym2 α` — Mathlib's
+unordered pair — and $E$ is a `List (Sym2 α)`, one entry per parallel
+copy. Orientation is not merely irrelevant but inexpressible:
+`s(u,v)` and `s(v,u)` are the same term. The crossing predicate is
+built with `Sym2.lift`, so its symmetry is a *well-definedness
+obligation* discharged at definition time, not a theorem proved
+afterwards.
+
+This matters, because for *directed* graphs the results below are
+false. A digraph can have exponentially many minimum cuts (in the
+in-star $v_i \to c$, every $S \ni c$ is a cut of value $0$), and the
+key step of Section 4 breaks: a set can have no outgoing edge while
+*every* edge is incident on it, so a uniformly random edge merges
+across the cut with probability $1$ rather than $\le 2/n$. Note also
+that $\deg$ below is the incidence degree, which is why the handshake
+identity reads $\sum_v \deg(v) = 2m$ and not $m$.
+
+`Sym2 α` is the endpoint type used by GraphLib (`Edge.endpoints` in
+`GraphLib/Graph/Basic.lean`, and `abbrev Edge := Sym2` in Weixuan
+Yuan's `UndirectedGraphs/SimpleGraphs.lean`), so this is the graph
+notion we intend to import once toolchains align. We diverge on two
+points, both forced by executability: multiplicity is carried by
+repetition in a `List` rather than by GraphLib's `Edge.edgeLabel` over
+a noncomputable `Set` (our `List (Sym2 α)` is their
+`Set (Edge α (Fin m))` with the list position as the label), and
+contraction merges one endpoint into the other rather than
+quotienting the vertex type by a `Setoid`, so that the vertex type is
+preserved across the $n-2$ rounds.
 
 ## 2. The algorithm
 

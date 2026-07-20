@@ -24,9 +24,13 @@ side conditions at all).
 
 ## Main declarations
 
-* `geometric q hq` — the geometric law on `ℕ`
-* `expVal_geometric` — `E = q/(1 − q)` failures, i.e. `1/(1 − q)`
-  trials
+* `geometric q hq` — the law of the failure count, `P(k) = qᵏ(1 − q)`
+* `mean_geometric` — `𝔼 = q/(1 − q)` failures
+* `geometricTrials p hp` — the law of the **trial** count of a
+  Bernoulli process with success probability `p` (failures plus the
+  successful trial)
+* `mean_geometricTrials` — `𝔼 = 1/p` trials, the form a
+  retry-until-success cost analysis actually consumes
 -/
 
 namespace ARA
@@ -42,6 +46,10 @@ private lemma geometric_mass (q : ℝ≥0∞) (hq : q < 1) :
   convert ENNReal.summable.hasSum
   exact htsum.symm
 
+/-- A nonzero success probability leaves failure probability `< 1`. -/
+lemma one_sub_lt_one {p : ℝ≥0∞} (hp0 : p ≠ 0) : 1 - p < 1 :=
+  ENNReal.sub_lt_self ENNReal.one_ne_top one_ne_zero hp0
+
 /-- The geometric distribution: `k` failures before the first success,
 `P(k) = qᵏ(1 − q)`, for failure probability `q < 1`. -/
 noncomputable def geometric (q : ℝ≥0∞) (hq : q < 1) : PMF ℕ :=
@@ -51,11 +59,11 @@ noncomputable def geometric (q : ℝ≥0∞) (hq : q < 1) : PMF ℕ :=
     geometric q hq k = q ^ k * (1 - q) := rfl
 
 /-- **Expectation of the geometric law**: `q/(1 − q)` expected
-failures before the first success (hence `1/(1 − q)` expected trials).
-Proved by the layer-cake exchange `k = #{j | j < k}`; in `ℝ≥0∞` the
-double-sum swap is unconditional. -/
-theorem expVal_geometric (q : ℝ≥0∞) (hq : q < 1) :
-    expVal (geometric q hq) (fun k => (k : ℝ≥0∞)) = q * (1 - q)⁻¹ := by
+failures before the first success. Proved by the layer-cake exchange
+`k = #{j | j < k}`; in `ℝ≥0∞` the double-sum swap is unconditional. -/
+theorem mean_geometric (q : ℝ≥0∞) (hq : q < 1) :
+    𝔼[geometric q hq] = q * (1 - q)⁻¹ := by
+  unfold mean
   have h0 : (1 - q) ≠ 0 := (tsub_pos_of_lt hq).ne'
   have htop : (1 - q) ≠ ⊤ := ne_top_of_le_ne_top ENNReal.one_ne_top tsub_le_self
   -- `k` as a sum of indicators.
@@ -90,5 +98,28 @@ theorem expVal_geometric (q : ℝ≥0∞) (hq : q < 1) :
           ENNReal.tsum_mul_left, ENNReal.tsum_mul_right,
           ENNReal.tsum_geometric, ENNReal.inv_mul_cancel h0 htop, mul_one]
     _ = q * (1 - q)⁻¹ := ENNReal.tsum_geometric_add_one q
+
+/-!
+## Trials until the first success
+-/
+
+/-- The law of the **number of trials** until the first success, for
+success probability `p`: the failure count plus the successful trial.
+This is the cost law of one retry-until-success stage. -/
+noncomputable def geometricTrials (p : ℝ≥0∞) (hp0 : p ≠ 0) : PMF ℕ :=
+  (geometric (1 - p) (one_sub_lt_one hp0)).map (· + 1)
+
+/-- **Expected number of trials until the first success**: `1/p`.
+The form a retry-until-success cost analysis consumes directly (the
+coupon collector's stage `m` has `p = m/n`, hence `n/m` draws). -/
+theorem mean_geometricTrials {p : ℝ≥0∞} (hp0 : p ≠ 0) (hptop : p ≠ ⊤)
+    (hp1 : p ≤ 1) :
+    𝔼[geometricTrials p hp0] = p⁻¹ := by
+  rw [geometricTrials, mean_map_add_one, mean_geometric,
+    ENNReal.sub_sub_cancel ENNReal.one_ne_top hp1]
+  -- `(1 − p)·p⁻¹ + 1 = p⁻¹`, via `1 = p·p⁻¹`.
+  have h1 : (1 - p) * p⁻¹ + 1 = (1 - p) * p⁻¹ + p * p⁻¹ := by
+    rw [ENNReal.mul_inv_cancel hp0 hptop]
+  rw [h1, ← add_mul, tsub_add_cancel_of_le hp1, one_mul]
 
 end ARA

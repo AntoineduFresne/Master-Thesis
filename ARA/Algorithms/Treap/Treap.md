@@ -59,9 +59,11 @@ their key sets, and concatenating
 $\text{inorder}(\ell), p, \text{inorder}(r)$ is strictly increasing
 and enumerates all keys. $\blacksquare$
 
-**Theorem 2 (deterministic height bound).** Every supported tree has
-height $\le n$ (a tree on $n$ keys has at most $n$ nodes, and height
-is at most the number of nodes). $\blacksquare$
+**Theorem 2 (deterministic height bound).** In **both** models, every
+supported tree has height $\le n$: by Theorem 1 the traversal of such
+a tree enumerates the $n$ keys, so the tree has exactly $n$ nodes, and
+the height of a binary tree is at most its number of nodes.
+$\blacksquare$
 
 ## 4. Expected height
 

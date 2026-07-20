@@ -242,6 +242,14 @@ lemma pmf_uniform_fin_bind_const_prob {β : Type*} {n : ℕ} [NeZero n]
   simp only [hv, Finset.mul_sum]
   exact ennreal_inv_nsmul_cancel v
 
+/-- Inverting a ratio of naturals: `(a/b)⁻¹ = b/a`. -/
+lemma ennreal_natCast_div_inv {a b : ℕ} (ha : a ≠ 0) :
+    ((a : ENNReal) / (b : ENNReal))⁻¹ = (b : ENNReal) / (a : ENNReal) := by
+  rw [div_eq_mul_inv,
+    ENNReal.mul_inv (Or.inl (by exact_mod_cast ha))
+      (Or.inl (ENNReal.natCast_ne_top _)),
+    inv_inv, mul_comm, ← div_eq_mul_inv]
+
 /-- Division comparison in `ℝ≥0∞` for natural fractions, by
 cross-multiplication in `ℕ`. -/
 lemma ennreal_div_le_div_nat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)

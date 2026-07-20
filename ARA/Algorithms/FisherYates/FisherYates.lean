@@ -31,7 +31,8 @@ their own work.
   appears with probability exactly `1 / n!`.
 * `support_shuffle` — for **any** list, every output is a permutation
   of the input (no `Nodup` needed).
-* `expected_cost_shuffle` — the shuffle is free.
+* `expected_cost_shuffle` / `costPMF_shuffle` — the shuffle is free,
+  on every run and not just on average.
 
 The pointwise form is the exchangeability lemma the treap
 model-equivalence roadmap item (insertion model ↔ recursive model)
@@ -211,5 +212,13 @@ lemma expected_cost_shuffle
       rw [expected_cost_toPMF_bind_pure]
       exact ih i
     rw [Finset.sum_congr rfl fun i _ => hbranch i, Finset.sum_const_zero, mul_zero]
+
+/-- The shuffle's *cost law* is the point mass at `0`: it is free on
+every run, not merely in expectation. -/
+lemma costPMF_shuffle
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (L : List α) :
+    costPMF (shuffle L : TimeMT ℕ M (List α)) = PMF.pure 0 :=
+  costPMF_eq_pure_zero (expected_cost_shuffle L)
 
 end ARA

@@ -80,13 +80,17 @@ $(d/|S|)^k$.
 
 ## 4. Complexity
 
-**Theorem 3.** Every run costs exactly $1$ oracle evaluation, and
-draws $n$ uniform samples from $S$. $\blacksquare$
+**Theorem 3.** Every run costs exactly $1$ oracle evaluation — the
+cost law is the point mass at $1$, not merely a mean. $\blacksquare$
 
 ## 5. Auxiliary facts used (stated, not proved)
 
 * A nonzero univariate polynomial of degree $k$ over an integral
   domain has at most $k$ roots (factor theorem + induction).
+* The counting bound of Theorem 2 itself: the induction above is the
+  classical argument (Schwartz 1980, Zippel 1979), and the
+  formalization consumes it as a library fact rather than replaying
+  it, exactly as it does the root bound.
 * The union bound.
 * Conditioning: the coordinates of a uniform sample of $S^n$ are
   independent and uniform on $S$.
