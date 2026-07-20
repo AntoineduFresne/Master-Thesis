@@ -110,7 +110,13 @@ pivotLT L i, pivotGE L i        -- the two sides of a pivot partition
 
 ```
 lake build          # builds the whole framework (root manifest ARA.lean)
+lake exe axiom_audit # checks the trusted base of every ARA declaration
 ```
+
+The audit ([scripts/AxiomAudit.lean](scripts/AxiomAudit.lean)) reads the built
+`.olean` files and fails if any declaration depends on an axiom other than
+`propext`, `Classical.choice` and `Quot.sound`. CI runs it, plus a `sorry` grep, on every
+push and pull request.
 
 Toolchain: `leanprover/lean4 v4.31.0`, Mathlib `v4.31.0`,
 [cslib](https://github.com/leanprover/cslib) `v4.31.0` (provides `TimeM`).
