@@ -8,6 +8,7 @@ import ARA.Infrastructure.Tactics
 import ARA.Infrastructure.Randomness.LawfulRandMonad
 import ARA.Infrastructure.Randomness.Prob
 import ARA.Infrastructure.Randomness.RandVec
+import ARA.Infrastructure.Randomness.SPMF
 import ARA.Infrastructure.Randomness.Geometric
 import ARA.Infrastructure.Complexity.TimeMT
 import ARA.Infrastructure.Complexity.MonadCost
