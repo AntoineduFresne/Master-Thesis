@@ -38,8 +38,10 @@ ARA/
 │   │   │                          (`randIdx`, `randBit`/`randVec`,
 │   │   │                          `randElem`/`randVecOn`) with the counting
 │   │   │                          principles #accepting / #choices
-│   │   └── Geometric.lean         geometric + `geometricTrials` laws (retry
-│   │                              cost), 𝔼 = q/(1−q) failures, 1/p trials
+│   │   ├── Geometric.lean         geometric + `geometricTrials` laws (retry
+│   │   │                          cost), 𝔼 = q/(1−q) failures, 1/p trials
+│   │   └── SPMF.lean              sub-probability (`OptionT PMF`) and the
+│   │                              `RetryMonad` Las-Vegas retry primitive
 │   ├── Complexity/     proving what it costs
 │   │   ├── TimeMT.lean            cost transformer over any monad
 │   │   ├── MonadCost.lean         abstract `tick` (no-op by default)
@@ -118,13 +120,11 @@ pivotLT L i, pivotGE L i        -- the two sides of a pivot partition
 
 ```
 lake build          # builds the whole framework (root manifest ARA.lean)
-lake exe axiom_audit # checks the trusted base of every ARA declaration
 ```
 
-The audit ([scripts/AxiomAudit.lean](scripts/AxiomAudit.lean)) reads the built
-`.olean` files and fails if any declaration depends on an axiom other than
-`propext`, `Classical.choice` and `Quot.sound`. CI runs it, plus a `sorry` grep, on every
-push and pull request.
+Every declaration rests only on Lean's classical foundations
+(`propext`, `Classical.choice`, `Quot.sound`) — the same trusted base
+as Mathlib; check any theorem with `#print axioms`.
 
-Toolchain: `leanprover/lean4 v4.31.0`, Mathlib `v4.31.0`,
-[cslib](https://github.com/leanprover/cslib) `v4.31.0` (provides `TimeM`).
+Toolchain: `leanprover/lean4 v4.32.0`, Mathlib `v4.32.0`,
+[cslib](https://github.com/leanprover/cslib) `v4.32.0` (provides `TimeM`).

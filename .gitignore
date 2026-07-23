@@ -5,3 +5,7 @@
 
 # private working material — not part of the published framework
 archive/
+
+# local editor / assistant configuration
+.vscode/
+.claude/
