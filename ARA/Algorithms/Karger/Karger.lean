@@ -233,31 +233,32 @@ theorem support_contractAux
           (h.verts.card = t ∨ h.edges = []) ∧
           h.edges.length ≤ g.edges.length ∧
           g.minCutValue ≤ h.minCutValue ∧ Tracks g₀ h := by
-  intro k
-  induction k with
-  | zero =>
-    intro g hwf hcard ht h hh
+  intro k g
+  induction k, g using contractAux.induct with
+  | case1 g =>
+    intro hwf hcard ht h hh
     rw [contractAux.eq_1] at hh
     toPMF_step at hh
     subst hh
     exact ⟨hwf, by omega, le_rfl, Or.inl (by omega), le_rfl, le_rfl, ht⟩
-  | succ k ih =>
-    intro g hwf hcard ht h hh
-    by_cases hm : 0 < g.edges.length
-    · rw [contractAux.eq_2, dif_pos hm] at hh
-      simp only [toPMF_simp, inst.toPMF_randIdx] at hh
-      obtain ⟨i, -, hi⟩ := hh
-      have hcard' := card_verts_contract hwf ht.disj i
-      obtain ⟨h1, h2, h3, h4, h5, h6, h7⟩ := ih (g.contract i) (hwf.contract i)
-        (by omega) (ht.contract hwf i) h hi
-      exact ⟨h1, h2, by omega, h4,
-        le_trans h5 (length_edges_contract_le g i),
-        le_trans (minCutValue_le_contract hwf ht.disj i (by omega)) h6, h7⟩
-    · rw [contractAux.eq_2, dif_neg hm] at hh
-      toPMF_step at hh
-      subst hh
-      exact ⟨hwf, by omega, le_rfl,
-        Or.inr (List.eq_nil_of_length_eq_zero (by omega)), le_rfl, le_rfl, ht⟩
+  | case2 k g hm ih =>
+    intro hwf hcard ht h hh
+    rw [contractAux.eq_2, dif_pos hm] at hh
+    simp only [toPMF_simp, inst.toPMF_randIdx] at hh
+    obtain ⟨i, -, hi⟩ := hh
+    have hcard' := card_verts_contract hwf ht.disj i
+    obtain ⟨h1, h2, h3, h4, h5, h6, h7⟩ := ih i (hwf.contract i)
+      (by omega) (ht.contract hwf i) h hi
+    exact ⟨h1, h2, by omega, h4,
+      le_trans h5 (length_edges_contract_le g i),
+      le_trans (minCutValue_le_contract hwf ht.disj i (by omega)) h6, h7⟩
+  | case3 k g hm =>
+    intro hwf hcard ht h hh
+    rw [contractAux.eq_2, dif_neg hm] at hh
+    toPMF_step at hh
+    subst hh
+    exact ⟨hwf, by omega, le_rfl,
+      Or.inr (List.eq_nil_of_length_eq_zero (by omega)), le_rfl, le_rfl, ht⟩
 
 /-! ## Survival of the minimum cut -/
 
@@ -278,10 +279,10 @@ theorem success_contractAux
       (((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
           (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞) ≤
         ℙ[contractAux k g ∈ {h | h.minCutValue = g.minCutValue} | M] := by
-  intro k
-  induction k with
-  | zero =>
-    intro g hwf hdisj hcard
+  intro k g
+  induction k, g using contractAux.induct with
+  | case1 g =>
+    intro hwf hdisj hcard
     have hone : prob (PMF.pure g)
         {h : MultiGraph (Finset α) | h.minCutValue = g.minCutValue} = 1 :=
       prob_pure_of_mem rfl
@@ -289,9 +290,8 @@ theorem success_contractAux
       show ((0 + s + 2) * (0 + s + 1) : ℕ) = ((s + 2) * (s + 1) : ℕ) by ring,
       ENNReal.div_self (Nat.cast_ne_zero.mpr (by positivity))
         (ENNReal.natCast_ne_top _)]
-  | succ k ih =>
-    intro g hwf hdisj hcard
-    by_cases hm : 0 < g.edges.length
+  | case2 k g hm ih =>
+    intro hwf hdisj hcard
     · -- Main case: pick a uniform edge, recurse.
       rw [contractAux.eq_2, dif_pos hm, toPMF_tick_bind, prob_toPMF_randIdx_bind]
       -- Fix a minimum cut `S`.
@@ -315,18 +315,15 @@ theorem success_contractAux
         by_cases hcr : Crossing S e
         · simp [hcr]
         · rw [if_neg hcr, hF]
-          have hmem := hwf.incidence e he
-          have hnd := hwf.loopless e he
-          have hcard' : (g.contractEdge e).verts.card = k + (s + 2) := by
+          obtain ⟨i, hilen, rfl⟩ := List.getElem_of_mem he
+          have hmem := hwf.incidence _ he
+          have hnd := hwf.loopless _ he
+          have hcard' : (g.contractEdge g.edges[i]).verts.card = k + (s + 2) := by
             have := card_verts_contractEdge hdisj hmem hnd
             omega
-          have hmc : (g.contractEdge e).minCutValue = g.minCutValue :=
-            minCutValue_contractEdge_of_notCrossing hwf hdisj hmem hnd
-              (by omega) hS hSval hcr
-          have hih := ih (g.contractEdge e) hwf.contractEdge
-            (hdisj.contractEdge hmem) hcard'
-          rw [hmc] at hih
-          exact hih
+          rw [← minCutValue_contractEdge_of_notCrossing hwf hdisj hmem hnd
+            (by omega) hS hSval hcr]
+          exact ih ⟨i, hilen⟩ hwf.contractEdge (hdisj.contractEdge hmem) hcard'
       -- Count the non-crossing edges: `m - c` of them.
       have hcount : (g.edges.map fun e =>
           (if Crossing S e then 0 else
@@ -353,6 +350,8 @@ theorem success_contractAux
       rw [show ((k + 1 + s + 2) * (k + 1 + s + 1) : ℕ) =
           ((k + s + 3) * (k + s + 2) : ℕ) by ring]
       exact this
+  | case3 k g hm =>
+    intro _ _ _
     · -- No edges left: the graph is unchanged, success with probability `1`.
       have hone : prob (PMF.pure g)
           {h : MultiGraph (Finset α) | h.minCutValue = g.minCutValue} = 1 :=
@@ -475,26 +474,24 @@ lemma expected_cost_contractAux
     ∀ (k : ℕ) (g : MultiGraph (Finset α)),
       𝔼_runtime[(contractAux k g : TimeMT ℕ M (MultiGraph (Finset α)))] ≤
         (k : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
-  intro k
-  induction k with
-  | zero =>
-    intro g
+  intro k g
+  induction k, g using contractAux.induct with
+  | case1 g =>
     rw [contractAux.eq_1, expected_cost_toPMF_pure]
     exact bot_le
-  | succ k ih =>
-    intro g
-    by_cases hm : 0 < g.edges.length
-    · rw [contractAux.eq_2, dif_pos hm, MonadCost.tick_timeMT,
-        expected_cost_toPMF_tick_bind, expected_cost_uniform_step]
-      -- Each branch recurses on at most `m` edges, so the uniform
-      -- average of the branch costs is at most `k * m`.
-      refine le_trans (add_le_add le_rfl (uniform_avg_le_of_forall
-        (fun i => le_trans (ih (g.contract i)) (mul_le_mul' le_rfl
-          (Nat.cast_le.mpr (length_edges_contract_le g i)))) hm.ne')) ?_
-      rw [show ((k + 1 : ℕ) : ℝ≥0∞) = (k : ℝ≥0∞) + 1 by push_cast; ring]
-      rw [add_mul, one_mul, add_comm]
-    · rw [contractAux.eq_2, dif_neg hm, expected_cost_toPMF_pure]
-      exact bot_le
+  | case2 k g hm ih =>
+    rw [contractAux.eq_2, dif_pos hm, MonadCost.tick_timeMT,
+      expected_cost_toPMF_tick_bind, expected_cost_uniform_step]
+    -- Each branch recurses on at most `m` edges, so the uniform
+    -- average of the branch costs is at most `k * m`.
+    refine le_trans (add_le_add le_rfl (uniform_avg_le_of_forall
+      (fun i => le_trans (ih i) (mul_le_mul' le_rfl
+        (Nat.cast_le.mpr (length_edges_contract_le g i)))) hm.ne')) ?_
+    rw [show ((k + 1 : ℕ) : ℝ≥0∞) = (k : ℝ≥0∞) + 1 by push_cast; ring]
+    rw [add_mul, one_mul, add_comm]
+  | case3 k g hm =>
+    rw [contractAux.eq_2, dif_neg hm, expected_cost_toPMF_pure]
+    exact bot_le
 
 /-- **Expected complexity of Karger's algorithm.** With one tick per
 edge scanned during a contraction pass, running `Karger` on a graph

@@ -122,6 +122,18 @@ the geometric sum is dominated by the last level $i = d(n) \le
 $\sum_i n\,m\,(\sqrt2)^i \le \tfrac{2\sqrt2}{\sqrt2 - 1}\, n^2 m
 \le 7\,n^2 m$. $\blacksquare$
 
+*Remark (proof route).* The level-sum argument above is the one to
+formalize: a direct per-call induction with an invariant of the form
+$\mathbb{E}[C] \le (c\,n^2 - b\,n)\,m$ provably cannot close, because
+$2\,t(n)^2 \approx n^2 + n$ — the two recursive calls together are
+*not* smaller than the parent in the quadratic measure; only the
+aggregate over levels is quadratic. (Checked against the exact
+recurrence: $G(n) = 2G(t(n)) + n$, $G(3)=3$ gives $G(32)/32^2 \approx
+4.2$, converging by the master theorem, so the constant $7$ has
+margin.) A weaker interim bound with a per-call induction is
+$\mathbb{E}[C] \le (2^{d(n)+2} - 2)\, n\, m$ — this is the bound the
+formal development currently proves (`kargerStein_cost_le`).
+
 *Remark (model).* The classical $O(n^2 \log^2 n)$-work-per-success
 headline assumes an $O(n)$-per-contraction implementation (adjacency
 matrices), under which a call at size $n_i$ costs $O(n_i^2)$ and each

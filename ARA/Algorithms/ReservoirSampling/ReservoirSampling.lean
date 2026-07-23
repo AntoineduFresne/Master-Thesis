@@ -99,23 +99,33 @@ private lemma toPMF_reservoirAux
     𝒟[reservoirAux seen cur xs | M] y =
     ((if y = cur then (seen : ENNReal) else 0) + (xs.count y : ENNReal)) /
       ((seen : ENNReal) + (xs.length : ENNReal)) := by
-  induction xs generalizing seen cur with
-  | nil =>
+  revert hseen
+  induction seen, cur, xs using reservoirAux.induct with
+  | case1 seen cur =>
+    intro hseen
     rw [reservoirAux.eq_1, inst.toPMF_pure, pmf_pure_eq, PMF.pure_apply]
     simp only [List.count_nil, List.length_nil, Nat.cast_zero, add_zero]
     split_ifs with h
     · rw [ENNReal.div_self (by exact_mod_cast hseen) (ENNReal.natCast_ne_top _)]
     · rw [ENNReal.zero_div]
-  | cons x xs ih =>
+  | case2 seen cur x xs ih =>
+    intro _
+    have hstep : ∀ i : Fin (seen + 1),
+        𝒟[reservoirAux (seen + 1) (if i.val = 0 then x else cur) xs | M] y =
+          ((if y = (if i.val = 0 then x else cur)
+              then ((seen + 1 : ℕ) : ENNReal) else 0) +
+            (xs.count y : ENNReal)) /
+          (((seen + 1 : ℕ) : ENNReal) + (xs.length : ENNReal)) :=
+      fun i => ih i (by omega)
     rw [reservoirAux.eq_2]
     simp only [toPMF_simp]
     rw [inst.toPMF_randFin, PMF.bind_apply, tsum_fintype]
     simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
+    simp only [hstep]
     rw [← Finset.mul_sum, Fin.sum_univ_succ]
     -- The coin: index `0` adopts `x`, the `seen` others keep `cur`.
     simp only [Fin.val_zero, Fin.val_succ, reduceIte, Nat.succ_ne_zero]
-    rw [ih (seen + 1) (by omega) x, ih (seen + 1) (by omega) cur,
-      Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
+    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
       ← mul_div_assoc, ENNReal.div_add_div_same,
       show ((seen + 1 : ℕ) : ENNReal) + (xs.length : ENNReal) =
           (seen : ENNReal) + ((x :: xs).length : ENNReal) from by
@@ -200,11 +210,11 @@ private lemma expected_cost_reservoirAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (xs : List α) (seen : ℕ) (cur : α) :
     𝔼_runtime[reservoirAux seen cur xs | M] = (xs.length : ENNReal) := by
-  induction xs generalizing seen cur with
-  | nil =>
+  induction seen, cur, xs using reservoirAux.induct with
+  | case1 seen cur =>
     rw [reservoirAux.eq_1, expected_cost_toPMF_pure]
     simp
-  | cons x xs ih =>
+  | case2 seen cur x xs ih =>
     haveI : NeZero (seen + 1) := ⟨seen.succ_ne_zero⟩
     rw [reservoirAux.eq_2, expected_cost_uniform_step_fin]
     have hbranch : ∀ i : Fin (seen + 1),
@@ -213,7 +223,7 @@ private lemma expected_cost_reservoirAux
         1 + (xs.length : ENNReal) := by
       intro i
       cost_step
-      rw [ih]
+      rw [ih i]
     rw [uniform_avg_eq_of_forall hbranch]
     simp only [List.length_cons]
     push_cast
@@ -251,18 +261,15 @@ private lemma costPMF_reservoirAux
     ∀ (xs : List α) (seen : ℕ) (cur : α),
       costPMF (reservoirAux seen cur xs : TimeMT ℕ M α) =
         PMF.pure xs.length := by
-  intro xs
-  induction xs with
-  | nil =>
-    intro seen cur
+  intro xs seen cur
+  induction seen, cur, xs using reservoirAux.induct with
+  | case1 seen cur =>
     rw [reservoirAux.eq_1]
     exact costPMF_eq_pure_zero (by cost_step)
-  | cons x xs ih =>
-    intro seen cur
+  | case2 seen cur x xs ih =>
     rw [reservoirAux.eq_2, randFin_timeMT]
     exact costPMF_lift_bind_const _ _ fun i => by
-      rw [MonadCost.tick_timeMT, costPMF_tick_bind,
-        ih (seen + 1) (if i.val = 0 then x else cur), PMF.pure_map]
+      rw [MonadCost.tick_timeMT, costPMF_tick_bind, ih i, PMF.pure_map]
       simp [Nat.add_comm]
 
 /-- **Deterministic cost.** The cost law of reservoir sampling is the
