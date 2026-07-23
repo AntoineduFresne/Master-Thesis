@@ -206,6 +206,26 @@ noncomputable def randVecOn {M} [Monad M] [RandMonad M] {α : Type} (s : Finset 
       let rest ← randVecOn s hs n
       return Fin.cons b rest
 
+/-- Evaluate a `Fin.cons`-postprocessed draw at a vector via its
+head/tail split — the Fin-tuple helper that hides the dependent-motive
+friction of `Fin.cons` (the head must match; the tail carries the
+recursion). -/
+lemma toPMF_bind_pure_finCons
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {γ : Type} [DecidableEq γ] {n : ℕ} (m : M (Fin n → γ)) (b : γ)
+    (f : Fin (n + 1) → γ) :
+    inst.toPMF (m >>= fun rest => pure (Fin.cons b rest)) f =
+      if f 0 = b then inst.toPMF m (Fin.tail f) else 0 := by
+  by_cases hb : f 0 = b
+  · rw [if_pos hb, ← hb]
+    have h := toPMF_bind_pure_apply m
+      (Fin.cons_right_injective (α := fun _ : Fin (n + 1) => γ) (f 0))
+      (Fin.tail f)
+    rwa [Fin.cons_self_tail] at h
+  · rw [if_neg hb]
+    exact toPMF_bind_pure_apply_eq_zero _ fun ⟨rest, hrest⟩ => hb (by
+      rw [← hrest, Fin.cons_zero])
+
 /-- Pointwise law of `randVecOn`: each grid point of `sⁿ` has
 probability `(#s ^ n)⁻¹`, everything else `0`. -/
 lemma toPMF_randVecOn_apply {M} [Monad M] [LawfulMonad M]
@@ -229,22 +249,8 @@ lemma toPMF_randVecOn_apply {M} [Monad M] [LawfulMonad M]
     rw [randVecOn, inst.toPMF_bind, toPMF_randElem, pmf_bind_eq, PMF.bind_apply]
     have hinner : ∀ b, inst.toPMF ((randVecOn s hs n : M (Fin n → α)) >>=
         fun rest => pure (Fin.cons b rest)) f =
-        if f 0 = b then 𝒟[randVecOn s hs n | M] (Fin.tail f) else 0 := by
-      intro b
-      by_cases hb : f 0 = b
-      · subst hb
-        rw [if_pos rfl]
-        have h : inst.toPMF ((randVecOn s hs n : M (Fin n → α)) >>=
-            fun rest => pure (Fin.cons (f 0) rest))
-            (Fin.cons (f 0) (Fin.tail f) : Fin (n + 1) → α) =
-            𝒟[randVecOn s hs n | M] (Fin.tail f) :=
-          toPMF_bind_pure_apply _
-            (Fin.cons_right_injective (α := fun _ : Fin (n + 1) => α) (f 0)) _
-        rw [Fin.cons_self_tail] at h
-        exact h
-      · rw [if_neg hb]
-        exact toPMF_bind_pure_apply_eq_zero _ fun ⟨rest, hrest⟩ => hb (by
-          rw [← hrest, Fin.cons_zero])
+        if f 0 = b then 𝒟[randVecOn s hs n | M] (Fin.tail f) else 0 :=
+      fun b => toPMF_bind_pure_finCons (randVecOn s hs n) b f
     rw [tsum_eq_single (f 0) (fun b hb => by
         rw [hinner b, if_neg fun h => hb h.symm, mul_zero]),
       hinner (f 0), if_pos rfl, ih (Fin.tail f), PMF.uniformOfFinset_apply]
@@ -310,5 +316,85 @@ lemma toPMF_randVecOn_true {M} [Monad M] [LawfulMonad M]
   simp only [inst.toPMF_pure, pmf_pure_eq]
   rw [toPMF_randVecOn s hs n, pmf_uniformOfFinset_bind_pure_true,
     Fintype.card_piFinset_const, Nat.cast_pow]
+
+/-!
+## Executable sampling for ordered types
+
+`randElem`/`randVecOn` enumerate an abstract `Finset`, which needs
+choice; over a `LinearOrder` the *sorted* enumeration is canonical and
+computable, restoring `#eval` for grid algorithms. The laws coincide
+(`toPMF_randElemSorted`, `toPMF_randVecOnSorted`), so every theorem
+about the abstract samplers transfers verbatim.
+-/
+
+section Sorted
+
+variable {α : Type} [LinearOrder α]
+
+/-- Computable `randElem`: draw a uniform index into the canonical
+sorted enumeration of `s`. -/
+def randElemSorted {M} [Monad M] [RandMonad M]
+    (s : Finset α) (hs : s.Nonempty) : M α := do
+  let i ← randIdx (s.sort (· ≤ ·))
+    (by rw [Finset.length_sort]; exact hs.card_pos)
+  pure (s.sort (· ≤ ·))[i]
+
+/-- The sorted sampler has the same law as the abstract one. -/
+lemma toPMF_randElemSorted {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M] (s : Finset α) (hs : s.Nonempty) :
+    𝒟[randElemSorted s hs | M] = PMF.uniformOfFinset s hs := by
+  haveI : NeZero (s.sort (· ≤ ·)).length :=
+    ⟨by rw [Finset.length_sort]; exact hs.card_pos.ne'⟩
+  ext a
+  rw [PMF.uniformOfFinset_apply, randElemSorted, inst.toPMF_bind,
+    inst.toPMF_randIdx, pmf_bind_eq, pmf_uniform_fin_bind_apply]
+  simp only [inst.toPMF_pure, pmf_pure_eq, PMF.pure_apply]
+  by_cases ha : a ∈ s
+  · obtain ⟨j, hj, hja⟩ :=
+      List.getElem_of_mem ((Finset.mem_sort (α := α) (· ≤ ·)).mpr ha)
+    rw [if_pos ha,
+      Fintype.sum_eq_single (⟨j, hj⟩ : Fin (s.sort (· ≤ ·)).length)
+        (fun i hne => by
+          refine if_neg fun hc => hne ?_
+          have hc2 : a = (s.sort (· ≤ ·))[(i : ℕ)]'i.isLt := hc
+          exact Fin.ext ((s.sort_nodup (· ≤ ·)).getElem_inj_iff.mp
+            (hc2.symm.trans hja.symm))),
+      if_pos (show a = (s.sort (· ≤ ·))[(⟨j, hj⟩ :
+        Fin (s.sort (· ≤ ·)).length)] from hja.symm),
+      mul_one, Finset.length_sort]
+  · rw [if_neg ha]
+    refine mul_eq_zero_of_right _ (Finset.sum_eq_zero fun i _ => ?_)
+    exact if_neg fun hc =>
+      ha ((Finset.mem_sort (α := α) (· ≤ ·)).mp (by
+        rw [hc]; exact List.getElem_mem _))
+
+/-- Computable `randVecOn`: a vector of independent sorted draws. -/
+def randVecOnSorted {M} [Monad M] [RandMonad M]
+    (s : Finset α) (hs : s.Nonempty) : (n : ℕ) → M (Fin n → α)
+  | 0 => return fun i => i.elim0
+  | n + 1 => do
+      let b ← randElemSorted s hs
+      let rest ← randVecOnSorted s hs n
+      return Fin.cons b rest
+
+/-- The sorted grid sampler has the same law as the abstract one:
+every theorem about `randVecOn` applies to the executable variant. -/
+lemma toPMF_randVecOnSorted {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M] (s : Finset α) (hs : s.Nonempty) :
+    ∀ n, 𝒟[randVecOnSorted s hs n | M] = 𝒟[randVecOn s hs n | M] := by
+  intro n
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+    rw [randVecOnSorted, randVecOn, inst.toPMF_bind, inst.toPMF_bind,
+      toPMF_randElemSorted, toPMF_randElem]
+    refine congrArg _ (funext fun b => ?_)
+    rw [inst.toPMF_bind, inst.toPMF_bind, ih]
+
+-- The demo seam (a) asked for: grid sampling now runs under `IO`.
+#eval (randVecOnSorted ({2, 3, 5, 7} : Finset ℕ) (by decide) 3 :
+    IO (Fin 3 → ℕ)) >>= fun v => pure (List.ofFn v)
+
+end Sorted
 
 end ARA

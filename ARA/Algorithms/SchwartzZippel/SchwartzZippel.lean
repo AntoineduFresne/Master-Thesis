@@ -99,15 +99,9 @@ theorem schwartzZippel_sound [IsDomain R]
       (Fintype.piFinset fun _ : Fin n => S).filter
         fun f => MvPolynomial.eval f P = 0 from
     Finset.filter_congr fun f _ => by simp]
-  -- Mathlib's `ℚ≥0` bound, cross-multiplied down to `ℕ` and lifted
-  -- back up to `ℝ≥0∞`.
-  have hq := MvPolynomial.schwartz_zippel_totalDegree hP S
-  rw [div_le_div_iff₀ (by exact_mod_cast pow_pos hS.card_pos n)
-    (by exact_mod_cast hS.card_pos)] at hq
-  have hnat : ((Fintype.piFinset fun _ : Fin n => S).filter
-      fun f => MvPolynomial.eval f P = 0).card * S.card ≤
-      P.totalDegree * S.card ^ n := by exact_mod_cast hq
-  have h := ennreal_div_le_div_nat (pow_pos hS.card_pos n) hS.card_pos hnat
+  -- Mathlib's `ℚ≥0` bound crosses to `ℝ≥0∞` in one bridge call.
+  have h := ennreal_div_le_div_of_nnrat (pow_pos hS.card_pos n) hS.card_pos
+    (by exact_mod_cast MvPolynomial.schwartz_zippel_totalDegree hP S)
   rw [Nat.cast_pow] at h
   exact h
 

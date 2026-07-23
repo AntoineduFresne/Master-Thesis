@@ -217,14 +217,22 @@ at least two supervertices, a genuine end state (two supervertices or
 no edges), and the `Tracks` partition invariant against the original
 graph. -/
 
-private lemma support_contractAux
+/-- **The run invariant of the contraction loop**, for an arbitrary
+stopping count `t` (Karger stops at `t = 2`; Karger–Stein at
+`t = ksTarget n`): well-formedness, the card window, a genuine end
+state, monotonicity of the edge count and of the minimum-cut value,
+and the `Tracks` partition invariant. -/
+theorem support_contractAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α} :
-    ∀ (k : ℕ) (g : MultiGraph (Finset α)), g.WF → g.verts.card = k + 2 →
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
+    (t : ℕ) (ht2 : 2 ≤ t) :
+    ∀ (k : ℕ) (g : MultiGraph (Finset α)), g.WF → g.verts.card = k + t →
       Tracks g₀ g →
       ∀ h ∈ 𝒟[contractAux k g | M].support,
-        h.WF ∧ 2 ≤ h.verts.card ∧ (h.verts.card = 2 ∨ h.edges = []) ∧
-          Tracks g₀ h := by
+        h.WF ∧ t ≤ h.verts.card ∧ h.verts.card ≤ g.verts.card ∧
+          (h.verts.card = t ∨ h.edges = []) ∧
+          h.edges.length ≤ g.edges.length ∧
+          g.minCutValue ≤ h.minCutValue ∧ Tracks g₀ h := by
   intro k
   induction k with
   | zero =>
@@ -232,21 +240,24 @@ private lemma support_contractAux
     rw [contractAux.eq_1] at hh
     toPMF_step at hh
     subst hh
-    exact ⟨hwf, by omega, Or.inl hcard, ht⟩
+    exact ⟨hwf, by omega, le_rfl, Or.inl (by omega), le_rfl, le_rfl, ht⟩
   | succ k ih =>
     intro g hwf hcard ht h hh
     by_cases hm : 0 < g.edges.length
     · rw [contractAux.eq_2, dif_pos hm] at hh
       simp only [toPMF_simp, inst.toPMF_randIdx] at hh
       obtain ⟨i, -, hi⟩ := hh
-      exact ih (g.contract i) (hwf.contract i)
-        (by have := card_verts_contract hwf ht.disj i; omega)
-        (ht.contract hwf i) h hi
+      have hcard' := card_verts_contract hwf ht.disj i
+      obtain ⟨h1, h2, h3, h4, h5, h6, h7⟩ := ih (g.contract i) (hwf.contract i)
+        (by omega) (ht.contract hwf i) h hi
+      exact ⟨h1, h2, by omega, h4,
+        le_trans h5 (length_edges_contract_le g i),
+        le_trans (minCutValue_le_contract hwf ht.disj i (by omega)) h6, h7⟩
     · rw [contractAux.eq_2, dif_neg hm] at hh
       toPMF_step at hh
       subst hh
-      exact ⟨hwf, by omega,
-        Or.inr (List.eq_nil_of_length_eq_zero (by omega)), ht⟩
+      exact ⟨hwf, by omega, le_rfl,
+        Or.inr (List.eq_nil_of_length_eq_zero (by omega)), le_rfl, le_rfl, ht⟩
 
 /-! ## Survival of the minimum cut -/
 
@@ -376,8 +387,8 @@ theorem karger_isCut
   intro o ho
   unfold Karger at ho
   obtain ⟨h, hh, rfl⟩ := mem_support_toPMF_bind_pure.mp ho
-  obtain ⟨hwf', h2', hend, ht⟩ :=
-    support_contractAux (M := M) (g.verts.card - 2) g.super hwf.super
+  obtain ⟨hwf', h2', -, hend, -, -, ht⟩ :=
+    support_contractAux (M := M) 2 le_rfl (g.verts.card - 2) g.super hwf.super
       (by rw [card_verts_super]; omega) (Tracks.super g) h hh
   refine ⟨fun S hS => ⟨ht.isCut_mem h2' hS, ht.cutValue_mem hwf' hend hS⟩, ?_⟩
   obtain ⟨S, hS⟩ := Finset.card_pos.mp (by omega : 0 < h.verts.card)
@@ -402,8 +413,8 @@ theorem karger_success_prob
   rw [karger_eq_map, LawfulRandMonad.toPMF_map, pmf_map_eq, prob_map]
   refine le_trans (by exact_mod_cast hmain)
     (prob_mono_of_support fun h hh hev => ?_)
-  obtain ⟨hwf', h2', hend, -⟩ :=
-    support_contractAux (M := M) (g.verts.card - 2) g.super hwf.super
+  obtain ⟨hwf', h2', -, hend, -, -, -⟩ :=
+    support_contractAux (M := M) 2 le_rfl (g.verts.card - 2) g.super hwf.super
       (by rw [card_verts_super]; omega) (Tracks.super g) h hh
   -- On the support, "the minimum cut survived" implies "the reported
   -- edge count is the original minimum-cut value".
@@ -457,8 +468,9 @@ contraction never adds edges, every round costs at most `m` and there
 are at most `n - 2` rounds, giving expected cost at most `(n - 2) m`.
 The bound holds for **arbitrary** graphs — no well-formedness needed. -/
 
-/-- Expected cost of the contraction loop: at most `fuel * m`. -/
-private lemma expected_cost_contractAux
+/-- Expected cost of the contraction loop: at most `fuel * m`
+(shared with Karger–Stein). -/
+lemma expected_cost_contractAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
     ∀ (k : ℕ) (g : MultiGraph (Finset α)),
       𝔼_runtime[(contractAux k g : TimeMT ℕ M (MultiGraph (Finset α)))] ≤

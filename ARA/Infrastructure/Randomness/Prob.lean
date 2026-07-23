@@ -302,6 +302,34 @@ lemma prob_toPMF_randIdx_bind
   simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
   rw [← Finset.mul_sum]
 
+/-- **Sequential success composition**: to succeed after a bind it is
+enough to land in a good set and then succeed from every good,
+reachable outcome — the "survive, then recurse" step of a recursive
+Monte-Carlo analysis (Karger–Stein's branch bound). -/
+lemma le_prob_toPMF_bind
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {β γ : Type} {m : M β} {f : β → M γ} {Good : Set β} {Ev : Set γ}
+    {p₁ p₂ : ℝ≥0∞}
+    (h1 : p₁ ≤ prob (inst.toPMF m) Good)
+    (h2 : ∀ b ∈ Good, b ∈ (inst.toPMF m).support →
+      p₂ ≤ prob (inst.toPMF (f b)) Ev) :
+    p₁ * p₂ ≤ prob (inst.toPMF (m >>= f)) Ev := by
+  rw [inst.toPMF_bind, pmf_bind_eq, prob_bind]
+  calc p₁ * p₂ ≤ prob (inst.toPMF m) Good * p₂ := mul_le_mul' h1 le_rfl
+    _ = ∑' b, Good.indicator (inst.toPMF m) b * p₂ := by
+        unfold prob
+        rw [ENNReal.tsum_mul_right]
+    _ ≤ ∑' b, inst.toPMF m b * prob (inst.toPMF (f b)) Ev := by
+        refine ENNReal.tsum_le_tsum fun b => ?_
+        by_cases hb : b ∈ Good
+        · rw [Set.indicator_of_mem hb]
+          by_cases hsupp : b ∈ (inst.toPMF m).support
+          · exact mul_le_mul' le_rfl (h2 b hb hsupp)
+          · rw [(PMF.apply_eq_zero_iff _ _).mpr hsupp]
+            simp
+        · rw [Set.indicator_of_notMem hb]
+          simp
+
 /-- A point mass assigns probability `1` to any event containing it.
 (Kept for symmetry with `prob_pure_of_notMem`, which the amplification
 argument uses.) -/

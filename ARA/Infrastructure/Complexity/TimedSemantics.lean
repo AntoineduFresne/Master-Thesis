@@ -157,4 +157,16 @@ lemma toPMF_tick_bind {C : Type} {M} [Monad M] [LawfulMonad M]
     inst.toPMF (MonadCost.tick c >>= f) = inst.toPMF (f ()) := by
   rw [inst.toPMF_bind, LawfulMonadCost.toPMF_tick, pmf_bind_eq, PMF.pure_bind]
 
+/-- Support facts transfer to timed runs: an outcome reachable with
+its clock is reachable without it. Lets a support invariant proved at
+any lawful `M` feed the cost analysis of the `TimeMT ℕ M` reading. -/
+lemma mem_support_timedPMF
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {β : Type} {m : TimeMT ℕ M β} {tm : TimeM ℕ β}
+    (h : tm ∈ (inst.toPMF m.run).support) :
+    tm.ret ∈ (𝒟[m]).support := by
+  show tm.ret ∈ (inst.toPMF (TimeM.ret <$> m.run)).support
+  rw [inst.toPMF_map, pmf_map_eq, PMF.support_map]
+  exact ⟨tm, h, rfl⟩
+
 end ARA

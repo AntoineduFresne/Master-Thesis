@@ -69,6 +69,7 @@ ARA/
 └── Algorithms/
     ├── Tutorial.lean          ← start here
     ├── Quicksort/             Quickselect/       Karger/
+    ├── KargerStein/
     ├── ReservoirSampling/     Freivalds/         Treap/
     ├── FisherYates/           SchwartzZippel/    CouponCollector/
     │
@@ -87,6 +88,7 @@ analysis; together they are the proof that the framework is usable.
 | **Quicksort** | Dirac: always the sorted permutation | exact `2(n+1)H(n) − 4n`; $\leq$ `C(n,2)` for duplicates; Markov tail `ℙ[cost > k] ≤ C(n,2)/(k+1)` |
 | **Quickselect** | Dirac: always the k-th order statistic | exact Knuth 1971 bivariate-harmonic formula; `≤ 4n`; $\leq$  `C(n,2)` for duplicates |
 | **Karger** | returns an actual **minimum cut** with prob. `≥ 2/(n(n−1))` (`karger_finds_min`); one-sided error (support) | amplified: `k` runs fail with prob. `≤ (1−2/(n(n−1)))^k`; cost `≤ (n−2)·m` |
+| **Karger–Stein** | returns an actual **minimum cut** with prob. `≥ 1/(d+3)`, `d = ksDepth n ≈ 2·log₂ n` (`kargerStein_finds_min`); one-sided error | recursive contraction to `t(n) ≈ n/√2` (integer `t(n)`, no `√2` anywhere); cost `≤ (2^(d+2)−2)·n·m` |
 | **Reservoir sampling** | exact output distribution: `P[a] = count a / n` | exactly `n − 1` coins on every run (cost law), single pass |
 | **Fisher–Yates** | exact output distribution: uniform over all `n!` permutations | free — a sampler, no ticks |
 | **Schwartz–Zippel** | complete + sound (`≤ deg/\|S\|`, any integral domain) | one wholesale evaluation |

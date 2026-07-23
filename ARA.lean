@@ -26,6 +26,7 @@ import ARA.Algorithms.Tutorial
 import ARA.Algorithms.Quicksort.Quicksort
 import ARA.Algorithms.Quickselect.Quickselect
 import ARA.Algorithms.Karger.Karger
+import ARA.Algorithms.KargerStein.KargerStein
 import ARA.Algorithms.ReservoirSampling.ReservoirSampling
 import ARA.Algorithms.Freivalds.Freivalds
 import ARA.Algorithms.SchwartzZippel.SchwartzZippel

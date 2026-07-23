@@ -310,6 +310,29 @@ Lets `cost_step` erase the trailing `return (f x)` of a branch. -/
   rw [expected_cost_toPMF_bind]
   simp only [expected_cost_toPMF_pure, mul_zero, tsum_zero, add_zero]
 
+/-- Support-aware continuation bound: if every continuation reachable
+from the support costs at most `c`, the bind costs at most the head
+plus `c` — the recursive-call step of a cost analysis whose bound
+depends on run invariants (Karger–Stein). -/
+lemma expected_cost_toPMF_bind_le
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α β : Type} {m : TimeMT ℕ M α} {f : α → TimeMT ℕ M β} {c : ENNReal}
+    (h : ∀ tm ∈ (inst.toPMF m.run).support,
+      expected_cost (inst.toPMF (f tm.ret).run) ≤ c) :
+    expected_cost (inst.toPMF (m >>= f).run) ≤
+      expected_cost (inst.toPMF m.run) + c := by
+  rw [expected_cost_toPMF_bind]
+  refine add_le_add le_rfl ?_
+  calc (∑' tm, (inst.toPMF m.run) tm *
+        expected_cost (inst.toPMF (f tm.ret).run))
+      ≤ ∑' tm, (inst.toPMF m.run) tm * c := by
+        refine ENNReal.tsum_le_tsum fun tm => ?_
+        by_cases hs : tm ∈ (inst.toPMF m.run).support
+        · exact mul_le_mul' le_rfl (h tm hs)
+        · rw [(PMF.apply_eq_zero_iff _ _).mpr hs]
+          simp
+    _ = c := pmf_tsum_mul_const _ c
+
 /-- **Divide-and-conquer cost**: two computations run in sequence and
 combined by a pure function cost the sum of their costs — the cost
 sibling of `mem_support_toPMF_seq₂` and `expVal_toPMF_seq₂`. -/

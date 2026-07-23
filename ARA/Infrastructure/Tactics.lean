@@ -24,6 +24,7 @@ import ARA.Infrastructure.SimpAttr
 namespace ARA
 
 open ENNReal PMF
+open scoped NNRat
 
 /-! ================================================================
     LAYER A: simp/grind tags
@@ -239,5 +240,19 @@ lemma ennreal_div_le_div_nat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)
   rw [ENNReal.le_div_iff_mul_le (Or.inl (by exact_mod_cast hd.ne'))
     (Or.inl (ENNReal.natCast_ne_top d))]
   exact_mod_cast h
+
+/-- **The ℚ≥0 → ℝ≥0∞ bridge** for probability bounds: a comparison of
+natural fractions proved in `ℚ≥0` — where Mathlib's counting results
+(e.g. Schwartz–Zippel) live — transfers directly to the `ℝ≥0∞` the
+framework's probabilities live in. One call replaces the
+cross-multiplication ceremony. -/
+lemma ennreal_div_le_div_of_nnrat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)
+    (h : (a : ℚ≥0) / (b : ℚ≥0) ≤ (c : ℚ≥0) / (d : ℚ≥0)) :
+    (a : ENNReal) / (b : ENNReal) ≤ (c : ENNReal) / (d : ENNReal) := by
+  refine ennreal_div_le_div_nat hb hd ?_
+  have h2 := (div_le_div_iff₀
+    (by exact_mod_cast hb : (0 : ℚ≥0) < b)
+    (by exact_mod_cast hd : (0 : ℚ≥0) < d)).mp h
+  exact_mod_cast h2
 
 end ARA
