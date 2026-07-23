@@ -34,9 +34,10 @@ ARA/
 │   │   ├── Prob.lean              the probability core: `expVal`, `𝔼[·]`, the
 │   │   │                          event algebra `prob`, Markov, and the
 │   │   │                          output notation ℙ[e = v | M] / ℙ[e ∈ S | M]
-│   │   ├── RandVec.lean           0/1 and finite-grid entropy sources
-│   │   │                          (`randBit`/`randVec`, `randElem`/`randVecOn`)
-│   │   │                          with the counting principles #accepting / |grid|
+│   │   ├── RandVec.lean           list, 0/1 and finite-grid entropy sources
+│   │   │                          (`randIdx`, `randBit`/`randVec`,
+│   │   │                          `randElem`/`randVecOn`) with the counting
+│   │   │                          principles #accepting / #choices
 │   │   └── Geometric.lean         geometric + `geometricTrials` laws (retry
 │   │                              cost), 𝔼 = q/(1−q) failures, 1/p trials
 │   ├── Complexity/     proving what it costs
@@ -46,6 +47,8 @@ ARA/
 │   │   │                          `LawfulMonadCost` (ticks invisible to `toPMF`)
 │   │   ├── ExpectedCost.lean      𝔼_runtime[e | M], cost_step, uniform-step
 │   │   │                          lemmas, `costPMF` (the cost law itself)
+│   │   ├── SamplerCosts.lean      the samplers are free (cost-tier facts
+│   │   │                          about `Randomness/RandVec`'s samplers)
 │   │   ├── Variance.lean          `variance`, Var = E[g²] − E[g]², Chebyshev
 │   │   └── TailBounds.lean        ℙ_runtime[e > k | M]: Markov and Chebyshev
 │   │                              tail bounds on the running time
@@ -55,10 +58,13 @@ ARA/
 │   │   └── Amplify.lean           `amplify best k m`: k independent runs, keep
 │   │                              the best — ℙ[success] ≥ 1 − (1−p)^k
 │   ├── SimpAttr.lean          the registered simp sets
-│   └── Tactics.lean           `pmf_simp`, PMF bridges, derived lemmas
-├── Helpers/            shared mathematics
+│   └── Tactics.lean           PMF bridges, `pmf_simp_attr`, derived lemmas
+├── Helpers/            shared mathematics (Mathlib-only)
 │   ├── Partition.lean         pivot-partition lemmas, `pivotLT`/`pivotGE`,
 │   │                          rank reindexing `nodup_partition_sum₂`
+│   ├── MultiGraph.lean        executable multigraphs: cuts, contraction,
+│   │                          degree/handshake — Karger's graph theory
+│   ├── Counting.lean          involution pairing (½-soundness counts)
 │   └── HarmonicSums.lean      prefix sums Σ H_r, Σ r·H_r, Σ (r+1)·H_r
 └── Algorithms/
     ├── Tutorial.lean          ← start here
@@ -78,14 +84,14 @@ analysis; together they are the proof that the framework is usable.
 
 | Algorithm | Correctness | Complexity |
 |---|---|---|
-| **Quicksort** | Dirac: always the sorted permutation | exact `2(n+1)H(n) − 4n`; $\leq$ `C(n,2)` for duplicates |
+| **Quicksort** | Dirac: always the sorted permutation | exact `2(n+1)H(n) − 4n`; $\leq$ `C(n,2)` for duplicates; Markov tail `ℙ[cost > k] ≤ C(n,2)/(k+1)` |
 | **Quickselect** | Dirac: always the k-th order statistic | exact Knuth 1971 bivariate-harmonic formula; `≤ 4n`; $\leq$  `C(n,2)` for duplicates |
-| **Karger** | one-sided error (support) | success probability `≥ 2/(n(n−1))`; amplified: `k` runs fail with prob. `≤ (1−2/(n(n−1)))^k`; cost `≤ (n−2)·m` |
-| **Reservoir sampling** | exact output distribution: `P[a] = count a / n` | exactly `n − 1` coins, single pass |
+| **Karger** | returns an actual **minimum cut** with prob. `≥ 2/(n(n−1))` (`karger_finds_min`); one-sided error (support) | amplified: `k` runs fail with prob. `≤ (1−2/(n(n−1)))^k`; cost `≤ (n−2)·m` |
+| **Reservoir sampling** | exact output distribution: `P[a] = count a / n` | exactly `n − 1` coins on every run (cost law), single pass |
 | **Fisher–Yates** | exact output distribution: uniform over all `n!` permutations | free — a sampler, no ticks |
 | **Schwartz–Zippel** | complete + sound (`≤ deg/\|S\|`, any integral domain) | one wholesale evaluation |
 | **Coupon collector** | (cost-law case study) | exactly `n·H(n)` expected draws |
-| **Freivalds** | complete + sound (`≤ 1/2`, any `CommRing`) | exactly `3n²` vs `n³` |
+| **Freivalds** | complete + sound (`≤ 1/2`, any `CommRing`) | exactly `3n²` on every run (cost law), vs `n³` |
 | **Treap** | every output a valid BST | **`E[height] ≤ 3·log₂(n+3) + 4`** via `E[2^H] ≤ C(n+3,3)` |
 
 All proofs rely (after "#print axioms") only on `propext`,

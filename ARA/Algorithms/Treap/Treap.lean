@@ -432,25 +432,12 @@ theorem treap_expVal_exp_height
           2 * ((((pivotGE (x :: xs) i).length + 3).choose 3 : ℕ) : ENNReal) := by
       intro i
       have hnd' : ((x :: xs).eraseIdx i).Nodup := hnd.eraseIdx _
-      rw [inst.toPMF_bind, pmf_bind_eq, expVal_bind]
-      -- Inner: integrate out the right subtree.
-      have hinner : ∀ l : Tree,
-          expVal (inst.toPMF
-            (treap (pivotGE (x :: xs) i) >>= fun r =>
-              pure (Tree.node l (x :: xs)[i] r)))
-            (fun t => 2 ^ t.height) ≤
-          2 * 2 ^ l.height +
-            2 * expVal (inst.toPMF (treap (pivotGE (x :: xs) i)))
-              (fun t => 2 ^ t.height) := by
-        intro l
-        rw [inst.toPMF_bind, pmf_bind_eq, expVal_bind]
-        refine le_trans (expVal_mono
-          (g₂ := fun r => 2 * 2 ^ l.height + 2 * 2 ^ r.height) _
-          fun r => ?_) ?_
-        · rw [inst.toPMF_pure, pmf_pure_eq, expVal_pure]
-          exact two_pow_node_height_le l r (x :: xs)[i]
-        · rw [expVal_add, expVal_const, expVal_const_mul]
-      refine le_trans (expVal_mono _ hinner) ?_
+      -- The divide-and-conquer combinator turns the two-bind branch
+      -- into an iterated expectation; bound it inside-out.
+      rw [expVal_toPMF_seq₂]
+      refine le_trans (expVal_mono _ fun l => le_trans
+        (expVal_mono _ fun r => two_pow_node_height_le l r (x :: xs)[i])
+        (le_of_eq (by rw [expVal_add, expVal_const, expVal_const_mul]))) ?_
       rw [expVal_add, expVal_const, expVal_const_mul]
       exact add_le_add
         (mul_le_mul' le_rfl (ih1 i (hnd'.filter _)))
@@ -460,9 +447,6 @@ theorem treap_expVal_exp_height
     rw [nodup_partition_sum₂ (x :: xs) hnd
       (fun a b => 2 * ((a + 3).choose 3 : ENNReal) +
         2 * ((b + 3).choose 3 : ENNReal))]
-    rw [Fin.sum_univ_eq_sum_range
-      (fun r => 2 * ((r + 3).choose 3 : ENNReal) +
-        2 * ((((x :: xs).length - 1 - r + 3).choose 3 : ℕ) : ENNReal))]
     rw [show (∑ r ∈ Finset.range (x :: xs).length,
         (2 * ((r + 3).choose 3 : ENNReal) +
           2 * ((((x :: xs).length - 1 - r + 3).choose 3 : ℕ) : ENNReal))) =
@@ -562,8 +546,8 @@ theorem treap_correct
   induction L using treap.induct with
   | case1 =>
     intro _ t ht
-    rw [treap.eq_1, inst.toPMF_pure, pmf_pure_eq, PMF.support_pure,
-      Set.mem_singleton_iff] at ht
+    rw [treap.eq_1] at ht
+    toPMF_step at ht
     subst ht
     simp [Tree.inorder]
   | case2 x xs ih1 ih2 =>
@@ -571,13 +555,7 @@ theorem treap_correct
     -- Deconstruct the support of `randIdx >>= (bind ∘ bind ∘ pure)`.
     rw [treap_eq_bind, support_toPMF_randIdx_bind, Set.mem_iUnion] at ht
     obtain ⟨i, ht⟩ := ht
-    rw [inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht
-    obtain ⟨l, hl, ht⟩ := ht
-    rw [inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff] at ht
-    obtain ⟨r, hr, ht⟩ := ht
-    rw [inst.toPMF_pure, pmf_pure_eq, PMF.support_pure,
-      Set.mem_singleton_iff] at ht
-    subst ht
+    obtain ⟨l, hl, r, hr, rfl⟩ := mem_support_toPMF_seq₂.mp ht
     have hnd' : ((x :: xs).eraseIdx i).Nodup := hnd.eraseIdx _
     obtain ⟨hsl, hpl⟩ := ih1 i (hnd'.filter _) l hl
     obtain ⟨hsr, hpr⟩ := ih2 i (hnd'.filter _) r hr

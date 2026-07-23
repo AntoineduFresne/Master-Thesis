@@ -111,10 +111,28 @@ lemma uniform_avg_le {n : ℕ} {S c : ENNReal}
 the closing step of a cost analysis whose branches all cost the same. -/
 lemma uniform_avg_const {n : ℕ} (c : ENNReal) (hn : n ≠ 0 := by simp) :
     (n : ENNReal)⁻¹ * ∑ _i : Fin n, c = c := by
-  rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
-    ← mul_assoc,
+  rw [Fin.sum_const, nsmul_eq_mul, ← mul_assoc,
     ENNReal.inv_mul_cancel (Nat.cast_ne_zero.mpr hn) (ENNReal.natCast_ne_top n),
     one_mul]
+
+/-- **Closing average, `≤` form.** Branches individually bounded by `c`
+average to at most `c` — `uniform_avg_le` with the
+`Finset.sum_le_sum`/`Fin.sum_const` bridge built in, so no call site
+ever spells it. -/
+lemma uniform_avg_le_of_forall {n : ℕ} {f : Fin n → ENNReal} {c : ENNReal}
+    (h : ∀ i, f i ≤ c) (hn : n ≠ 0 := by simp) :
+    (n : ENNReal)⁻¹ * ∑ i : Fin n, f i ≤ c := by
+  refine uniform_avg_le (le_trans (Finset.sum_le_sum fun i _ => h i) ?_) hn
+  rw [Fin.sum_const, nsmul_eq_mul]
+
+/-- **Closing average, `=` form.** Branches that individually cost `c`
+average to exactly `c` — `uniform_avg_const` with the
+`Finset.sum_congr` rewrite-under-a-binder built in. -/
+lemma uniform_avg_eq_of_forall {n : ℕ} {f : Fin n → ENNReal} {c : ENNReal}
+    (h : ∀ i, f i = c) (hn : n ≠ 0 := by simp) :
+    (n : ENNReal)⁻¹ * ∑ i : Fin n, f i = c := by
+  rw [Finset.sum_congr rfl fun i _ => h i]
+  exact uniform_avg_const c hn
 
 /-!
 ## Bridge lemmas: `toPMF`-composed helpers
@@ -292,6 +310,21 @@ Lets `cost_step` erase the trailing `return (f x)` of a branch. -/
   rw [expected_cost_toPMF_bind]
   simp only [expected_cost_toPMF_pure, mul_zero, tsum_zero, add_zero]
 
+/-- **Divide-and-conquer cost**: two computations run in sequence and
+combined by a pure function cost the sum of their costs — the cost
+sibling of `mem_support_toPMF_seq₂` and `expVal_toPMF_seq₂`. -/
+lemma expected_cost_toPMF_seq₂
+    {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M]
+    {α β γ : Type} (m₁ : TimeMT ℕ M α) (m₂ : TimeMT ℕ M β)
+    (g : α → β → γ) :
+    expected_cost (inst.toPMF (m₁ >>= fun a => m₂ >>= fun b =>
+        (pure (g a b) : TimeMT ℕ M γ)).run) =
+      expected_cost (inst.toPMF m₁.run) +
+        expected_cost (inst.toPMF m₂.run) := by
+  rw [expected_cost_toPMF_bind]
+  simp only [expected_cost_toPMF_bind_pure, pmf_tsum_mul_const]
+
 /-!
 ## Notation for expected runtime
 
@@ -386,15 +419,38 @@ combine with `simp only [expected_cost_simp, my_lemma]` directly.
 
 The leading `dsimp` clears the `have`/`let` redexes that do-notation
 `let`s desugar to, so `unfold my_branch; cost_step` works on branches
-written with local `let`s. -/
-scoped macro "cost_step" : tactic =>
-  `(tactic| ((try dsimp only []); simp only [expected_cost_simp]))
+written with local `let`s.
+
+Accepts a location (`cost_step at h`), and an algorithm name:
+`cost_step myAlgo` first unfolds one layer of `myAlgo` via its
+equation lemmas, so a non-recursive case's cost proof is the single
+call `cost_step myAlgo` with no `myAlgo.eq_1` spelled anywhere. -/
+scoped syntax "cost_step" (Lean.Parser.Tactic.location)? : tactic
+
+@[inherit_doc tacticCost_step_] scoped syntax "cost_step " colGt ident
+    (Lean.Parser.Tactic.location)? : tactic
+
+scoped macro_rules
+  | `(tactic| cost_step) =>
+    `(tactic| ((try dsimp only []); simp only [expected_cost_simp]))
+  | `(tactic| cost_step $loc:location) =>
+    `(tactic| ((try dsimp only [] $loc:location); simp only [expected_cost_simp] $loc:location))
+  | `(tactic| cost_step $f:ident) =>
+    `(tactic| (simp only [$f:ident]; cost_step))
+  | `(tactic| cost_step $f:ident $loc:location) =>
+    `(tactic| (simp only [$f:ident] $loc:location; cost_step $loc:location))
 
 /-- `runtime_simp` is the combined normalizer: peels `TimeMT` combinators
 with `expected_cost_simp`, then cleans up arithmetic/`PMF` weights via
-`pmf_simp_attr`. Intended for fully-closed cost computations. -/
-scoped macro "runtime_simp" : tactic =>
-  `(tactic| ((try dsimp only []); simp only [expected_cost_simp, pmf_simp_attr]; try norm_num))
+`pmf_simp_attr`. Intended for fully-closed cost computations.
+Accepts a location (`runtime_simp at h`). -/
+scoped syntax "runtime_simp" (Lean.Parser.Tactic.location)? : tactic
+
+scoped macro_rules
+  | `(tactic| runtime_simp) =>
+    `(tactic| ((try dsimp only []); simp only [expected_cost_simp, pmf_simp_attr]; try norm_num))
+  | `(tactic| runtime_simp $loc:location) =>
+    `(tactic| ((try dsimp only [] $loc:location); simp only [expected_cost_simp, pmf_simp_attr] $loc:location; try norm_num))
 
 /-!
 ## Uniform-pivot recipes
@@ -475,6 +531,39 @@ lemma toReal_uniform_avg {n : ℕ} {S : Fin n → ENNReal}
     ENNReal.toReal_sum fun i _ => h i]
 
 /-!
+### Descending to `ℝ`
+
+The generic apparatus for the final `toReal` step of an exact-cost
+proof: finiteness of the standard branch-cost shape `n + a + b`,
+`toReal` distributed through it, and the one-line descent of an
+ENNReal bound to a real bound.
+-/
+
+/-- The standard branch cost `n + a + b` (deterministic work plus
+recursive calls) is finite when the recursive costs are. -/
+lemma natCast_add_add_ne_top {a b : ENNReal} (n : ℕ)
+    (ha : a ≠ ⊤) (hb : b ≠ ⊤) :
+    (n : ENNReal) + a + b ≠ ⊤ := by
+  simp [ha, hb]
+
+/-- Distribute `toReal` through the standard branch cost `n + a + b`. -/
+lemma toReal_natCast_add_add {a b : ENNReal} (n : ℕ)
+    (ha : a ≠ ⊤) (hb : b ≠ ⊤) :
+    ((n : ENNReal) + a + b).toReal = n + a.toReal + b.toReal := by
+  rw [ENNReal.toReal_add
+      (ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top n, ha⟩) hb,
+    ENNReal.toReal_add (ENNReal.natCast_ne_top n) ha, ENNReal.toReal_natCast]
+
+/-- **Descent.** An `ENNReal` runtime bound becomes a real bound in one
+step; the finiteness certificate is the bound itself. -/
+lemma runtime_toReal_le
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] {α : Type}
+    {m : TimeMT ℕ M α} {c : ENNReal}
+    (h : 𝔼_runtime[m] ≤ c) (hc : c ≠ ⊤) :
+    𝔼ℝ_runtime[m] ≤ c.toReal :=
+  ENNReal.toReal_mono hc h
+
+/-!
 ## The cost distribution
 
 Beyond its expectation (`𝔼_runtime`) and its tail bounds
@@ -534,6 +623,47 @@ lemma costPMF_tick_bind {M} [Monad M] [LawfulMonad M]
   rw [costPMF, costPMF, h1, PMF.map_bind]
   simp only [PMF.pure_map]
   rw [PMF.map_comp]
+  rfl
+
+/-- A **zero-cost draw** whose continuation's cost law does not depend
+on the drawn value leaves the law unchanged — the `randFin`/`randIdx`
+step of a deterministic-cost analysis (use `randFin_timeMT` /
+`randIdx_timeMT` to reach the `lift` form). -/
+lemma costPMF_lift_bind_const {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M] {α β : Type}
+    (m : M α) (f : α → TimeMT ℕ M β) {q : PMF ℕ}
+    (h : ∀ a, costPMF (f a) = q) :
+    costPMF (TimeMT.lift m >>= f) = q := by
+  have h1 : TimedPMF (TimeMT.lift m >>= f) =
+      (inst.toPMF m).bind fun a => TimedPMF (f a) := by
+    show inst.toPMF _ = _
+    rw [TimeMT.run_bind, TimeMT.run_lift, map_eq_bind_pure_comp, bind_assoc,
+      inst.toPMF_bind, pmf_bind_eq]
+    refine congrArg _ (funext fun a => ?_)
+    simp only [Function.comp_apply, pure_bind, inst.toPMF_bind, pmf_bind_eq,
+      inst.toPMF_pure, pmf_pure_eq, zero_add]
+    -- `⟨tm.ret, tm.time⟩ = tm` by structure eta, so this is `bind pure`.
+    exact PMF.bind_pure _
+  rw [costPMF, h1, PMF.map_bind]
+  simp only [show ∀ a, (TimedPMF (f a)).map TimeM.time = costPMF (f a)
+    from fun a => rfl, h]
+  exact PMF.bind_const _ q
+
+/-- Pure post-processing is invisible to the cost law — the `costPMF`
+sibling of `expected_cost_toPMF_bind_pure`. -/
+lemma costPMF_bind_pure {M} [Monad M] [LawfulMonad M]
+    [inst : LawfulRandMonad M] {α β : Type}
+    (m : TimeMT ℕ M α) (g : α → β) :
+    costPMF (m >>= fun a => (pure (g a) : TimeMT ℕ M β)) = costPMF m := by
+  have h1 : TimedPMF (m >>= fun a => (pure (g a) : TimeMT ℕ M β)) =
+      (TimedPMF m).bind fun tm => PMF.pure ⟨g tm.ret, tm.time⟩ := by
+    show inst.toPMF _ = _
+    rw [TimeMT.run_bind, inst.toPMF_bind, pmf_bind_eq]
+    refine congrArg _ (funext fun tm => ?_)
+    simp only [TimeMT.run_pure, pure_bind, inst.toPMF_pure, pmf_pure_eq,
+      add_zero]
+  rw [costPMF, costPMF, h1, PMF.map_bind]
+  simp only [PMF.pure_map]
   rfl
 
 /-- The expected cost is the mean of the cost distribution. -/

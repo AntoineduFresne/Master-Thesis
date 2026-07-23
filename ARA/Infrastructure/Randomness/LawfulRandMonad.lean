@@ -157,6 +157,48 @@ lemma mem_support_toPMF_bind_pure
   exact exists_congr fun a => and_congr_right fun _ => by
     rw [PMF.support_pure, Set.mem_singleton_iff]
 
+open scoped Classical in
+/-- Distribution of a `pure` program at a point — the
+`toPMF_pure`/`pmf_pure_eq`/`PMF.pure_apply` triple in one step: the
+base case of every distributional induction. -/
+lemma toPMF_pure_apply
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α : Type} (a b : α) :
+    inst.toPMF (pure a : M α) b = if b = a then 1 else 0 := by
+  rw [inst.toPMF_pure, pmf_pure_eq, PMF.pure_apply]
+
+/-- The support of a `pure` program is the singleton — the base case
+of every support induction. -/
+lemma mem_support_toPMF_pure
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α : Type} {a b : α} :
+    b ∈ (inst.toPMF (pure a : M α)).support ↔ b = a := by
+  rw [inst.toPMF_pure, pmf_pure_eq, PMF.mem_support_pure_iff]
+
+/-- The support of a bind: everything reachable through a support
+element of the first computation followed by a support element of its
+continuation. -/
+lemma mem_support_toPMF_bind
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α β : Type} {m : M α} {f : α → M β} {b : β} :
+    b ∈ (inst.toPMF (m >>= f)).support ↔
+      ∃ a ∈ (inst.toPMF m).support, b ∈ (inst.toPMF (f a)).support := by
+  rw [inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff]
+
+/-- **Divide-and-conquer support**: the support of two computations
+run in sequence and combined by a pure function is the image of the
+two supports. Use with an `⟨a, ha, b, hb, rfl⟩` pattern. -/
+lemma mem_support_toPMF_seq₂
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α β γ : Type} {m₁ : M α} {m₂ : M β} {g : α → β → γ} {c : γ} :
+    c ∈ (inst.toPMF (m₁ >>= fun a => m₂ >>= fun b =>
+        pure (g a b))).support ↔
+      ∃ a ∈ (inst.toPMF m₁).support, ∃ b ∈ (inst.toPMF m₂).support,
+        c = g a b := by
+  rw [mem_support_toPMF_bind]
+  exact exists_congr fun a => and_congr_right fun _ =>
+    mem_support_toPMF_bind_pure
+
 /-!
 ### Notation
 

@@ -13,6 +13,7 @@ import ARA.Infrastructure.Complexity.TimeMT
 import ARA.Infrastructure.Complexity.MonadCost
 import ARA.Infrastructure.Complexity.TimedSemantics
 import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Complexity.SamplerCosts
 import ARA.Infrastructure.Complexity.Variance
 import ARA.Infrastructure.Complexity.TailBounds
 import ARA.Infrastructure.Correctness.Correctness
@@ -20,6 +21,7 @@ import ARA.Infrastructure.Correctness.Amplify
 import ARA.Helpers.Partition
 import ARA.Helpers.MultiGraph
 import ARA.Helpers.HarmonicSums
+import ARA.Helpers.Counting
 import ARA.Algorithms.Tutorial
 import ARA.Algorithms.Quicksort.Quicksort
 import ARA.Algorithms.Quickselect.Quickselect

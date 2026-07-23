@@ -3,20 +3,27 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
-import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Randomness.Prob
+import ARA.Helpers.Partition
 import Mathlib.Data.Fin.Tuple.Finset
 import Mathlib.Data.Fintype.BigOperators
 
 /-!
 # Random vectors: `0/1` bits and uniform grid samples
 
-The generic entropy sources for Monte-Carlo algorithms:
+The generic entropy sources for Monte-Carlo algorithms, with one
+counting principle per tier — "any test accepts with probability
+`#accepting / #choices`":
 
+* the **list** tier — a uniform index into a list (`randIdx`) and
+  `toPMF_randIdx_bind_countP`: a branch that decides a predicate at a
+  uniform index accepts with probability `L.countP P / |L|`.
 * the `0/1` tier — a uniform random bit (`randBit`), a uniform random
-  bit vector (`randVec`), and the counting principle
-  `toPMF_randVec_true`: testing **any** predicate on a random `0/1`
-  vector accepts with probability `#{accepting bit choices} / 2^n`.
-  Only `Zero R` and `One R` are assumed; `Freivalds` is the client.
+  bit vector (`randVec`), and `toPMF_randVec_true` /
+  `toPMF_randVec_true_card`: testing **any** predicate on a random
+  `0/1` vector accepts with probability
+  `#{accepting bit choices} / 2^n`. Only `Zero R` and `One R` are
+  assumed; `Freivalds` is the client.
 * the **grid** tier — a uniformly random element of an arbitrary
   nonempty `Finset` (`randElem`, law `uniformOfFinset`), a vector of
   independent such draws (`randVecOn`, law: uniform on the grid
@@ -25,12 +32,12 @@ The generic entropy sources for Monte-Carlo algorithms:
   with probability `#accepting / #s ^ n`. `SchwartzZippel` is the
   client.
 
-None of the samplers ticks (`expected_cost_randVec`).
+None of the samplers ticks; the cost-tier facts live in
+`Complexity/SamplerCosts.lean` (`expected_cost_randVec` and friends),
+keeping `Randomness/` strictly below `Complexity/`.
 -/
 
 namespace ARA
-
-open Cslib.Algorithms.Lean
 
 variable {R : Type} [Zero R] [One R] {n : ℕ}
 
@@ -58,6 +65,34 @@ lemma bitVec_cons (i : Fin 2) (v : Fin n → Fin 2) :
   refine Fin.cases ?_ (fun k => ?_) k
   · simp [bitVec, Fin.cons_zero]
   · simp [bitVec, Fin.cons_succ]
+
+/-!
+## The list counting principle
+
+The simplest Monte-Carlo shape there is: draw a uniform index into a
+list, accept iff the element satisfies a predicate.
+-/
+
+/-- **The list counting principle.** If every branch of a uniform-index
+draw deterministically decides the predicate `P` at its own element,
+the algorithm accepts with probability `#{i | P L[i]} / |L|` — the
+list sibling of `toPMF_randVec_true` and `toPMF_randVecOn_true`.
+
+Stated on the branch function `f`, so ticks and other lawful-invisible
+work inside the branch are discharged by `toPMF_step` in the
+hypothesis (`by intro i; toPMF_step`). -/
+theorem toPMF_randIdx_bind_countP
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α : Type} {L : List α} (hL : 0 < L.length) (P : α → Bool)
+    (f : Fin L.length → M Bool)
+    (hf : ∀ i, 𝒟[f i] = PMF.pure (P L[i])) :
+    ℙ[(randIdx L hL >>= f : M Bool) = true]
+      = (L.countP P : ENNReal) / (L.length : ENNReal) := by
+  haveI : NeZero L.length := ⟨hL.ne'⟩
+  rw [inst.toPMF_bind, inst.toPMF_randIdx, pmf_bind_eq,
+    pmf_uniform_fin_bind_apply]
+  simp only [hf, PMF.pure_apply, eq_comm (a := true)]
+  rw [sum_ite_getElem_eq_countP, ENNReal.div_eq_inv_mul]
 
 /-- **Acceptance probability as a count.** Testing any predicate on a
 random `0/1` vector accepts with probability
@@ -108,6 +143,19 @@ lemma toPMF_randVec_true
     simp only [ENNReal.div_eq_inv_mul]
     rw [← Finset.mul_sum, h2]
     ring_nf
+
+/-- `toPMF_randVec_true` with the count as a `Finset.card` — the form
+that lets a client count accepting bit choices in ℕ and descend once,
+as `toPMF_randVecOn_true` already does for grids. -/
+lemma toPMF_randVec_true_card
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (n : ℕ) (p : (Fin n → R) → Bool) :
+    ℙ[((randVec n : M (Fin n → R)) >>= fun r => pure (p r)) = true] =
+      ((Finset.univ.filter fun v : Fin n → Fin 2 => p (bitVec v)).card :
+        ENNReal) / 2 ^ n := by
+  rw [toPMF_randVec_true]
+  congr 1
+  rw [Finset.sum_boole]
 
 /-!
 ## Uniform sampling from a finite set
@@ -262,55 +310,5 @@ lemma toPMF_randVecOn_true {M} [Monad M] [LawfulMonad M]
   simp only [inst.toPMF_pure, pmf_pure_eq]
   rw [toPMF_randVecOn s hs n, pmf_uniformOfFinset_bind_pure_true,
     Fintype.card_piFinset_const, Nat.cast_pow]
-
-/-! ## Costs: the samplers are free -/
-
-/-- `randBit` performs no ticks. -/
-lemma expected_cost_randBit
-    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] :
-    𝔼_runtime[(randBit : TimeMT ℕ M R)] = 0 := by
-  unfold randBit
-  cost_step
-
-/-- `randVec` performs no ticks. -/
-lemma expected_cost_randVec
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
-    ∀ n : ℕ,
-    𝔼_runtime[(randVec n : TimeMT ℕ M (Fin n → R))] = 0 := by
-  intro n
-  induction n with
-  | zero =>
-    rw [randVec, expected_cost_toPMF_pure]
-  | succ n ih =>
-    rw [show (randVec (n + 1) : TimeMT ℕ M (Fin (n + 1) → R)) =
-      (randBit : TimeMT ℕ M R) >>= fun b =>
-        (randVec n : TimeMT ℕ M (Fin n → R)) >>= fun rest =>
-          pure (Fin.cons b rest) from rfl,
-      expected_cost_toPMF_bind_const _ _ fun b =>
-        (expected_cost_toPMF_bind_pure _ _).trans ih,
-      expected_cost_randBit, zero_add]
-
-/-- `randElem` performs no ticks. -/
-lemma expected_cost_randElem
-    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] {α : Type}
-    (s : Finset α) (hs : s.Nonempty) :
-    𝔼_runtime[randElem s hs | M] = 0 := by
-  unfold randElem
-  cost_step
-
-/-- `randVecOn` performs no ticks. -/
-lemma expected_cost_randVecOn
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] {α : Type}
-    (s : Finset α) (hs : s.Nonempty) :
-    ∀ n : ℕ, 𝔼_runtime[randVecOn s hs n | M] = 0 := by
-  intro n
-  induction n with
-  | zero =>
-    rw [randVecOn, expected_cost_toPMF_pure]
-  | succ n ih =>
-    rw [randVecOn,
-      expected_cost_toPMF_bind_const _ _ fun b =>
-        (expected_cost_toPMF_bind_pure _ _).trans ih,
-      expected_cost_randElem, zero_add]
 
 end ARA

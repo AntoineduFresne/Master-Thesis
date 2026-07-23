@@ -5,7 +5,6 @@ Authors: Antoine du Fresne von Hohenesche
 -/
 import Mathlib.Tactic
 import Mathlib.Order.Lattice.Nat
-import Mathlib.Data.Sym.Sym2.Order
 
 /-!
 # Executable undirected multigraphs: cuts and contraction
@@ -33,9 +32,11 @@ Two divergences, both forced by executability and documented at their
 definitions: multiplicity is carried by repetition in a `List` rather
 than by an `Edge.edgeLabel` over a noncomputable `Set` (our
 `List (Sym2 α)` is their `Set (Edge α (Fin m))` with the list position
-as the label), and contraction merges one endpoint into the other
-rather than quotienting the vertex type by a `Setoid`, so the vertex
-type survives the contraction loop.
+as the label), and contraction is the **supervertex `∪`-merge** on
+`MultiGraph (Finset β)` rather than a quotient of the vertex type by a
+`Setoid`: merging is symmetric, so contraction is a genuine function
+of the unordered edge (no order, no choice, no tie-break), and the
+vertex type survives the contraction loop.
 
 When GraphLib publishes on a matching toolchain, this file should
 shrink to an adapter.
@@ -252,77 +253,20 @@ lemma card_mul_minCutValue_le (g : MultiGraph α) (hwf : g.WF)
         Finset.sum_le_sum fun v hv => minCutValue_le_degree g hwf h2 hv
     _ = 2 * g.edges.length := sum_degree g hwf
 
-/-! ### Contraction
+/-! ### Transport of cut values along an endpoint relabelling -/
 
-Ported from GraphLib's `Contractions/Basic.lean`: `redirect` is
-`redirectEdge` and `contractEdge` is `contract` (minus the parallel-
-edge deduplication, which Karger's multigraph analysis must not do).
-Redirection acts on endpoints through `Sym2.map`, exactly as in
-Weixuan's `Contractions.lean` (`def mapEdge : Edge α → Edge β :=
-Sym2.map π`); we merge one vertex into another instead of quotienting
-by a `Setoid`, so that the vertex *type* does not change and the
-contraction loop stays a plain recursion. -/
-
-/-- Redirect a vertex: `v` becomes `u`, everything else is unchanged
-(GraphLib's `redirectEdge`, per endpoint). -/
-def redirect (u v x : α) : α := if x = v then u else x
-
-lemma redirect_mem_erase {V : Finset α} {u v x : α}
-    (hu : u ∈ V) (hne : u ≠ v) (hx : x ∈ V) :
-    redirect u v x ∈ V.erase v := by
-  unfold redirect
-  split_ifs with h
-  · exact Finset.mem_erase.mpr ⟨hne, hu⟩
-  · exact Finset.mem_erase.mpr ⟨h, hx⟩
-
-/-- **Contract** `v` into `u`: remove `v` from the vertex set, redirect
-every edge touching `v` to `u`, and drop the resulting loops (the
-parallel copies of `s(u, v)` itself). Parallel edges are kept. -/
-def contractEdge (g : MultiGraph α) (u v : α) : MultiGraph α where
-  verts := g.verts.erase v
-  edges := (g.edges.map (Sym2.map (redirect u v))).filter fun e => !e.IsDiag
-
-@[simp] lemma verts_contractEdge (g : MultiGraph α) (u v : α) :
-    (g.contractEdge u v).verts = g.verts.erase v := rfl
-
-@[simp] lemma edges_contractEdge (g : MultiGraph α) (u v : α) :
-    (g.contractEdge u v).edges =
-      (g.edges.map (Sym2.map (redirect u v))).filter fun e => !e.IsDiag := rfl
-
-/-- Contraction preserves well-formedness. -/
-theorem WF.contractEdge {g : MultiGraph α} (hwf : g.WF) {u v : α}
-    (hu : u ∈ g.verts) (hne : u ≠ v) : (g.contractEdge u v).WF := by
-  constructor
-  · intro e' he' w hw
-    simp only [edges_contractEdge, List.mem_filter, List.mem_map] at he'
-    obtain ⟨⟨e, he, rfl⟩, -⟩ := he'
-    obtain ⟨x, hx, rfl⟩ := Sym2.mem_map.mp hw
-    exact redirect_mem_erase hu hne (hwf.incidence e he x hx)
-  · intro e' he'
-    simp only [edges_contractEdge, List.mem_filter] at he'
-    simpa using he'.2
-
-/-- Contraction removes exactly one vertex. -/
-lemma card_verts_contractEdge (g : MultiGraph α) {u v : α} (hv : v ∈ g.verts) :
-    (g.contractEdge u v).verts.card + 1 = g.verts.card := by
-  rw [verts_contractEdge]
-  exact Finset.card_erase_add_one hv
-
-/-- Contraction never increases the edge count. -/
-lemma length_edges_contractEdge_le (g : MultiGraph α) (u v : α) :
-    (g.contractEdge u v).edges.length ≤ g.edges.length :=
-  le_trans (List.length_filter_le _ _) (le_of_eq (List.length_map ..))
-
-/-- Transport of cut values along contraction: if membership in `S'`
-after redirection agrees pointwise with membership in `S`, the two cuts
-have the same value. Crossing edges are never dropped (a loop cannot
-cross), and dropped edges never cross. -/
-private lemma cutValue_contractEdge_of_pointwise {g : MultiGraph α}
-    (hwf : g.WF) {u v : α} {S' S : Finset α}
-    (hpt : ∀ x ∈ g.verts, (redirect u v x ∈ S' ↔ x ∈ S)) :
-    (g.contractEdge u v).cutValue S' = g.cutValue S := by
+/-- If membership after relabelling agrees pointwise with membership
+before, relabelling every edge and dropping the resulting loops
+preserves the crossing count: crossing edges are never dropped (a loop
+cannot cross), and dropped edges never cross. The engine behind every
+contraction lemma below. -/
+private lemma countP_crossing_map_filter {g : MultiGraph α} (hwf : g.WF)
+    (f : α → α) {S' S : Finset α}
+    (hpt : ∀ x ∈ g.verts, (f x ∈ S' ↔ x ∈ S)) :
+    ((g.edges.map (Sym2.map f)).filter fun e => !e.IsDiag).countP
+      (fun e => decide (Crossing S' e)) = g.cutValue S := by
   unfold cutValue
-  rw [edges_contractEdge, List.countP_filter, List.countP_map]
+  rw [List.countP_filter, List.countP_map]
   refine List.countP_congr fun e he => ?_
   have hnd := hwf.loopless e he
   have hmem := hwf.incidence e he
@@ -338,83 +282,6 @@ private lemma cutValue_contractEdge_of_pointwise {g : MultiGraph α}
       Sym2.map_mk, crossing_mk, Bool.not_eq_true', decide_eq_false_iff_not,
       Sym2.mk_isDiag_iff]
     grind
-
-/-- **Cut lifting** (soundness of contraction): every cut of the
-contracted graph comes from a cut of `g` with the *same* value. Hence
-contraction can only increase the minimum-cut value. -/
-lemma exists_isCut_lift {g : MultiGraph α} (hwf : g.WF) {u v : α}
-    (hv : v ∈ g.verts) {S' : Finset α}
-    (h : (g.contractEdge u v).IsCut S') :
-    ∃ S : Finset α, g.IsCut S ∧ g.cutValue S = (g.contractEdge u v).cutValue S' := by
-  have hsub : S' ⊆ g.verts.erase v := h.subset
-  have hvS' : v ∉ S' := fun hmem => Finset.notMem_erase v g.verts (hsub hmem)
-  obtain ⟨w, hw, hwS'⟩ := h.proper
-  rw [verts_contractEdge] at hw
-  have hw' := Finset.mem_erase.mp hw
-  by_cases hu' : u ∈ S'
-  · refine ⟨insert v S', ⟨?_, ⟨v, Finset.mem_insert_self v S'⟩, w, hw'.2, ?_⟩, ?_⟩
-    · exact Finset.insert_subset_iff.mpr
-        ⟨hv, hsub.trans (Finset.erase_subset ..)⟩
-    · simp [Finset.mem_insert, hw'.1, hwS']
-    · refine (cutValue_contractEdge_of_pointwise hwf fun x => ?_).symm
-      by_cases hxv : x = v <;>
-        simp [redirect, hxv, hu', Finset.mem_insert, hvS']
-  · refine ⟨S', ⟨hsub.trans (Finset.erase_subset ..), h.nonempty, w, hw'.2, hwS'⟩, ?_⟩
-    refine (cutValue_contractEdge_of_pointwise hwf fun x _ => ?_).symm
-    by_cases hxv : x = v <;> simp [redirect, hxv, hu', hvS']
-
-/-- **Cut survival**: contracting an edge that does *not* cross `S`
-keeps `S` a cut of the same value (with `v` removed from it). -/
-lemma isCut_contractEdge_of_notCrossing {g : MultiGraph α} (hwf : g.WF)
-    {u v : α} (hu : u ∈ g.verts) (hne : u ≠ v) {S : Finset α}
-    (hS : g.IsCut S) (hnc : ¬Crossing S s(u, v)) :
-    (g.contractEdge u v).IsCut (S.erase v) ∧
-      (g.contractEdge u v).cutValue (S.erase v) = g.cutValue S := by
-  have hiff : u ∈ S ↔ v ∈ S := by simpa using hnc
-  constructor
-  · refine ⟨?_, ?_, ?_⟩
-    · rw [verts_contractEdge]
-      exact Finset.erase_subset_erase v hS.subset
-    · by_cases hvS : v ∈ S
-      · exact ⟨u, Finset.mem_erase.mpr ⟨hne, hiff.mpr hvS⟩⟩
-      · rw [Finset.erase_eq_of_notMem hvS]; exact hS.nonempty
-    · obtain ⟨w, hw, hwS⟩ := hS.proper
-      rw [verts_contractEdge]
-      by_cases hwv : w = v
-      · subst hwv
-        exact ⟨u, Finset.mem_erase.mpr ⟨hne, hu⟩,
-          fun hmem => hwS (hiff.mp (Finset.mem_of_mem_erase hmem))⟩
-      · exact ⟨w, Finset.mem_erase.mpr ⟨hwv, hw⟩,
-          fun hmem => hwS (Finset.mem_of_mem_erase hmem)⟩
-  · refine cutValue_contractEdge_of_pointwise hwf fun x _ => ?_
-    by_cases hxv : x = v <;>
-      simp [redirect, hxv, Finset.mem_erase, hne, hiff]
-
-/-- Contraction never decreases the minimum-cut value. -/
-lemma minCutValue_le_contractEdge {g : MultiGraph α} (hwf : g.WF) {u v : α}
-    (hv : v ∈ g.verts) (h3 : 3 ≤ g.verts.card) :
-    g.minCutValue ≤ (g.contractEdge u v).minCutValue := by
-  have h2' : 2 ≤ (g.contractEdge u v).verts.card := by
-    have := card_verts_contractEdge (u := u) g hv
-    omega
-  obtain ⟨S', hS', hval⟩ := exists_minCut _ h2'
-  obtain ⟨S, hS, hval2⟩ := exists_isCut_lift hwf hv hS'
-  rw [← hval, ← hval2]
-  exact minCutValue_le hS
-
-/-- Contracting an edge that avoids a fixed minimum cut preserves the
-minimum-cut value exactly. -/
-lemma minCutValue_contractEdge_of_notCrossing {g : MultiGraph α} (hwf : g.WF)
-    {u v : α} (hu : u ∈ g.verts) (hv : v ∈ g.verts) (hne : u ≠ v)
-    (h3 : 3 ≤ g.verts.card) {S : Finset α} (hS : g.IsCut S)
-    (hmin : g.cutValue S = g.minCutValue) (hnc : ¬Crossing S s(u, v)) :
-    (g.contractEdge u v).minCutValue = g.minCutValue := by
-  obtain ⟨hcut', hval'⟩ := isCut_contractEdge_of_notCrossing hwf hu hne hS hnc
-  refine le_antisymm ?_ (minCutValue_le_contractEdge hwf hv h3)
-  calc (g.contractEdge u v).minCutValue
-      ≤ (g.contractEdge u v).cutValue (S.erase v) := minCutValue_le hcut'
-    _ = g.cutValue S := hval'
-    _ = g.minCutValue := hmin
 
 /-! ### Two-vertex graphs
 
@@ -455,17 +322,9 @@ lemma length_eq_minCutValue_of_card_two {g : MultiGraph α} (hwf : g.WF)
   obtain ⟨S, hS, hval⟩ := exists_minCut g (le_of_eq hcard.symm)
   rw [← hval, cutValue_of_card_two hwf hcard hS]
 
-/-! ### Tracking the supervertices
-
-Karger's algorithm returns a **cut**, not just its value, so a run has
-to remember which original vertices were merged together. `Tracks g₀ g r`
-is that bookkeeping invariant: `r` sends each original vertex to the
-supervertex it currently sits in, and — the load-bearing clause —
-every cut of the contracted graph pulls back along `r` to a cut of
-`g₀` of the *same value*. The inductive step is
-`cutValue_contractEdge_of_pointwise`, one contraction at a time. -/
-
-/-- A cut value only depends on which *vertices* lie in the cut set. -/
+/-- A cut value only depends on which *vertices* lie in the cut set.
+(Kept as the general weight-invariance principle of the cut tier;
+Benczúr–Karger sparsification is the intended next client.) -/
 lemma cutValue_congr_of_verts {g : MultiGraph α} (hwf : g.WF) {S T : Finset α}
     (h : ∀ x ∈ g.verts, (x ∈ S ↔ x ∈ T)) : g.cutValue S = g.cutValue T := by
   unfold cutValue
@@ -481,177 +340,618 @@ lemma cutValue_congr_of_verts {g : MultiGraph α} (hwf : g.WF) {S T : Finset α}
     simp only [crossing_mk]
     grind
 
-/-- The pullback of `S'` along `r`, as a subset of `g₀`'s vertices. -/
-def pullback (g₀ : MultiGraph α) (r : α → α) (S' : Finset α) : Finset α :=
-  g₀.verts.filter fun x => r x ∈ S'
+/-! ### Supervertex contraction
 
-/-- `r` tracks the contraction of `g₀` down to `g`. -/
-structure Tracks (g₀ g : MultiGraph α) (r : α → α) : Prop where
-  /-- Every original vertex sits in some current supervertex. -/
-  maps : ∀ x ∈ g₀.verts, r x ∈ g.verts
-  /-- Every current supervertex contains an original vertex. -/
-  onto : ∀ y ∈ g.verts, ∃ x ∈ g₀.verts, r x = y
-  /-- Cuts pull back along `r` with the same value. -/
-  cut : ∀ S' : Finset α, g.cutValue S' = g₀.cutValue (g₀.pullback r S')
+Contracting `s(S, T)` must produce a single merged vertex, and any
+rule that *keeps one of the two* is not a function of the unordered
+edge — the two choices give isomorphic but unequal graphs (this was
+the old `[LinearOrder α]` artifact: keep `inf`, merge away `sup`).
+The supervertex model dissolves the problem: vertices are `Finset β`
+of original vertices and merging is `S ∪ T`, which is symmetric — so
+contraction is a genuine function of `Sym2 (Finset β)`, with no order
+and no choice, and the vertex type is preserved so the contraction
+loop stays a plain recursion.
 
-/-- The identity tracks a graph against itself. -/
-lemma Tracks.refl (g₀ : MultiGraph α) (hwf : g₀.WF) : Tracks g₀ g₀ id := by
-  refine ⟨fun x hx => hx, fun y hy => ⟨y, hy, rfl⟩, fun S' => ?_⟩
-  refine cutValue_congr_of_verts hwf fun x hx => ?_
-  simp [pullback, hx]
+The price is an invariant: the supervertices must be **pairwise
+disjoint** (`SupDisjoint`) — without it the merged vertex can collide
+with a third supervertex and contraction drops the vertex count by
+two. -/
 
-/-- Tracking survives one contraction. -/
-lemma Tracks.contractEdge {g₀ g : MultiGraph α} {r : α → α}
-    (hwf₀ : g₀.WF) (hwf : g.WF) (ht : Tracks g₀ g r) {u v : α}
-    (hu : u ∈ g.verts) (hne : u ≠ v) :
-    Tracks g₀ (g.contractEdge u v) (redirect u v ∘ r) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro x hx
-    exact redirect_mem_erase hu hne (ht.maps x hx)
-  · intro y hy
-    rw [verts_contractEdge] at hy
-    obtain ⟨hyv, hyg⟩ := Finset.mem_erase.mp hy
-    obtain ⟨x, hx, rfl⟩ := ht.onto y hyg
-    exact ⟨x, hx, by simp [Function.comp_apply, redirect, hyv]⟩
-  · intro S''
-    rw [cutValue_contractEdge_of_pointwise (S := g.pullback (redirect u v) S'')
-        hwf (fun x hx => by simp [pullback, hx]), ht.cut]
-    refine cutValue_congr_of_verts hwf₀ fun x hx => ?_
-    simp only [pullback, Finset.mem_filter, Function.comp_apply, hx, true_and,
-      ht.maps x hx]
+section Super
 
-/-! ### Contraction of a listed edge
+variable {β : Type} [DecidableEq β]
 
-Contracting `s(u, v)` has to keep one of the two endpoints, and the two
-choices give *isomorphic but not equal* graphs — so contraction is not
-a function of the unordered edge alone. GraphLib resolves this by
-quotienting the vertex type by a `Setoid`, which changes the vertex
-type at every round and would stop the contraction loop from being a
-plain recursion. We instead fix the survivor with the linear order on
-`α` (keep `inf`, merge away `sup`). Only this executable layer needs
-`[LinearOrder α]`; the cut theory above needs just `[DecidableEq α]`. -/
+/-- The union of the two endpoints of an unordered edge — well-defined
+by commutativity of `∪` (a genuine `Sym2.lift`: this symmetry is the
+point of the supervertex model). -/
+def unionOf : Sym2 (Finset β) → Finset β :=
+  Sym2.lift ⟨(· ∪ ·), Finset.union_comm⟩
 
-section Indexed
-variable [LinearOrder α]
+@[simp] lemma unionOf_mk (S T : Finset β) : unionOf s(S, T) = S ∪ T := rfl
 
-omit [DecidableEq α] in
-/-- An edge is recovered from its endpoints in order. -/
-theorem sym2_mk_inf_sup (e : Sym2 α) : s(e.inf, e.sup) = e := by
+/-- Redirect a supervertex under the `∪`-merge of the endpoints of
+`e`: both endpoints become their union, everything else is unchanged.
+Symmetric in the two endpoints by construction. -/
+def redirectS (e : Sym2 (Finset β)) (X : Finset β) : Finset β :=
+  if X ∈ e then unionOf e else X
+
+/-- The supervertices are pairwise disjoint — the invariant that makes
+the `∪`-merge well-behaved. -/
+def SupDisjoint (g : MultiGraph (Finset β)) : Prop :=
+  ∀ S ∈ g.verts, ∀ T ∈ g.verts, S ≠ T → Disjoint S T
+
+/-- **Contract** the edge `e` by the supervertex merge: its two
+endpoints leave the vertex set, their union enters, every edge is
+redirected through `redirectS e` and the resulting loops (the parallel
+copies of `e` itself) are dropped; parallel edges are kept. A genuine
+function of the *unordered* edge. -/
+def contractEdge (g : MultiGraph (Finset β)) (e : Sym2 (Finset β)) :
+    MultiGraph (Finset β) where
+  verts := insert (unionOf e) (g.verts.filter (· ∉ e))
+  edges := (g.edges.map (Sym2.map (redirectS e))).filter fun e' => !e'.IsDiag
+
+@[simp] lemma verts_contractEdge (g : MultiGraph (Finset β)) (e : Sym2 (Finset β)) :
+    (g.contractEdge e).verts = insert (unionOf e) (g.verts.filter (· ∉ e)) := rfl
+
+@[simp] lemma edges_contractEdge (g : MultiGraph (Finset β)) (e : Sym2 (Finset β)) :
+    (g.contractEdge e).edges =
+      (g.edges.map (Sym2.map (redirectS e))).filter fun e' => !e'.IsDiag := rfl
+
+/-- Under disjointness the merged vertex is *fresh*: it cannot coincide
+with any supervertex other than the merged endpoints themselves. -/
+lemma unionOf_notMem_filter {g : MultiGraph (Finset β)} (hdisj : SupDisjoint g)
+    {e : Sym2 (Finset β)} (hmem : ∀ X ∈ e, X ∈ g.verts) (hnd : ¬ e.IsDiag) :
+    unionOf e ∉ g.verts.filter (· ∉ e) := by
+  revert hmem hnd
   induction e with
-  | _ a b =>
-    rcases le_total a b with h | h <;>
-      simp [Sym2.inf_mk, Sym2.sup_mk, h, Sym2.eq_swap]
+  | _ S T =>
+    intro hmem hnd
+    rw [Sym2.mk_isDiag_iff] at hnd
+    intro hU
+    obtain ⟨hUv, hUe⟩ := Finset.mem_filter.mp hU
+    simp only [unionOf_mk] at hUv hUe
+    have hS := hmem S (Sym2.mem_mk_left S T)
+    have hT := hmem T (Sym2.mem_mk_right S T)
+    have hneS : S ∪ T ≠ S := fun hc => hUe (by rw [hc]; exact Sym2.mem_mk_left S T)
+    have hneT : S ∪ T ≠ T := fun hc => hUe (by rw [hc]; exact Sym2.mem_mk_right S T)
+    have hSe : S = ∅ := by
+      have : Disjoint S S :=
+        ((hdisj _ hUv _ hS hneS).mono_left Finset.subset_union_left)
+      simpa using disjoint_self.mp this
+    have hTe : T = ∅ := by
+      have : Disjoint T T :=
+        ((hdisj _ hUv _ hT hneT).mono_left Finset.subset_union_right)
+      simpa using disjoint_self.mp this
+    exact hnd (hSe.trans hTe.symm)
 
-omit [DecidableEq α] in
-theorem sym2_inf_mem (e : Sym2 α) : e.inf ∈ e := by
+/-- Contraction removes exactly one supervertex: two leave, their
+union enters — *fresh*, by disjointness. -/
+lemma card_verts_contractEdge {g : MultiGraph (Finset β)} (hdisj : SupDisjoint g)
+    {e : Sym2 (Finset β)} (hmem : ∀ X ∈ e, X ∈ g.verts) (hnd : ¬ e.IsDiag) :
+    (g.contractEdge e).verts.card + 1 = g.verts.card := by
+  rw [verts_contractEdge,
+    Finset.card_insert_of_notMem (unionOf_notMem_filter hdisj hmem hnd)]
+  revert hmem hnd
   induction e with
-  | _ a b => rcases le_total a b with h | h <;> simp [Sym2.inf_mk, h]
+  | _ S T =>
+    intro hmem hnd
+    rw [Sym2.mk_isDiag_iff] at hnd
+    have hS := hmem S (Sym2.mem_mk_left S T)
+    have hT := hmem T (Sym2.mem_mk_right S T)
+    have hfil : g.verts.filter (· ∉ s(S, T)) = g.verts \ {S, T} := by
+      ext W
+      simp only [Finset.mem_filter, Finset.mem_sdiff, Finset.mem_insert,
+        Finset.mem_singleton, Sym2.mem_iff]
+    have hsub : ({S, T} : Finset (Finset β)) ⊆ g.verts :=
+      Finset.insert_subset_iff.mpr ⟨hS, Finset.singleton_subset_iff.mpr hT⟩
+    have h2le : 2 ≤ g.verts.card := by
+      calc 2 = ({S, T} : Finset (Finset β)).card := (Finset.card_pair hnd).symm
+        _ ≤ g.verts.card := Finset.card_le_card hsub
+    rw [hfil, Finset.card_sdiff, Finset.inter_eq_left.mpr hsub,
+      Finset.card_pair hnd]
+    omega
 
-omit [DecidableEq α] in
-theorem sym2_sup_mem (e : Sym2 α) : e.sup ∈ e := by
+/-- Contraction preserves well-formedness. -/
+theorem WF.contractEdge {g : MultiGraph (Finset β)} (hwf : g.WF)
+    {e : Sym2 (Finset β)} : (g.contractEdge e).WF := by
+  constructor
+  · intro e' he' W hW
+    simp only [edges_contractEdge, List.mem_filter, List.mem_map] at he'
+    obtain ⟨⟨e₀, he₀, rfl⟩, -⟩ := he'
+    obtain ⟨X, hX, rfl⟩ := Sym2.mem_map.mp hW
+    have hXv := hwf.incidence e₀ he₀ X hX
+    rw [verts_contractEdge]
+    unfold redirectS
+    split_ifs with hXe
+    · exact Finset.mem_insert_self _ _
+    · exact Finset.mem_insert_of_mem (Finset.mem_filter.mpr ⟨hXv, hXe⟩)
+  · intro e' he'
+    simp only [edges_contractEdge, List.mem_filter] at he'
+    simpa using he'.2
+
+/-- Contraction preserves pairwise disjointness of the supervertices. -/
+lemma SupDisjoint.contractEdge {g : MultiGraph (Finset β)} (hdisj : SupDisjoint g)
+    {e : Sym2 (Finset β)} (hmem : ∀ X ∈ e, X ∈ g.verts) :
+    SupDisjoint (g.contractEdge e) := by
+  revert hmem
   induction e with
-  | _ a b => rcases le_total a b with h | h <;> simp [Sym2.sup_mk, h]
+  | _ S T =>
+    intro hmem A hA B hB hAB
+    rw [verts_contractEdge] at hA hB
+    have hS := hmem S (Sym2.mem_mk_left S T)
+    have hT := hmem T (Sym2.mem_mk_right S T)
+    have hkey : ∀ W ∈ g.verts.filter (· ∉ s(S, T)),
+        Disjoint (unionOf s(S, T)) W := by
+      intro W hW
+      obtain ⟨hWv, hWe⟩ := Finset.mem_filter.mp hW
+      rw [Sym2.mem_iff] at hWe
+      push Not at hWe
+      rw [unionOf_mk]
+      exact Finset.disjoint_union_left.mpr
+        ⟨(hdisj S hS W hWv fun hc => hWe.1 hc.symm),
+         (hdisj T hT W hWv fun hc => hWe.2 hc.symm)⟩
+    rcases Finset.mem_insert.mp hA with rfl | hAf
+    · rcases Finset.mem_insert.mp hB with rfl | hBf
+      · exact absurd rfl hAB
+      · exact hkey B hBf
+    · rcases Finset.mem_insert.mp hB with rfl | hBf
+      · exact (hkey A hAf).symm
+      · exact hdisj A (Finset.mem_filter.mp hAf).1 B (Finset.mem_filter.mp hBf).1 hAB
 
-omit [DecidableEq α] in
-theorem sym2_inf_ne_sup {e : Sym2 α} (h : ¬ e.IsDiag) : e.inf ≠ e.sup := by
+/-- Contraction never increases the edge count. -/
+lemma length_edges_contractEdge_le (g : MultiGraph (Finset β)) (e : Sym2 (Finset β)) :
+    (g.contractEdge e).edges.length ≤ g.edges.length :=
+  le_trans (List.length_filter_le _ _) (le_of_eq (List.length_map ..))
+
+/-- Cut-value transport along one contraction: if membership in `𝒮'`
+after redirection agrees pointwise with membership in `𝒮`, the two
+cuts have the same value. -/
+lemma cutValue_contractEdge_of_pointwise {g : MultiGraph (Finset β)} (hwf : g.WF)
+    {e : Sym2 (Finset β)} {𝒮' 𝒮 : Finset (Finset β)}
+    (hpt : ∀ X ∈ g.verts, (redirectS e X ∈ 𝒮' ↔ X ∈ 𝒮)) :
+    (g.contractEdge e).cutValue 𝒮' = g.cutValue 𝒮 :=
+  countP_crossing_map_filter hwf _ hpt
+
+/-- **Cut lifting** (soundness of contraction): every cut of the
+contracted graph comes from a cut of `g` with the *same* value. Hence
+contraction can only increase the minimum-cut value. -/
+lemma exists_isCut_lift {g : MultiGraph (Finset β)} (hwf : g.WF)
+    {e : Sym2 (Finset β)} (hmem : ∀ X ∈ e, X ∈ g.verts)
+    {𝒮' : Finset (Finset β)} (h : (g.contractEdge e).IsCut 𝒮') :
+    ∃ 𝒮, g.IsCut 𝒮 ∧ g.cutValue 𝒮 = (g.contractEdge e).cutValue 𝒮' := by
+  revert hmem
   induction e with
-  | _ a b =>
-    rw [Sym2.mk_isDiag_iff] at h
-    rcases lt_or_gt_of_ne h with hlt | hlt <;>
-      simp [Sym2.inf_mk, Sym2.sup_mk] <;> exact h
+  | _ S T =>
+    intro hmem
+    have hS := hmem S (Sym2.mem_mk_left S T)
+    refine ⟨g.verts.filter (redirectS s(S, T) · ∈ 𝒮'),
+      ⟨Finset.filter_subset _ _, ?_, ?_⟩, ?_⟩
+    · obtain ⟨Y, hY⟩ := h.nonempty
+      have hYv := h.subset hY
+      rw [verts_contractEdge] at hYv
+      rcases Finset.mem_insert.mp hYv with rfl | hYf
+      · refine ⟨S, Finset.mem_filter.mpr ⟨hS, ?_⟩⟩
+        simpa [redirectS, Sym2.mem_mk_left] using hY
+      · obtain ⟨hYv', hYe⟩ := Finset.mem_filter.mp hYf
+        refine ⟨Y, Finset.mem_filter.mpr ⟨hYv', ?_⟩⟩
+        simpa [redirectS, hYe] using hY
+    · obtain ⟨W, hW, hWS⟩ := h.proper
+      rw [verts_contractEdge] at hW
+      rcases Finset.mem_insert.mp hW with rfl | hWf
+      · refine ⟨S, hS, fun hc => ?_⟩
+        have := (Finset.mem_filter.mp hc).2
+        rw [redirectS, if_pos (Sym2.mem_mk_left S T)] at this
+        exact hWS this
+      · obtain ⟨hWv, hWe⟩ := Finset.mem_filter.mp hWf
+        refine ⟨W, hWv, fun hc => ?_⟩
+        have := (Finset.mem_filter.mp hc).2
+        rw [redirectS, if_neg hWe] at this
+        exact hWS this
+    · exact (cutValue_contractEdge_of_pointwise hwf fun X hX => by
+        simp [Finset.mem_filter, hX]).symm
 
-/-- Contract the undirected edge `e`, merging its larger endpoint into
-its smaller one. -/
-def contract' (g : MultiGraph α) (e : Sym2 α) : MultiGraph α :=
-  g.contractEdge e.inf e.sup
+/-- **Cut survival**: contracting an edge that does not cross a cut
+`𝒮` keeps a merge-image of `𝒮` a cut of the same value. -/
+lemma exists_isCut_contractEdge_of_notCrossing {g : MultiGraph (Finset β)}
+    (hwf : g.WF) (hdisj : SupDisjoint g) {e : Sym2 (Finset β)}
+    (hmem : ∀ X ∈ e, X ∈ g.verts) (hnd : ¬ e.IsDiag)
+    {𝒮 : Finset (Finset β)} (h𝒮 : g.IsCut 𝒮) (hnc : ¬ Crossing 𝒮 e) :
+    ∃ 𝒮', (g.contractEdge e).IsCut 𝒮' ∧
+      (g.contractEdge e).cutValue 𝒮' = g.cutValue 𝒮 := by
+  have hfresh := unionOf_notMem_filter hdisj hmem hnd
+  revert hmem hnd hnc hfresh
+  induction e with
+  | _ S T =>
+    intro hmem hnd hnc hfresh
+    rw [Sym2.mk_isDiag_iff] at hnd
+    have hS := hmem S (Sym2.mem_mk_left S T)
+    have hT := hmem T (Sym2.mem_mk_right S T)
+    have hiff : S ∈ 𝒮 ↔ T ∈ 𝒮 := by simpa using hnc
+    by_cases hSin : S ∈ 𝒮
+    · -- both endpoints inside: the merged vertex joins the cut
+      refine ⟨insert (unionOf s(S, T)) (𝒮.filter (· ∉ s(S, T))),
+        ⟨?_, ⟨_, Finset.mem_insert_self ..⟩, ?_⟩, ?_⟩
+      · rw [verts_contractEdge]
+        exact Finset.insert_subset_insert _
+          (Finset.filter_subset_filter _ h𝒮.subset)
+      · obtain ⟨W, hWv, hWS⟩ := h𝒮.proper
+        have hWe : W ∉ s(S, T) := by
+          rw [Sym2.mem_iff]
+          push Not
+          exact ⟨fun hc => hWS (hc ▸ hSin), fun hc => hWS (hc ▸ hiff.mp hSin)⟩
+        refine ⟨W, ?_, ?_⟩
+        · rw [verts_contractEdge]
+          exact Finset.mem_insert_of_mem (Finset.mem_filter.mpr ⟨hWv, hWe⟩)
+        · intro hc
+          rcases Finset.mem_insert.mp hc with hcU | hcf
+          · exact hfresh (hcU ▸ Finset.mem_filter.mpr ⟨hWv, hWe⟩)
+          · exact hWS (Finset.mem_filter.mp hcf).1
+      · refine cutValue_contractEdge_of_pointwise hwf fun X hX => ?_
+        by_cases hXe : X ∈ s(S, T)
+        · simp only [redirectS, if_pos hXe]
+          constructor
+          · intro _
+            rcases Sym2.mem_iff.mp hXe with rfl | rfl
+            · exact hSin
+            · exact hiff.mp hSin
+          · intro _
+            exact Finset.mem_insert_self ..
+        · simp only [redirectS, if_neg hXe]
+          rw [Finset.mem_insert]
+          constructor
+          · rintro (rfl | hXf)
+            · exact absurd (Finset.mem_filter.mpr ⟨hX, hXe⟩) hfresh
+            · exact (Finset.mem_filter.mp hXf).1
+          · intro hX𝒮
+            exact Or.inr (Finset.mem_filter.mpr ⟨hX𝒮, hXe⟩)
+    · -- neither endpoint inside: the cut survives verbatim
+      have hTin : T ∉ 𝒮 := fun hc => hSin (hiff.mpr hc)
+      have hUnot : unionOf s(S, T) ∉ 𝒮 := by
+        intro hc
+        by_cases hUe : unionOf s(S, T) ∈ s(S, T)
+        · rcases Sym2.mem_iff.mp hUe with hUS | hUT
+          · exact hSin (hUS ▸ hc)
+          · exact hTin (hUT ▸ hc)
+        · exact hfresh (Finset.mem_filter.mpr ⟨h𝒮.subset hc, hUe⟩)
+      refine ⟨𝒮, ⟨?_, h𝒮.nonempty, ?_⟩, ?_⟩
+      · intro Y hY
+        rw [verts_contractEdge]
+        refine Finset.mem_insert_of_mem (Finset.mem_filter.mpr ⟨h𝒮.subset hY, ?_⟩)
+        rw [Sym2.mem_iff]
+        push Not
+        exact ⟨fun hc => hSin (hc ▸ hY), fun hc => hTin (hc ▸ hY)⟩
+      · exact ⟨unionOf s(S, T), by rw [verts_contractEdge]; exact Finset.mem_insert_self ..,
+          hUnot⟩
+      · refine cutValue_contractEdge_of_pointwise hwf fun X hX => ?_
+        by_cases hXe : X ∈ s(S, T)
+        · simp only [redirectS, if_pos hXe]
+          constructor
+          · intro hc
+            exact absurd hc hUnot
+          · intro hc
+            rcases Sym2.mem_iff.mp hXe with rfl | rfl
+            · exact absurd hc hSin
+            · exact absurd hc hTin
+        · simp only [redirectS, if_neg hXe]
+
+/-- Contraction never decreases the minimum-cut value. -/
+lemma minCutValue_le_contractEdge {g : MultiGraph (Finset β)} (hwf : g.WF)
+    (hdisj : SupDisjoint g) {e : Sym2 (Finset β)}
+    (hmem : ∀ X ∈ e, X ∈ g.verts) (hnd : ¬ e.IsDiag) (h3 : 3 ≤ g.verts.card) :
+    g.minCutValue ≤ (g.contractEdge e).minCutValue := by
+  have h2' : 2 ≤ (g.contractEdge e).verts.card := by
+    have := card_verts_contractEdge hdisj hmem hnd
+    omega
+  obtain ⟨𝒮', h𝒮', hval⟩ := exists_minCut _ h2'
+  obtain ⟨𝒮, h𝒮, hval2⟩ := exists_isCut_lift hwf hmem h𝒮'
+  rw [← hval, ← hval2]
+  exact minCutValue_le h𝒮
+
+/-- Contracting an edge that avoids a fixed minimum cut preserves the
+minimum-cut value exactly — the per-step fact of Karger's analysis. -/
+lemma minCutValue_contractEdge_of_notCrossing {g : MultiGraph (Finset β)}
+    (hwf : g.WF) (hdisj : SupDisjoint g) {e : Sym2 (Finset β)}
+    (hmem : ∀ X ∈ e, X ∈ g.verts) (hnd : ¬ e.IsDiag) (h3 : 3 ≤ g.verts.card)
+    {𝒮 : Finset (Finset β)} (h𝒮 : g.IsCut 𝒮)
+    (hmin : g.cutValue 𝒮 = g.minCutValue) (hnc : ¬ Crossing 𝒮 e) :
+    (g.contractEdge e).minCutValue = g.minCutValue := by
+  obtain ⟨𝒮', hcut', hval'⟩ :=
+    exists_isCut_contractEdge_of_notCrossing hwf hdisj hmem hnd h𝒮 hnc
+  refine le_antisymm ?_ (minCutValue_le_contractEdge hwf hdisj hmem hnd h3)
+  calc (g.contractEdge e).minCutValue
+      ≤ (g.contractEdge e).cutValue 𝒮' := minCutValue_le hcut'
+    _ = g.cutValue 𝒮 := hval'
+    _ = g.minCutValue := hmin
+
+/-! ### Contraction of a listed edge -/
 
 /-- Contract the `i`-th edge of the list. -/
-def contract (g : MultiGraph α) (i : Fin g.edges.length) : MultiGraph α :=
-  g.contract' g.edges[(i : ℕ)]
+def contract (g : MultiGraph (Finset β)) (i : Fin g.edges.length) :
+    MultiGraph (Finset β) :=
+  g.contractEdge g.edges[(i : ℕ)]
 
-lemma WF.contract {g : MultiGraph α} (hwf : g.WF) (i : Fin g.edges.length) :
-    (g.contract i).WF :=
+lemma WF.contract {g : MultiGraph (Finset β)} (hwf : g.WF)
+    (i : Fin g.edges.length) : (g.contract i).WF :=
   hwf.contractEdge
-    (hwf.incidence _ (List.getElem_mem _) _ (sym2_inf_mem _))
-    (sym2_inf_ne_sup (hwf.loopless _ (List.getElem_mem _)))
 
-lemma card_verts_contract {g : MultiGraph α} (hwf : g.WF)
-    (i : Fin g.edges.length) :
+lemma SupDisjoint.contract {g : MultiGraph (Finset β)} (hdisj : SupDisjoint g)
+    (hwf : g.WF) (i : Fin g.edges.length) : SupDisjoint (g.contract i) :=
+  hdisj.contractEdge (hwf.incidence _ (List.getElem_mem _))
+
+lemma card_verts_contract {g : MultiGraph (Finset β)} (hwf : g.WF)
+    (hdisj : SupDisjoint g) (i : Fin g.edges.length) :
     (g.contract i).verts.card + 1 = g.verts.card :=
-  card_verts_contractEdge g
-    (hwf.incidence _ (List.getElem_mem _) _ (sym2_sup_mem _))
+  card_verts_contractEdge hdisj (hwf.incidence _ (List.getElem_mem _))
+    (hwf.loopless _ (List.getElem_mem _))
 
-lemma length_edges_contract_le (g : MultiGraph α) (i : Fin g.edges.length) :
+lemma length_edges_contract_le (g : MultiGraph (Finset β)) (i : Fin g.edges.length) :
     (g.contract i).edges.length ≤ g.edges.length :=
-  length_edges_contractEdge_le g _ _
+  length_edges_contractEdge_le g _
 
-lemma minCutValue_le_contract {g : MultiGraph α} (hwf : g.WF)
-    (i : Fin g.edges.length) (h3 : 3 ≤ g.verts.card) :
+lemma minCutValue_le_contract {g : MultiGraph (Finset β)} (hwf : g.WF)
+    (hdisj : SupDisjoint g) (i : Fin g.edges.length) (h3 : 3 ≤ g.verts.card) :
     g.minCutValue ≤ (g.contract i).minCutValue :=
-  minCutValue_le_contractEdge hwf
-    (hwf.incidence _ (List.getElem_mem _) _ (sym2_sup_mem _)) h3
+  minCutValue_le_contractEdge hwf hdisj (hwf.incidence _ (List.getElem_mem _))
+    (hwf.loopless _ (List.getElem_mem _)) h3
 
-end Indexed
+/-! ### The supervertex embedding -/
+
+/-- Enter the supervertex world: each vertex becomes its singleton.
+The contraction loop starts here, and the supervertices it merges are
+exactly the fibres a run has accumulated — the final vertex set *is*
+the reported cut, with no extra bookkeeping. -/
+def super (g : MultiGraph β) : MultiGraph (Finset β) where
+  verts := g.verts.image fun a => {a}
+  edges := g.edges.map (Sym2.map fun a => {a})
+
+@[simp] lemma verts_super (g : MultiGraph β) :
+    (g.super).verts = g.verts.image fun a => {a} := rfl
+
+@[simp] lemma edges_super (g : MultiGraph β) :
+    (g.super).edges = g.edges.map (Sym2.map fun a => {a}) := rfl
+
+lemma card_verts_super (g : MultiGraph β) :
+    (g.super).verts.card = g.verts.card :=
+  Finset.card_image_of_injective _ fun _ _ h => Finset.singleton_injective h
+
+lemma length_edges_super (g : MultiGraph β) :
+    (g.super).edges.length = g.edges.length :=
+  List.length_map ..
+
+theorem WF.super {g : MultiGraph β} (hwf : g.WF) : (g.super).WF := by
+  constructor
+  · intro e' he' Y hY
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp he'
+    obtain ⟨a, ha, rfl⟩ := Sym2.mem_map.mp hY
+    exact Finset.mem_image_of_mem _ (hwf.incidence e he a ha)
+  · intro e' he'
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp he'
+    revert he
+    induction e with
+    | _ a b =>
+      intro he hd
+      rw [Sym2.map_mk, Sym2.mk_isDiag_iff] at hd
+      exact hwf.loopless _ he
+        (Sym2.mk_isDiag_iff.mpr (Finset.singleton_injective hd))
+
+lemma supDisjoint_super (g : MultiGraph β) : SupDisjoint (g.super) := by
+  intro A hA B hB hAB
+  obtain ⟨a, -, rfl⟩ := Finset.mem_image.mp hA
+  obtain ⟨b, -, rfl⟩ := Finset.mem_image.mp hB
+  exact Finset.disjoint_singleton.mpr fun hc => hAB (hc ▸ rfl)
+
+/-! ### Tracking the supervertices -/
+
+/-- The supervertex graph `g` **tracks** `g₀`: its vertices are
+pairwise-disjoint nonempty sets of original vertices covering all of
+them, and every cut of `g` flattens (`⋃`) to a cut of `g₀` of the same
+value. A contraction run maintains this invariant, and at the end the
+surviving supervertices are, verbatim, the sides of the reported cut. -/
+structure Tracks (g₀ : MultiGraph β) (g : MultiGraph (Finset β)) : Prop where
+  /-- Every supervertex consists of original vertices. -/
+  subset : ∀ S ∈ g.verts, S ⊆ g₀.verts
+  /-- Every supervertex is nonempty. -/
+  nonempty : ∀ S ∈ g.verts, S.Nonempty
+  /-- The supervertices are pairwise disjoint. -/
+  disj : SupDisjoint g
+  /-- Every original vertex sits in some supervertex. -/
+  covers : ∀ a ∈ g₀.verts, ∃ S ∈ g.verts, a ∈ S
+  /-- Cuts flatten with the same value. -/
+  cut : ∀ 𝒮 ⊆ g.verts, g.cutValue 𝒮 = g₀.cutValue (𝒮.biUnion id)
+
+/-- The singleton embedding tracks the original graph. -/
+lemma Tracks.super (g : MultiGraph β) : Tracks g g.super := by
+  refine ⟨?_, ?_, supDisjoint_super g, ?_, ?_⟩
+  · intro S hS
+    obtain ⟨a, ha, rfl⟩ := Finset.mem_image.mp hS
+    exact Finset.singleton_subset_iff.mpr ha
+  · intro S hS
+    obtain ⟨a, -, rfl⟩ := Finset.mem_image.mp hS
+    exact Finset.singleton_nonempty a
+  · intro a ha
+    exact ⟨{a}, Finset.mem_image_of_mem _ ha, Finset.mem_singleton_self a⟩
+  · intro 𝒮 h𝒮
+    have hkey : ∀ a : β, (a ∈ 𝒮.biUnion id ↔ {a} ∈ 𝒮) := by
+      intro a
+      simp only [Finset.mem_biUnion, id]
+      constructor
+      · rintro ⟨Y, hY, haY⟩
+        obtain ⟨c, -, rfl⟩ := Finset.mem_image.mp (h𝒮 hY)
+        rw [Finset.mem_singleton] at haY
+        exact haY ▸ hY
+      · intro h
+        exact ⟨{a}, h, Finset.mem_singleton_self a⟩
+    unfold cutValue
+    rw [edges_super, List.countP_map]
+    refine List.countP_congr fun e he => ?_
+    induction e with
+    | _ a b =>
+      simp only [Function.comp_apply, Sym2.map_mk, crossing_mk,
+        hkey a, hkey b]
+
+/-- Tracking survives one `∪`-merge contraction of a listed edge. -/
+lemma Tracks.contractEdge {g₀ : MultiGraph β} {g : MultiGraph (Finset β)}
+    (hwf : g.WF) (ht : Tracks g₀ g) {e : Sym2 (Finset β)} (he : e ∈ g.edges) :
+    Tracks g₀ (g.contractEdge e) := by
+  have hmem := hwf.incidence e he
+  have hnd := hwf.loopless e he
+  clear he
+  revert hmem hnd
+  induction e with
+  | _ S T =>
+    intro hmem hnd
+    have hS := hmem S (Sym2.mem_mk_left S T)
+    have hT := hmem T (Sym2.mem_mk_right S T)
+    refine ⟨?_, ?_, ht.disj.contractEdge hmem, ?_, ?_⟩
+    · intro A hA
+      rw [verts_contractEdge] at hA
+      rcases Finset.mem_insert.mp hA with rfl | hAf
+      · rw [unionOf_mk]
+        exact Finset.union_subset (ht.subset S hS) (ht.subset T hT)
+      · exact ht.subset A (Finset.mem_filter.mp hAf).1
+    · intro A hA
+      rw [verts_contractEdge] at hA
+      rcases Finset.mem_insert.mp hA with rfl | hAf
+      · rw [unionOf_mk]
+        exact (ht.nonempty S hS).mono Finset.subset_union_left
+      · exact ht.nonempty A (Finset.mem_filter.mp hAf).1
+    · intro a ha
+      obtain ⟨A, hA, haA⟩ := ht.covers a ha
+      by_cases hAe : A ∈ s(S, T)
+      · refine ⟨unionOf s(S, T), Finset.mem_insert_self .., ?_⟩
+        rw [unionOf_mk]
+        rcases Sym2.mem_iff.mp hAe with rfl | rfl
+        · exact Finset.mem_union_left _ haA
+        · exact Finset.mem_union_right _ haA
+      · exact ⟨A, Finset.mem_insert_of_mem (Finset.mem_filter.mpr ⟨hA, hAe⟩), haA⟩
+    · intro 𝒮' h𝒮'
+      rw [cutValue_contractEdge_of_pointwise
+          (𝒮 := g.verts.filter (redirectS s(S, T) · ∈ 𝒮')) hwf
+          (fun X hX => by simp [Finset.mem_filter, hX]),
+        ht.cut _ (Finset.filter_subset _ _)]
+      congr 1
+      ext a
+      simp only [Finset.mem_biUnion, Finset.mem_filter, id]
+      constructor
+      · rintro ⟨X, ⟨hXv, hX𝒮'⟩, haX⟩
+        by_cases hXe : X ∈ s(S, T)
+        · rw [redirectS, if_pos hXe] at hX𝒮'
+          refine ⟨unionOf s(S, T), hX𝒮', ?_⟩
+          rw [unionOf_mk]
+          rcases Sym2.mem_iff.mp hXe with rfl | rfl
+          · exact Finset.mem_union_left _ haX
+          · exact Finset.mem_union_right _ haX
+        · rw [redirectS, if_neg hXe] at hX𝒮'
+          exact ⟨X, hX𝒮', haX⟩
+      · rintro ⟨Y, hY𝒮', haY⟩
+        have hYv' := h𝒮' hY𝒮'
+        rw [verts_contractEdge] at hYv'
+        rcases Finset.mem_insert.mp hYv' with rfl | hYf
+        · rw [unionOf_mk] at haY
+          rcases Finset.mem_union.mp haY with ha | ha
+          · exact ⟨S, ⟨hS, by rw [redirectS, if_pos (Sym2.mem_mk_left S T)]; exact hY𝒮'⟩, ha⟩
+          · exact ⟨T, ⟨hT, by rw [redirectS, if_pos (Sym2.mem_mk_right S T)]; exact hY𝒮'⟩, ha⟩
+        · obtain ⟨hYv, hYe⟩ := Finset.mem_filter.mp hYf
+          exact ⟨Y, ⟨hYv, by rw [redirectS, if_neg hYe]; exact hY𝒮'⟩, haY⟩
+
+/-- Tracking survives contracting the `i`-th listed edge. -/
+lemma Tracks.contract {g₀ : MultiGraph β} {g : MultiGraph (Finset β)}
+    (hwf : g.WF) (ht : Tracks g₀ g) (i : Fin g.edges.length) :
+    Tracks g₀ (g.contract i) :=
+  ht.contractEdge hwf (List.getElem_mem _)
+
+/-! ### Reading the cut off the surviving supervertices -/
+
+/-- Every surviving supervertex is a genuine cut of the tracked graph. -/
+lemma Tracks.isCut_mem {g₀ : MultiGraph β} {g : MultiGraph (Finset β)}
+    (ht : Tracks g₀ g) (h2 : 2 ≤ g.verts.card) {S : Finset β}
+    (hS : S ∈ g.verts) : g₀.IsCut S := by
+  refine ⟨ht.subset S hS, ht.nonempty S hS, ?_⟩
+  obtain ⟨T, hT, hTS⟩ : ∃ T ∈ g.verts, T ≠ S := by
+    obtain ⟨A, B, hA, hB, hAB⟩ := Finset.one_lt_card_iff.mp (show 1 < g.verts.card by omega)
+    by_cases hAS : A = S
+    · exact ⟨B, hB, fun hc => hAB (hAS.trans hc.symm)⟩
+    · exact ⟨A, hA, hAS⟩
+  obtain ⟨b, hb⟩ := ht.nonempty T hT
+  exact ⟨b, ht.subset T hT hb,
+    fun hbS => Finset.disjoint_left.mp (ht.disj T hT S hS hTS) hb hbS⟩
+
+/-- **The bridge**: when a run finishes (two supervertices remain, or
+no edges do) every surviving supervertex cuts the tracked graph with
+value exactly the number of surviving edges. -/
+lemma Tracks.cutValue_mem {g₀ : MultiGraph β} {g : MultiGraph (Finset β)}
+    (hwf : g.WF) (ht : Tracks g₀ g)
+    (hend : g.verts.card = 2 ∨ g.edges = []) {S : Finset β}
+    (hS : S ∈ g.verts) : g₀.cutValue S = g.edges.length := by
+  have h1 := ht.cut {S} (Finset.singleton_subset_iff.mpr hS)
+  rw [Finset.singleton_biUnion, id] at h1
+  rcases hend with hcard | hnil
+  · rw [← h1]
+    refine cutValue_of_card_two hwf hcard
+      ⟨Finset.singleton_subset_iff.mpr hS, Finset.singleton_nonempty S, ?_⟩
+    obtain ⟨T, hT, hTS⟩ : ∃ T ∈ g.verts, T ≠ S := by
+      obtain ⟨A, B, hA, hB, hAB⟩ := Finset.one_lt_card_iff.mp (show 1 < g.verts.card by omega)
+      by_cases hAS : A = S
+      · exact ⟨B, hB, fun hc => hAB (hAS.trans hc.symm)⟩
+      · exact ⟨A, hA, hAS⟩
+    exact ⟨T, hT, by simp [hTS]⟩
+  · rw [← h1]
+    simp [cutValue, hnil]
+
+/-- Flattening any cut of the supervertex graph yields a cut of the
+tracked graph (of the same value, by `Tracks.cut`). -/
+lemma Tracks.isCut_biUnion {g₀ : MultiGraph β} {g : MultiGraph (Finset β)}
+    (ht : Tracks g₀ g) {𝒮 : Finset (Finset β)} (h𝒮 : g.IsCut 𝒮) :
+    g₀.IsCut (𝒮.biUnion id) := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro a ha
+    obtain ⟨Y, hY, haY⟩ := Finset.mem_biUnion.mp ha
+    exact ht.subset Y (h𝒮.subset hY) haY
+  · obtain ⟨Y, hY⟩ := h𝒮.nonempty
+    obtain ⟨a, ha⟩ := ht.nonempty Y (h𝒮.subset hY)
+    exact ⟨a, Finset.mem_biUnion.mpr ⟨Y, hY, ha⟩⟩
+  · obtain ⟨W, hWv, hW𝒮⟩ := h𝒮.proper
+    obtain ⟨b, hb⟩ := ht.nonempty W hWv
+    refine ⟨b, ht.subset W hWv hb, fun hc => ?_⟩
+    obtain ⟨Y, hY, hbY⟩ := Finset.mem_biUnion.mp hc
+    exact Finset.disjoint_left.mp
+      (ht.disj Y (h𝒮.subset hY) W hWv fun hc' => hW𝒮 (hc' ▸ hY)) hbY hb
+
+/-- The supervertex embedding preserves the minimum-cut value. -/
+lemma minCutValue_super {g : MultiGraph β} (h2 : 2 ≤ g.verts.card) :
+    (g.super).minCutValue = g.minCutValue := by
+  have ht := Tracks.super g
+  have h2' : 2 ≤ (g.super).verts.card := by rw [card_verts_super]; exact h2
+  refine le_antisymm ?_ ?_
+  · obtain ⟨S, hS, hval⟩ := exists_minCut g h2
+    have hcut : (g.super).IsCut (S.image fun a => {a}) := by
+      refine ⟨?_, hS.nonempty.image _, ?_⟩
+      · rw [verts_super]
+        exact Finset.image_subset_image hS.subset
+      · obtain ⟨v, hv, hvS⟩ := hS.proper
+        refine ⟨{v}, by rw [verts_super]; exact Finset.mem_image_of_mem _ hv,
+          fun hc => ?_⟩
+        obtain ⟨w, hw, hwv⟩ := Finset.mem_image.mp hc
+        exact hvS (Finset.singleton_injective hwv ▸ hw)
+    have hval2 : (g.super).cutValue (S.image fun a => {a}) = g.cutValue S := by
+      rw [ht.cut _ hcut.subset]
+      congr 1
+      ext a
+      simp only [Finset.mem_biUnion, Finset.mem_image, id]
+      constructor
+      · rintro ⟨Y, ⟨c, hc, rfl⟩, haY⟩
+        rw [Finset.mem_singleton] at haY
+        exact haY ▸ hc
+      · intro ha
+        exact ⟨{a}, ⟨a, ha, rfl⟩, Finset.mem_singleton_self a⟩
+    rw [← hval, ← hval2]
+    exact minCutValue_le hcut
+  · obtain ⟨𝒮, h𝒮, hval⟩ := exists_minCut _ h2'
+    rw [← hval, ht.cut 𝒮 h𝒮.subset]
+    exact minCutValue_le (ht.isCut_biUnion h𝒮)
+
+end Super
 
 end MultiGraph
-
-open MultiGraph
-
-variable [LinearOrder α]
-
-/-! ## Reading the cut off a tracked contraction -/
-
-/-- The cut reported by a finished run: the set of original vertices
-that were merged into the same supervertex as the smallest vertex.
-(The complementary fibre induces the same cut.) -/
-def cutOf (g : MultiGraph α) (r : α → α) : Finset α :=
-  if h : g.verts.Nonempty then
-    g.verts.filter fun x => r x = r (g.verts.min' h)
-  else ∅
-
-lemma cutOf_eq_pullback (g₀ : MultiGraph α) (r : α → α)
-    (h : g₀.verts.Nonempty) :
-    cutOf g₀ r = g₀.pullback r {r (g₀.verts.min' h)} := by
-  simp [cutOf, MultiGraph.pullback, h]
-
-/-- The returned set really is a cut of the original graph. -/
-lemma isCut_cutOf {g₀ g : MultiGraph α} {r : α → α} (ht : Tracks g₀ g r)
-    (h2 : 2 ≤ g.verts.card) (h : g₀.verts.Nonempty) :
-    g₀.IsCut (cutOf g₀ r) := by
-  rw [cutOf_eq_pullback g₀ r h]
-  set m := g₀.verts.min' h with hm
-  have hmv : m ∈ g₀.verts := g₀.verts.min'_mem h
-  refine ⟨Finset.filter_subset _ _, ⟨m, ?_⟩, ?_⟩
-  · simp [MultiGraph.pullback, hmv]
-  · -- some other supervertex exists, and it has an original vertex in it
-    obtain ⟨y, hy, hyne⟩ : ∃ y ∈ g.verts, y ≠ r m := by
-      obtain ⟨a, b, ha, hb, hab⟩ :=
-        Finset.one_lt_card_iff.mp (show 1 < g.verts.card by omega)
-      by_cases hav : a = r m
-      · exact ⟨b, hb, by rw [← hav]; exact fun hc => hab hc.symm⟩
-      · exact ⟨a, ha, hav⟩
-    obtain ⟨x, hx, rfl⟩ := ht.onto y hy
-    exact ⟨x, hx, by simp [MultiGraph.pullback, hx, hyne]⟩
-
-/-- **The bridge.** The cut a run returns has exactly the value that
-run reports: `cutValue` of the output equals the surviving edge count,
-which is what `kargerValue` is analysed as. -/
-lemma cutValue_cutOf {g₀ g : MultiGraph α} (hwf : g.WF)
-    {r : α → α} (ht : Tracks g₀ g r)
-    (hend : g.verts.card = 2 ∨ g.edges = []) (h : g₀.verts.Nonempty) :
-    g₀.cutValue (cutOf g₀ r) = g.edges.length := by
-  rw [cutOf_eq_pullback g₀ r h, ← ht.cut]
-  set m := g₀.verts.min' h with hm
-  have hmv : m ∈ g₀.verts := g₀.verts.min'_mem h
-  rcases hend with hcard | hnil
-  · refine cutValue_of_card_two hwf hcard ?_
-    refine ⟨Finset.singleton_subset_iff.mpr (ht.maps m hmv),
-      Finset.singleton_nonempty _, ?_⟩
-    obtain ⟨a, b, ha, hb, hab⟩ :=
-      Finset.one_lt_card_iff.mp (show 1 < g.verts.card by omega)
-    by_cases hav : a = r m
-    · exact ⟨b, hb, by simp [← hav, Ne.symm hab]⟩
-    · exact ⟨a, ha, by simp [hav]⟩
-  · simp [MultiGraph.cutValue, hnil]
 
 end ARA

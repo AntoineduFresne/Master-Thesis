@@ -52,6 +52,29 @@ lemma perm_getElem_cons_eraseIdx
           ‹i + 1 < List.length (hd :: tl)›))
       (List.Perm.swap ..)
 
+/-- **Counting accepting indices.** The number of positions of `L`
+whose element satisfies `P`, written as a `Fin`-indexed sum of
+indicators — the pure list mathematics behind the list counting
+principle `toPMF_randIdx_bind_countP`.
+
+Proved by leaving the `Fin`-indexed world (`sum_ofFn` /
+`ofFn_getElem_eq_map`) before inducting: a direct induction runs into
+`Decidable`-instance motives that neither `rw` nor `simp` handle. -/
+lemma sum_ite_getElem_eq_countP {β : Type*} [AddCommMonoidWithOne β]
+    (L : List α) (P : α → Bool) :
+    ∑ i : Fin L.length, (if P L[i] then (1 : β) else 0)
+      = (L.countP P : β) := by
+  simp only [Fin.getElem_fin]
+  rw [← List.sum_ofFn,
+    List.ofFn_getElem_eq_map L (fun a => if P a then (1 : β) else 0)]
+  induction L with
+  | nil => simp
+  | cons a L ih =>
+    rw [List.map_cons, List.sum_cons, ih, List.countP_cons]
+    by_cases h : P a
+    · simp [h, add_comm]
+    · simp [h]
+
 /-! ### Sortedness (antisymmetry and transitivity) -/
 
 section PartialOrder
@@ -176,11 +199,16 @@ lemma perm_filter_partition
 
 /-- The sorted list splits around any pivot as
 `sorted(< pivot) ++ [pivot] ++ sorted(≥ pivot)`: two sorted
-permutations of the same list are equal. -/
+permutations of the same list are equal.
+
+Oriented branch = spec (the concatenation on the left), the
+`spec_transport` convention, so `dirac_finish` can rewrite a
+collapsed Quicksort branch to the specification. -/
 lemma mergeSort_partition (L : List α) (i : Fin L.length) :
-    L.mergeSort (· ≤ ·) =
-      ((L.eraseIdx i).filter (· < L[i])).mergeSort (· ≤ ·) ++ [L[i]] ++
-        ((L.eraseIdx i).filter (· ≥ L[i])).mergeSort (· ≤ ·) := by
+    ((L.eraseIdx i).filter (· < L[i])).mergeSort (· ≤ ·) ++ [L[i]] ++
+      ((L.eraseIdx i).filter (· ≥ L[i])).mergeSort (· ≤ ·) =
+      L.mergeSort (· ≤ ·) := by
+  symm
   -- Two sorted permutations of the same list are equal.
   apply eq_of_sortedLE_perm sortedLE_mergeSort
   · -- The concatenation is sorted: everything left of the pivot is
@@ -302,6 +330,11 @@ any function of the two partition sizes can be re-summed over ranks.
 Works in any `AddCommMonoid` (used with `ℚ` for Quicksort's exact
 formula and with `ℝ≥0∞` for Quickselect's bound).
 
+The RHS is a `Finset.range` sum: everything downstream of a rank
+reindexing (`Finset.sum_range_succ`, `sum_range_reflect`, harmonic
+closed forms) lives on range sums, so the `Fin`-to-range hop happens
+once, here, and never at a call site.
+
 Uses `Finset.sum_equiv` with the rank equivalence for a clean
 bijective reindexing. -/
 lemma nodup_partition_sum₂ {β : Type*} [AddCommMonoid β]
@@ -311,8 +344,9 @@ lemma nodup_partition_sum₂ {β : Type*} [AddCommMonoid β]
           (· < L[i])).length
         ((L.eraseIdx i).filter
           (· ≥ L[i])).length) =
-    ∑ k : Fin L.length,
-      f k.val (L.length - 1 - k.val) := by
+    ∑ r ∈ Finset.range L.length,
+      f r (L.length - 1 - r) := by
+  rw [← Fin.sum_univ_eq_sum_range]
   -- Rewrite LHS summand in terms of rank, then reindex
   have h_eq : ∀ i : Fin L.length,
       f ((L.eraseIdx i).filter (· < L[i])).length

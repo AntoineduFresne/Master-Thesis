@@ -4,6 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Complexity.TailBounds
 import ARA.Infrastructure.Correctness.Correctness
 import ARA.Helpers.Partition
 import Mathlib.NumberTheory.Harmonic.Defs
@@ -100,9 +101,9 @@ def Quicksort_IO : List ℕ → IO (List ℕ) := Quicksort
 
 #eval Quicksort_IO [8,4,1,2]
 
--- PMF version (noncomputable specification)
-noncomputable def Quicksort_PMF :
-    List ℕ → PMF (List ℕ) := Quicksort
+-- PMF reading (noncomputable specification; an `example` suffices —
+-- theorems are stated about `Quicksort` itself)
+noncomputable example : List ℕ → PMF (List ℕ) := Quicksort
 
 -- ----------------------------------------
 -- Monad transformer version (timed)
@@ -114,9 +115,8 @@ def Quicksort_IO_Timed : List ℕ → TimeMT ℕ IO (List ℕ) := Quicksort
 
 #eval (Quicksort_IO_Timed [5, 4, 2, 1, 3, 6, 2, 1, 24, 6]).run
 
--- PMF timed version (noncomputable specification)
-noncomputable def Quicksort_PMF_Timed :
-    List ℕ → TimeMT ℕ PMF (List ℕ) := Quicksort
+-- PMF timed reading (noncomputable specification)
+noncomputable example : List ℕ → TimeMT ℕ PMF (List ℕ) := Quicksort
 
 -- ----------------------------------------
 -- Generic Correctness proof
@@ -159,10 +159,19 @@ private lemma quicksort_eq_bind
 /-!
 ### Generic correctness theorem
 
-The proof is the Tutorial's recipe verbatim: functional induction,
-expose the pivot, collapse, discharge the branch — the transport
-lemma is `mergeSort_partition`.
+The proof is the Tutorial's recipe: one `dirac_correct` call. The
+transport lemma is `mergeSort_partition` (from `Helpers`), restated
+below in the `simp`-normal form a collapsed branch actually has
+(`++ [x] ++` normalizes to `++ x :: ·`, `· ≥ p` to `p ≤ ·`), so
+`dirac_finish` can fire it.
 -/
+
+@[spec_transport]
+private lemma mergeSort_partition_cons (L : List α) (i : ℕ) (h : i < L.length) :
+    ((L.eraseIdx i).filter (fun x => x < L[i])).mergeSort (· ≤ ·) ++ L[i] ::
+      ((L.eraseIdx i).filter (fun x => L[i] ≤ x)).mergeSort (· ≤ ·) =
+      L.mergeSort (· ≤ ·) := by
+  simpa using mergeSort_partition L ⟨i, h⟩
 
 /-- **Correctness.** For any lawful random monad and any lawful cost
 model, `Quicksort` returns exactly the sorted list: its output
@@ -172,19 +181,7 @@ theorem quicksort_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
     𝒟[Quicksort L | M] = PMF.pure (L.mergeSort (· ≤ ·)) := by
-  induction L using Quicksort.induct with
-  | case1 =>
-    rw [Quicksort.eq_1]
-    simp only [LawfulRandMonad.toPMF_pure, List.mergeSort_nil]
-    rfl
-  | case2 head tail ih1 ih2 =>
-    rw [quicksort_eq_bind]
-    refine toPMF_randIdx_bind_dirac fun i => ?_
-    unfold qs_branch
-    toPMF_step
-    rw [ih1 i, ih2 i]
-    toPMF_step
-    rw [← mergeSort_partition]
+  dirac_correct Quicksort
 
 /-- The output is a sorted permutation of the input (existential
 specification form of `quicksort_correct`). -/
@@ -235,36 +232,26 @@ is needed; the exact formula descends to `ℝ` via `toReal`, with
 finiteness supplied by the `C(n,2)` bound.
 -/
 
+/-- The per-pivot step cost, **named once** so no proof ever restates
+it: the deterministic partition work plus the two recursive calls. -/
+private noncomputable def qsStepCost (M : Type → Type) [Monad M]
+    [LawfulMonad M] [LawfulRandMonad M]
+    (L : List α) (i : Fin L.length) : ENNReal :=
+  ((L.eraseIdx i).length : ENNReal) +
+    𝔼_runtime[Quicksort (pivotLT L i) | M] +
+    𝔼_runtime[Quicksort (pivotGE L i) | M]
+
 /-- The expected cost of `qs_branch` is
-`|rest| + E[QS (pivotLT L i)] + E[QS (pivotGE L i)]`. -/
+`|rest| + E[QS (pivotLT L i)] + E[QS (pivotGE L i)]`: peel the tick,
+then the divide-and-conquer combinator does the rest. -/
 private lemma expected_cost_qs_branch
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (i : Fin L.length) :
-    𝔼_runtime[qs_branch (TimeMT ℕ M) L i] =
-    ((L.eraseIdx i).length : ENNReal) +
-      𝔼_runtime[Quicksort (pivotLT L i) | M] +
-      𝔼_runtime[Quicksort (pivotGE L i) | M] := by
-  -- Peel `tick` and the trailing `pure` automatically.
-  unfold qs_branch
+    𝔼_runtime[qs_branch (TimeMT ℕ M) L i] = qsStepCost M L i := by
+  unfold qs_branch qsStepCost
   cost_step
-  -- Decompose the outer recursive bind, then collapse the inner
-  -- continuation `(QS (pivotGE L i) >>= pure)` to `E[QS (pivotGE L i)]`.
-  rw [expected_cost_toPMF_bind]
-  have h_inner : ∀ tm : TimeM ℕ (List α),
-      expected_cost
-        (inst.toPMF
-          ((Quicksort (pivotGE L i) : TimeMT ℕ M _) >>= fun S2 =>
-            (pure (tm.ret ++ [L[i]] ++ S2) :
-              TimeMT ℕ M (List α))).run) =
-      expected_cost
-        (inst.toPMF (Quicksort (pivotGE L i) : TimeMT ℕ M _).run) := by
-    intro tm
-    rw [expected_cost_toPMF_bind]
-    cost_step
-  simp only [pivotLT, pivotGE, h_inner, ENNReal.tsum_mul_right,
-    PMF.tsum_coe, one_mul]
-  ring
+  rw [expected_cost_toPMF_seq₂, ← add_assoc]
 
 /-- The empty list costs nothing. -/
 lemma expected_cost_quicksort_nil
@@ -281,10 +268,7 @@ lemma expected_cost_quicksort_step
     (head : α) (tail : List α) :
     𝔼_runtime[Quicksort (head :: tail) | M] =
     ((head :: tail).length : ENNReal)⁻¹ *
-      ∑ i : Fin (head :: tail).length,
-        ((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
-          𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]) := by
+      ∑ i : Fin (head :: tail).length, qsStepCost M (head :: tail) i := by
   rw [quicksort_eq_bind head tail]
   exact expected_cost_uniform_step' (by simp)
     fun i => expected_cost_qs_branch (head :: tail) i
@@ -318,43 +302,31 @@ theorem quicksort_cost_le
     exact bot_le
   | case2 head tail ih1 ih2 =>
     rw [expected_cost_quicksort_step head tail]
-    -- The recursive calls act on complementary parts of `rest`, so
-    -- convexity of `C(·,2)` bounds their joint cost by `C(tail.length, 2)`.
-    have hbound : ∀ i : Fin (head :: tail).length,
-        ((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
-          𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]) ≤
-        ((tail.length : ENNReal) + (tail.length.choose 2 : ENNReal)) := by
-      intro i
-      have hrest := length_eraseIdx_cons head tail i
-      have hsplit : (pivotLT (head :: tail) i).length +
-          (pivotGE (head :: tail) i).length =
-          tail.length := by
-        rw [length_filter_lt_ge]
-        exact hrest
-      have hchoose : ((pivotLT (head :: tail) i).length).choose 2 +
-          ((pivotGE (head :: tail) i).length).choose 2 ≤
-          tail.length.choose 2 := by
-        rw [← hsplit]
-        exact choose_two_add_le _ _
-      rw [add_assoc,
-        show ((((head :: tail).eraseIdx i).length : ENNReal)) = (tail.length : ENNReal)
-          from by rw [hrest]]
-      refine add_le_add le_rfl (le_trans (add_le_add (ih1 i) (ih2 i)) ?_)
-      rw [← Nat.cast_add]
-      exact Nat.cast_le.mpr hchoose
+    -- Every branch is bounded by Pascal + convexity of `C(·,2)`; the
+    -- uniform average of the bounds closes the case.
+    refine uniform_avg_le_of_forall fun i => ?_
+    unfold qsStepCost
+    have hrest := length_eraseIdx_cons head tail i
+    have hsplit : (pivotLT (head :: tail) i).length +
+        (pivotGE (head :: tail) i).length =
+        tail.length := by
+      rw [length_filter_lt_ge]
+      exact hrest
+    have hchoose : ((pivotLT (head :: tail) i).length).choose 2 +
+        ((pivotGE (head :: tail) i).length).choose 2 ≤
+        tail.length.choose 2 := by
+      rw [← hsplit]
+      exact choose_two_add_le _ _
     -- Pascal: `C(n,2) = tail.length + C(tail.length, 2)`.
-    have hpascal : (head :: tail).length.choose 2 =
-        tail.length + tail.length.choose 2 := by
-      simp only [List.length_cons]
-      exact choose_two_succ tail.length
-    -- Average the `n` equal bounds.
-    refine uniform_avg_le
-      (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)
-    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
-      hpascal]
-    push_cast
-    exact le_rfl
+    rw [show ((head :: tail).length.choose 2 : ENNReal) =
+        (tail.length : ENNReal) + (tail.length.choose 2 : ENNReal) from by
+      simp only [List.length_cons, choose_two_succ]; push_cast; ring]
+    rw [add_assoc,
+      show ((((head :: tail).eraseIdx i).length : ENNReal)) = (tail.length : ENNReal)
+        from by rw [hrest]]
+    refine add_le_add le_rfl (le_trans (add_le_add (ih1 i) (ih2 i)) ?_)
+    rw [← Nat.cast_add]
+    exact Nat.cast_le.mpr hchoose
 
 /-- For an arbitrary list (possibly with duplicates), the expected cost of
 `Quicksort` is at most `C(n,2)` comparisons. Real-valued corollary of
@@ -366,6 +338,18 @@ theorem quicksort_cost_le_real
   have := ENNReal.toReal_mono (ENNReal.natCast_ne_top _)
     (quicksort_cost_le (M := M) L)
   simpa using this
+
+/-- **Runtime tail bound, for free**: a Quicksort run exceeds `k`
+comparisons with probability at most `C(n,2)/(k+1)` — Markov's
+inequality (`runtime_markov_gt`) applied to the `C(n,2)` bound. Any
+expected-cost theorem upgrades this way. -/
+theorem quicksort_runtime_tail
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    (L : List α) (k : ℕ) :
+    ℙ_runtime[Quicksort L > k | M] ≤
+      (L.length.choose 2 : ENNReal) / (k + 1) :=
+  le_trans (runtime_markov_gt _ k)
+    (ENNReal.div_le_div_right (quicksort_cost_le L) _)
 
 /-- Finiteness of the expected cost — a free corollary of the `C(n,2)`
 bound, no separate induction needed. Feeds the `toReal` steps of the
@@ -436,41 +420,29 @@ theorem quicksort_cost_exact
     -- Each summand is finite (from the `C(n,2)` bound), so `toReal`
     -- distributes through the average.
     have hne : ∀ i : Fin (head :: tail).length,
-        ((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
-          𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]) ≠ ⊤ := fun i =>
-      ENNReal.add_ne_top.mpr
-        ⟨ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top _,
-          expected_cost_quicksort_ne_top _⟩,
-        expected_cost_quicksort_ne_top _⟩
+        qsStepCost M (head :: tail) i ≠ ⊤ := fun i =>
+      natCast_add_add_ne_top _ (expected_cost_quicksort_ne_top _)
+        (expected_cost_quicksort_ne_top _)
     rw [toReal_uniform_avg hne]
     -- Rewrite each summand with the IH (in `ℝ`).
     have hterm : ∀ i : Fin (head :: tail).length,
-        (((((head :: tail).eraseIdx i).length : ENNReal) +
-          𝔼_runtime[Quicksort (pivotLT (head :: tail) i) | M] +
-          𝔼_runtime[Quicksort (pivotGE (head :: tail) i) | M]).toReal) =
+        (qsStepCost M (head :: tail) i).toReal =
         (tail.length : ℝ) +
           ((expected_qs_cost
             ((pivotLT (head :: tail) i).length) : ℚ) : ℝ) +
           ((expected_qs_cost
             ((pivotGE (head :: tail) i).length) : ℚ) : ℝ) := by
       intro i
-      rw [ENNReal.toReal_add
-          (ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top _,
-            expected_cost_quicksort_ne_top _⟩)
+      unfold qsStepCost
+      rw [toReal_natCast_add_add _ (expected_cost_quicksort_ne_top _)
           (expected_cost_quicksort_ne_top _),
-        ENNReal.toReal_add (ENNReal.natCast_ne_top _)
-          (expected_cost_quicksort_ne_top _),
-        ENNReal.toReal_natCast, length_eraseIdx_cons head tail i,
+        length_eraseIdx_cons head tail i,
         ih1 i ((hnd.eraseIdx _).filter _), ih2 i ((hnd.eraseIdx _).filter _)]
     rw [Finset.sum_congr rfl fun i _ => hterm i]
     -- Reindex by rank (`|L1_i| = rank i` for nodup lists).
     rw [nodup_partition_sum₂ (head :: tail) hnd
       (fun a b => (tail.length : ℝ) + ((expected_qs_cost a : ℚ) : ℝ) +
         ((expected_qs_cost b : ℚ) : ℝ))]
-    rw [Fin.sum_univ_eq_sum_range
-      (fun r => (tail.length : ℝ) + ((expected_qs_cost r : ℚ) : ℝ) +
-        ((expected_qs_cost ((head :: tail).length - 1 - r) : ℚ) : ℝ))]
     simp only [List.length_cons]
     -- Split the sum; the reflected second cost sum equals the first.
     rw [Finset.sum_add_distrib, Finset.sum_add_distrib, Finset.sum_const,

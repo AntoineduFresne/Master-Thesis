@@ -10,7 +10,8 @@ import ARA.Infrastructure.SimpAttr
 
   Organized in layers:
   - A: grind/simp tags to bridge PMF into arithmetic
-  - B: pmf_simp macro and pmf_norm for computing probabilities
+  - B: the `pmf_simp_attr` simp set for computing concrete
+    probabilities (consumed by `runtime_simp` in `ExpectedCost`)
   - C: reusable derived lemmas
 
   ## Custom simp attribute
@@ -99,20 +100,7 @@ attribute [grind =] PMF.bind_map
 attribute [grind =] PMF.map_bind
 attribute [grind =] PMF.bind_pure_comp
 
-/-! ##### A.4  Do-notation Desugaring
-
-  do-notation desugars `←` to `Bind.bind`, `return` to `Pure.pure`, and
-  sometimes `←` to `Functor.map`.  These typeclass methods are
-  definitionally equal to their concrete counterparts (e.g. `PMF.bind`),
-  but `grind`/`simp` pattern-match syntactically and won't see through
-  the typeclass layer.
-
-  `unfold_do` resolves them via `dsimp` (definitional unfolding).
-  Globally tagging them at `@[simp]` would be too aggressive.
--/
-macro "unfold_do" : tactic => `(tactic| dsimp only [Bind.bind, Pure.pure, Functor.map])
-
-/-! ##### A.5  Support & bindOnSupport -/
+/-! ##### A.4  Support & bindOnSupport -/
 
 attribute [grind =] PMF.support_uniformOfFintype
 attribute [grind =] PMF.support_uniformOfFinset
@@ -124,16 +112,17 @@ attribute [grind =] PMF.pure_bindOnSupport
 attribute [grind =] PMF.bindOnSupport_apply
 
 /-! ================================================================
-    LAYER B: pmf_simp — concrete probability computation
+    LAYER B: pmf_simp_attr — concrete probability computation
     ================================================================
 
-  Use pmf_simp to compute things like P(X = 3) = 1/12.
-  It collapses tsum to finite sums, applies distribution weights,
-  and cleans up arithmetic.
-
-  The core simp set is the registered `pmf_simp_attr` attribute
-  (declared in `ARA.Infrastructure.SimpAttr`). Downstream files can extend it by
+  The simp set for computing things like P(X = 3) = 1/12: it collapses
+  tsum to finite sums, applies distribution weights, and cleans up
+  arithmetic. Its consumer is `runtime_simp` (in `ExpectedCost`, the
+  combined cost normalizer); downstream files can extend the set by
   tagging their lemmas with `@[pmf_simp_attr]`.
+
+  The attribute itself is declared in `ARA.Infrastructure.SimpAttr`
+  (Lean requires the declaration in a separate file).
 -/
 
 -- Tag key lemmas with the custom attribute
@@ -160,19 +149,6 @@ attribute [pmf_simp_attr] ENNReal.inv_two_add_inv_two
 attribute [pmf_simp_attr] if_true if_false ite_self dite_true dite_false
 attribute [pmf_simp_attr] eq_self_iff_true ne_eq
 attribute [pmf_simp_attr] Finset.mem_univ Finset.mem_singleton Finset.mem_insert
-
-/-- `pmf_simp` normalizes PMF expressions by applying the `pmf_simp_attr`
-simp set, then cleaning up with `norm_num`. -/
-macro "pmf_simp" : tactic =>
-  `(tactic| (simp only [pmf_simp_attr]; try norm_num))
-
-/-- `pmf_norm` extends `pmf_simp` with `omega` for index bounds and
-`ring_nf` for residual arithmetic. -/
-macro "pmf_norm" : tactic =>
-  `(tactic| first
-    | pmf_simp
-    | (simp only [pmf_simp_attr]; omega)
-    | (simp only [pmf_simp_attr]; ring_nf; norm_num))
 
 /-! ================================================================
     LAYER C: Reusable Derived Lemmas

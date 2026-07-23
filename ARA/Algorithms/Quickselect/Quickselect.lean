@@ -166,7 +166,7 @@ private lemma orderStat_lt_branch (L : List α) (i : ℕ) (hi : i < L.length)
     {k : ℕ} (hk : k < ((L.eraseIdx i).filter (· < L[i])).length) :
     orderStat ((L.eraseIdx i).filter (· < L[i])) k = orderStat L k := by
   symm
-  have h := mergeSort_partition L ⟨i, hi⟩
+  have h := (mergeSort_partition L ⟨i, hi⟩).symm
   simp only [Fin.getElem_fin] at h
   unfold orderStat
   -- Index `k` lands inside the first block of the split sorted list.
@@ -179,7 +179,7 @@ syntactically. -/
 @[spec_transport]
 private lemma orderStat_eq_branch (L : List α) (i : ℕ) (hi : i < L.length) :
     orderStat L ((L.eraseIdx i).filter (· < L[i])).length = L[i] := by
-  have h := mergeSort_partition L ⟨i, hi⟩
+  have h := (mergeSort_partition L ⟨i, hi⟩).symm
   simp only [Fin.getElem_fin] at h
   unfold orderStat
   -- Index `k` lands exactly on the singleton `[pivot]` block.
@@ -199,7 +199,7 @@ private lemma orderStat_gt_branch (L : List α) (i : ℕ) (hi : i < L.length)
       orderStat L k := by
   have hk : ((L.eraseIdx i).filter (· < L[i])).length < k := by omega
   symm
-  have h := mergeSort_partition L ⟨i, hi⟩
+  have h := (mergeSort_partition L ⟨i, hi⟩).symm
   simp only [Fin.getElem_fin] at h
   unfold orderStat
   -- Index `k` lands in the last block; subtract the first block's length…
@@ -270,22 +270,33 @@ bookkeeping is needed; the exact formula descends to `ℝ` via `toReal`,
 with finiteness supplied by the `C(n,2)` bound.
 -/
 
+/-- The recursive part of the per-pivot step cost — the cost of the
+branch actually taken, **named once** so no proof ever restates the
+if-tree. -/
+private noncomputable def qselRecCost (M : Type → Type) [Monad M]
+    [LawfulMonad M] [LawfulRandMonad M]
+    (L : List α) (k : ℕ) (i : Fin L.length) : ENNReal :=
+  if k < (pivotLT L i).length then
+    𝔼_runtime[Quickselect (pivotLT L i) k | M]
+  else if k = (pivotLT L i).length then 0
+  else
+    𝔼_runtime[Quickselect (pivotGE L i) (k - (pivotLT L i).length - 1) | M]
+
+/-- The per-pivot step cost: the partition work plus `qselRecCost`. -/
+private noncomputable def qselStepCost (M : Type → Type) [Monad M]
+    [LawfulMonad M] [LawfulRandMonad M]
+    (L : List α) (k : ℕ) (i : Fin L.length) : ENNReal :=
+  ((L.eraseIdx i).length : ENNReal) + qselRecCost M L k i
+
 /-- The expected cost of `qsel_branch` in `TimeMT` is the tick cost
 plus the expected cost of the branch actually taken. -/
 private lemma expected_cost_qsel_branch
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (k : ℕ) (i : Fin L.length) :
-    𝔼_runtime[qsel_branch (TimeMT ℕ M) L k i] =
-    ((L.eraseIdx i).length : ENNReal) +
-      (if k < ((L.eraseIdx i).filter (· < L[i])).length then
-        𝔼_runtime[Quickselect ((L.eraseIdx i).filter (· < L[i])) k | M]
-      else if k = ((L.eraseIdx i).filter (· < L[i])).length then 0
-      else
-        𝔼_runtime[Quickselect ((L.eraseIdx i).filter (· ≥ L[i]))
-          (k - ((L.eraseIdx i).filter (· < L[i])).length - 1) | M]) := by
+    𝔼_runtime[qsel_branch (TimeMT ℕ M) L k i] = qselStepCost M L k i := by
   -- Peel the tick with the bridge lemmas, then the `pure` branch is free.
-  unfold qsel_branch
+  unfold qsel_branch qselStepCost qselRecCost
   cost_step
   congr 1
   split_ifs
@@ -301,14 +312,7 @@ lemma expected_cost_quickselect_step
     (head : α) (tail : List α) (k : ℕ) :
     𝔼_runtime[Quickselect (head :: tail) k | M] =
     ((head :: tail).length : ENNReal)⁻¹ *
-      ∑ i : Fin (head :: tail).length,
-        ((((head :: tail).eraseIdx i).length : ENNReal) +
-          (if k < (pivotLT (head :: tail) i).length then
-            𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
-          else if k = (pivotLT (head :: tail) i).length then 0
-          else
-            𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
-              (k - (pivotLT (head :: tail) i).length - 1) | M])) := by
+      ∑ i : Fin (head :: tail).length, qselStepCost M (head :: tail) k i := by
   rw [quickselect_eq_bind head tail k]
   exact expected_cost_uniform_step' (by simp)
     fun i => expected_cost_qsel_branch (head :: tail) k i
@@ -344,34 +348,18 @@ theorem quickselect_cost_le_quadratic
   | case2 head tail k ih1 ih2 =>
     rw [expected_cost_quickselect_step head tail k]
     -- Whichever branch is taken recurses on at most `tail.length`
-    -- elements, so `C(·,2)`-monotonicity bounds it by `C(tail.length, 2)`.
-    have hbound : ∀ i : Fin (head :: tail).length,
-        ((((head :: tail).eraseIdx i).length : ENNReal) +
-          (if k < (pivotLT (head :: tail) i).length then
-            𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
-          else if k = (pivotLT (head :: tail) i).length then 0
-          else
-            𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
-              (k - (pivotLT (head :: tail) i).length - 1) | M])) ≤
-        ((tail.length : ENNReal) + (tail.length.choose 2 : ENNReal)) := by
-      intro i
-      refine add_le_add (le_of_eq (by rw [length_eraseIdx_cons])) ?_
-      split_ifs with h1 h2
-      · exact le_trans (ih1 i) (Nat.cast_le.mpr (Nat.choose_le_choose 2 (by grind)))
-      · exact bot_le
-      · exact le_trans (ih2 i) (Nat.cast_le.mpr (Nat.choose_le_choose 2 (by grind)))
-    -- Pascal: `C(n,2) = tail.length + C(tail.length, 2)`.
-    have hpascal : (head :: tail).length.choose 2 =
-        tail.length + tail.length.choose 2 := by
-      simp only [List.length_cons]
-      exact choose_two_succ tail.length
-    -- Average the `n` equal bounds.
-    refine uniform_avg_le
-      (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)
-    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
-      hpascal]
-    push_cast
-    exact le_rfl
+    -- elements; Pascal + `C(·,2)`-monotonicity bound each branch, and
+    -- the uniform average of the bounds closes the case.
+    refine uniform_avg_le_of_forall fun i => ?_
+    unfold qselStepCost qselRecCost
+    rw [show ((head :: tail).length.choose 2 : ENNReal) =
+        (tail.length : ENNReal) + (tail.length.choose 2 : ENNReal) from by
+      simp only [List.length_cons, choose_two_succ]; push_cast; ring]
+    refine add_le_add (le_of_eq (by rw [length_eraseIdx_cons])) ?_
+    split_ifs with h1 h2
+    · exact le_trans (ih1 i) (Nat.cast_le.mpr (Nat.choose_le_choose 2 (by grind)))
+    · exact bot_le
+    · exact le_trans (ih2 i) (Nat.cast_le.mpr (Nat.choose_le_choose 2 (by grind)))
 
 /-- For an arbitrary list (possibly with duplicates) and any rank, the
 expected cost of `Quickselect` is at most `C(n,2)` comparisons.
@@ -419,19 +407,14 @@ theorem quickselect_cost_le_linear
     -- Bound each branch by `tail.length + 4·max(|lt|, |ge|)` using the IH:
     -- whichever side is recursed into has at most `max` elements.
     have hbound : ∀ i : Fin (head :: tail).length,
-        ((((head :: tail).eraseIdx i).length : ENNReal) +
-          (if k < (pivotLT (head :: tail) i).length then
-            𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
-          else if k = (pivotLT (head :: tail) i).length then 0
-          else
-            𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
-              (k - (pivotLT (head :: tail) i).length - 1) | M])) ≤
+        qselStepCost M (head :: tail) k i ≤
         ((tail.length : ENNReal) +
           4 * ((max
             ((pivotLT (head :: tail) i).length)
             ((pivotGE (head :: tail) i).length) : ℕ) :
             ENNReal)) := by
       intro i
+      unfold qselStepCost qselRecCost
       refine add_le_add (le_of_eq (by rw [length_eraseIdx_cons])) ?_
       have hnd' : (((head :: tail).eraseIdx i)).Nodup := hnd.eraseIdx _
       split_ifs with h1 h2
@@ -450,9 +433,9 @@ theorem quickselect_cost_le_linear
             ((pivotLT (head :: tail) i).length)
             ((pivotGE (head :: tail) i).length) : ℕ) :
             ENNReal))) =
-        ∑ r : Fin (head :: tail).length,
+        ∑ r ∈ Finset.range (head :: tail).length,
           ((tail.length : ENNReal) +
-            4 * ((max r.val ((head :: tail).length - 1 - r.val) : ℕ) : ENNReal)) :=
+            4 * ((max r ((head :: tail).length - 1 - r) : ℕ) : ENNReal)) :=
       nodup_partition_sum₂ (head :: tail) hnd
         (fun a b => (tail.length : ENNReal) + 4 * ((max a b : ℕ) : ENNReal))
     -- ℕ-level bound for the reindexed sum, in `n * (4n)` shape
@@ -474,9 +457,7 @@ theorem quickselect_cost_le_linear
     -- Average the `n` bounds: `n⁻¹ * (n * 4n) ≤ 4n`.
     refine uniform_avg_le
       (le_trans (Finset.sum_le_sum fun i _ => hbound i) ?_)
-    rw [hsum, Fin.sum_univ_eq_sum_range
-      (fun r => (tail.length : ENNReal) +
-        4 * ((max r ((head :: tail).length - 1 - r) : ℕ) : ENNReal))]
+    rw [hsum]
     simp only [List.length_cons, Nat.add_sub_cancel]
     refine le_trans (le_of_eq ?_) (le_trans (Nat.cast_le.mpr hkey) (le_of_eq ?_))
     · push_cast
@@ -671,30 +652,23 @@ theorem quickselect_cost_exact
     -- Every branch is finite (from the `C(n,2)` bound), so `toReal`
     -- distributes through the average.
     have hite : ∀ i : Fin (head :: tail).length,
-        (if k < (pivotLT (head :: tail) i).length then
-          𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
-        else if k = (pivotLT (head :: tail) i).length then 0
-        else
-          𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
-            (k - (pivotLT (head :: tail) i).length - 1) | M]) ≠ ⊤ := by
+        qselRecCost M (head :: tail) k i ≠ ⊤ := by
       intro i
+      unfold qselRecCost
       split_ifs
       · exact expected_cost_quickselect_ne_top _ _
       · exact ENNReal.zero_ne_top
       · exact expected_cost_quickselect_ne_top _ _
-    rw [toReal_uniform_avg (fun i =>
-      ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top _, hite i⟩)]
+    have hne : ∀ i : Fin (head :: tail).length,
+        qselStepCost M (head :: tail) k i ≠ ⊤ := fun i => by
+      unfold qselStepCost
+      exact ENNReal.add_ne_top.mpr ⟨ENNReal.natCast_ne_top _, hite i⟩
+    rw [toReal_uniform_avg hne]
     have hknat : k < tail.length + 1 := by simpa using hk
     -- Rewrite each summand with the IH (in `ℝ`); the `≥`-branch rank
     -- stays in range because the two filters partition `rest`.
     have hterm : ∀ i : Fin (head :: tail).length,
-        (((((head :: tail).eraseIdx i).length : ENNReal) +
-          (if k < (pivotLT (head :: tail) i).length then
-            𝔼_runtime[Quickselect (pivotLT (head :: tail) i) k | M]
-          else if k = (pivotLT (head :: tail) i).length then 0
-          else
-            𝔼_runtime[Quickselect (pivotGE (head :: tail) i)
-              (k - (pivotLT (head :: tail) i).length - 1) | M])).toReal) =
+        (qselStepCost M (head :: tail) k i).toReal =
         (tail.length : ℝ) +
           ((if k < (pivotLT (head :: tail) i).length then
             expected_qsel_cost
@@ -711,8 +685,10 @@ theorem quickselect_cost_exact
           tail.length := by
         rw [length_filter_lt_ge ((head :: tail).eraseIdx i) (head :: tail)[i]]
         exact length_eraseIdx_cons head tail i
+      unfold qselStepCost
       rw [ENNReal.toReal_add (ENNReal.natCast_ne_top _) (hite i),
         ENNReal.toReal_natCast, length_eraseIdx_cons head tail i]
+      unfold qselRecCost
       congr 1
       split_ifs with h1 h2
       · exact ih1 i ((hnd.eraseIdx _).filter _) h1
@@ -726,11 +702,6 @@ theorem quickselect_cost_exact
         ((if k < a then expected_qsel_cost a k
           else if k = a then 0
           else expected_qsel_cost b (k - a - 1) : ℚ) : ℝ))]
-    rw [Fin.sum_univ_eq_sum_range
-      (fun r => (tail.length : ℝ) +
-        ((if k < r then expected_qsel_cost r k
-          else if k = r then 0
-          else expected_qsel_cost ((head :: tail).length - 1 - r) (k - r - 1) : ℚ) : ℝ))]
     -- Separate the constant part and apply the recurrence identity.
     rw [Finset.sum_add_distrib, Finset.sum_const, Finset.card_range, nsmul_eq_mul,
       show (∑ r ∈ Finset.range (head :: tail).length,

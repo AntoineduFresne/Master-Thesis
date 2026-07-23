@@ -4,8 +4,8 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.Randomness.RandVec
+import ARA.Infrastructure.Complexity.SamplerCosts
 import ARA.Infrastructure.Correctness.Correctness
-import ARA.Infrastructure.Complexity.TailBounds
 import Mathlib.Algebra.MvPolynomial.SchwartzZippel
 
 /-!
@@ -121,7 +121,6 @@ theorem schwartzZippel_cost_exact
     𝔼_runtime[schwartzZippel P S hS | M] = 1 := by
   rw [schwartzZippel]
   cost_step
-  rw [expected_cost_randVecOn, add_zero]
 
 /-- **Deterministic cost.** The cost law is a point mass: *every* run
 costs exactly one evaluation, not merely one on average. -/

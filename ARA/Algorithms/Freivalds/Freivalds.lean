@@ -4,8 +4,9 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.Randomness.RandVec
+import ARA.Infrastructure.Complexity.SamplerCosts
+import ARA.Helpers.Counting
 import ARA.Infrastructure.Correctness.Correctness
-import ARA.Infrastructure.Complexity.TailBounds
 import Mathlib.Data.Matrix.Mul
 
 /-!
@@ -31,7 +32,7 @@ specification, and as timed algorithm.
   bounded-error tier (amplify by repetition). Proved over any
   `CommRing` by the pairing argument: flipping the `j`-th bit of a
   witness column pairs each accepting vector with a rejecting one.
-* `freivalds_cost_exact` — `3n²` ring multiplications
+* `freivalds_cost_exact` / `freivalds_costPMF` — `3n²` ring multiplications
   (three matrix-vector products), against `n³` for naive
   recomputation. Honesty note: the cost model charges the three
   matrix-vector products as one wholesale tick, so this theorem reads
@@ -176,45 +177,33 @@ theorem freivalds_sound
     push Not at hall
     exact h (by ext i j; simpa [sub_eq_zero] using hall i j)
   obtain ⟨i, j, hD⟩ := hD
-  rw [freivalds, toPMF_tick_bind, toPMF_randVec_true]
-  -- The bit-flip at `j` is an involution pairing accept with reject.
-  set F : (Fin n → Fin 2) → ENNReal :=
-    fun v => if freivaldsCheck A B C (bitVec v) then 1 else 0 with hF
-  set flip : (Fin n → Fin 2) → (Fin n → Fin 2) :=
-    fun v => Function.update v j (v j + 1) with hflipdef
-  have hinv : Function.Involutive flip := by
+  rw [freivalds, toPMF_tick_bind, toPMF_randVec_true_card]
+  -- The bit-flip at `j` is an involution pairing accept with reject
+  -- (`two_mul_card_filter_le_of_involutive`, from `ARA.Helpers.Counting`),
+  -- so at most half of the `2^n` bit vectors accept.
+  have hinv : Function.Involutive
+      (fun v : Fin n → Fin 2 => Function.update v j (v j + 1)) := by
     intro v
     funext k
     rcases eq_or_ne k j with rfl | hk
-    · simp only [hflipdef, Function.update_self]
+    · simp only [Function.update_self]
       exact (by decide : ∀ b : Fin 2, b + 1 + 1 = b) (v k)
-    · simp [hflipdef, Function.update_of_ne hk]
-  have hpair : ∀ v, F v + F (flip v) ≤ 1 := by
-    intro v
-    by_cases h1 : freivaldsCheck A B C (bitVec v) = true
-    · by_cases h2 : freivaldsCheck A B C (bitVec (flip v)) = true
-      · exact absurd ⟨h1, h2⟩ (not_check_both A B C hD v)
-      · simp [hF, h1, h2]
-    · rcases h2 : freivaldsCheck A B C (bitVec (flip v)) <;> simp [hF, h1, h2]
-  -- Sum the pairing bound: `2 · Σ F ≤ 2^n`.
-  have hre : (∑ v, F (flip v)) = ∑ v, F v := by
-    have := Equiv.sum_comp hinv.toPerm F
-    simpa [Function.Involutive.coe_toPerm] using this
-  have hsum : (∑ v, F v) + (∑ v, F v) ≤ 2 ^ n := by
-    calc (∑ v, F v) + (∑ v, F v)
-        = ∑ v, (F v + F (flip v)) := by
-          rw [Finset.sum_add_distrib, hre]
-      _ ≤ ∑ _v : Fin n → Fin 2, 1 := Finset.sum_le_sum fun v _ => hpair v
-      _ = 2 ^ n := by
-          simp [Finset.card_univ]
-  -- Conclude `Σ F / 2^n ≤ 1/2`.
+    · simp [Function.update_of_ne hk]
+  have hcard : 2 * (Finset.univ.filter fun v : Fin n → Fin 2 =>
+      freivaldsCheck A B C (bitVec v)).card ≤ 2 ^ n :=
+    le_trans
+      (two_mul_card_filter_le_of_involutive _ _ hinv
+        fun v hv hv' => not_check_both A B C hD v ⟨hv, hv'⟩)
+      (le_of_eq (by simp))
+  -- Conclude `#accepting / 2^n ≤ 1/2`.
   rw [one_div, ENNReal.div_le_iff (by positivity)
     (ENNReal.pow_ne_top ENNReal.ofNat_ne_top)]
-  have h2s : 2 * (∑ v, F v) ≤ 2 ^ n := by rw [two_mul]; exact hsum
-  calc (∑ v, F v)
-      = 2⁻¹ * (2 * ∑ v, F v) := by
-        rw [← mul_assoc, ENNReal.inv_mul_cancel (by norm_num) (by norm_num), one_mul]
-    _ ≤ 2⁻¹ * 2 ^ n := mul_le_mul' le_rfl h2s
+  calc ((Finset.univ.filter fun v : Fin n → Fin 2 =>
+        freivaldsCheck A B C (bitVec v)).card : ENNReal)
+      = 2⁻¹ * (2 * _) := by
+        rw [← mul_assoc, ENNReal.inv_mul_cancel (by norm_num) (by norm_num),
+          one_mul]
+    _ ≤ 2⁻¹ * 2 ^ n := mul_le_mul' le_rfl (by exact_mod_cast hcard)
 
 -- ----------------------------------------
 -- Generic Complexity Proof
@@ -238,8 +227,17 @@ theorem freivalds_cost_exact
     𝔼_runtime[freivalds A B C | M] = ((3 * n * n : ℕ) : ENNReal) := by
   rw [freivalds]
   cost_step
-  rw [expected_cost_randVec]
-  simp
+
+/-- **Deterministic cost.** The cost law is a point mass: *every* run
+costs exactly `3n²`, not merely on average. -/
+theorem freivalds_costPMF
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] [DecidableEq R]
+    (A B C : Matrix (Fin n) (Fin n) R) :
+    costPMF (freivalds A B C : TimeMT ℕ M Bool) = PMF.pure (3 * n * n) := by
+  rw [freivalds, MonadCost.tick_timeMT, costPMF_tick_bind,
+    costPMF_eq_pure_zero
+      (by rw [expected_cost_toPMF_bind_pure]; exact expected_cost_randVec n),
+    PMF.pure_map, Nat.add_zero]
 
 /-!
 ## Named corollaries at `M = PMF`

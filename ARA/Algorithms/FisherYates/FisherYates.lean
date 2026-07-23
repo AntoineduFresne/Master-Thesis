@@ -5,7 +5,6 @@ Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Correctness
-import ARA.Infrastructure.Complexity.TailBounds
 import ARA.Helpers.Partition
 import Mathlib.Data.List.Permutation
 
@@ -204,14 +203,10 @@ lemma expected_cost_shuffle
   induction L using shuffle.induct with
   | case1 => rw [shuffle.eq_1, expected_cost_toPMF_pure]
   | case2 x xs ih =>
-    rw [shuffle.eq_2, expected_cost_uniform_step]
-    have hbranch : ∀ i : Fin (x :: xs).length,
-        𝔼_runtime[(shuffle ((x :: xs).eraseIdx i) : TimeMT ℕ M (List α)) >>=
-          fun rest => pure ((x :: xs)[i] :: rest)] = 0 := by
-      intro i
-      rw [expected_cost_toPMF_bind_pure]
-      exact ih i
-    rw [Finset.sum_congr rfl fun i _ => hbranch i, Finset.sum_const_zero, mul_zero]
+    rw [shuffle.eq_2]
+    exact (expected_cost_uniform_step' (by simp) fun i =>
+      (expected_cost_toPMF_bind_pure _ _).trans (ih i)).trans
+      (by rw [Finset.sum_const_zero, mul_zero])
 
 /-- The shuffle's *cost law* is the point mass at `0`: it is free on
 every run, not merely in expectation. -/

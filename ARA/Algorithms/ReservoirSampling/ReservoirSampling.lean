@@ -5,7 +5,6 @@ Authors: Antoine du Fresne von Hohenesche
 -/
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Correctness
-import ARA.Infrastructure.Complexity.TailBounds
 
 /-!
 # Reservoir sampling (Algorithm R, k = 1)
@@ -30,8 +29,9 @@ as specification (`M = PMF`), and as timed algorithm
   headline claim of the `PMF` shallow embedding.
 * `reservoir_none_eq_zero` — the sampler never returns `none` on a nonempty
   list.
-* `reservoir_cost_exact` — one coin per stream element after
-  the first: exactly `n − 1` ticks — a single pass.
+* `reservoir_cost_exact` / `reservoir_costPMF` — one coin per stream
+  element after the first: exactly `n − 1` ticks, on every run — a
+  single pass.
 -/
 
 namespace ARA
@@ -214,7 +214,7 @@ private lemma expected_cost_reservoirAux
       intro i
       cost_step
       rw [ih]
-    rw [Finset.sum_congr rfl fun i _ => hbranch i, uniform_avg_const _]
+    rw [uniform_avg_eq_of_forall hbranch]
     simp only [List.length_cons]
     push_cast
     ring
@@ -243,5 +243,44 @@ theorem reservoir_correct_pmf [DecidableEq α] (L : List α) (a : α) :
     (reservoir L : PMF (Option α)) (some a) =
       (L.count a : ENNReal) / (L.length : ENNReal) :=
   reservoir_correct (M := PMF) L a
+
+/-- The streaming loop's cost *law* is the point mass at the number of
+elements processed: one tick per element, on **every** run. -/
+private lemma costPMF_reservoirAux
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
+    ∀ (xs : List α) (seen : ℕ) (cur : α),
+      costPMF (reservoirAux seen cur xs : TimeMT ℕ M α) =
+        PMF.pure xs.length := by
+  intro xs
+  induction xs with
+  | nil =>
+    intro seen cur
+    rw [reservoirAux.eq_1]
+    exact costPMF_eq_pure_zero (by cost_step)
+  | cons x xs ih =>
+    intro seen cur
+    rw [reservoirAux.eq_2, randFin_timeMT]
+    exact costPMF_lift_bind_const _ _ fun i => by
+      rw [MonadCost.tick_timeMT, costPMF_tick_bind,
+        ih (seen + 1) (if i.val = 0 then x else cur), PMF.pure_map]
+      simp [Nat.add_comm]
+
+/-- **Deterministic cost.** The cost law of reservoir sampling is the
+point mass at `n − 1`: a run makes exactly `n − 1` coin flips, not
+merely `n − 1` on average. -/
+theorem reservoir_costPMF
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    (L : List α) :
+    costPMF (reservoir L : TimeMT ℕ M (Option α)) =
+      PMF.pure (L.length - 1) := by
+  cases L with
+  | nil =>
+    rw [reservoir.eq_1]
+    exact costPMF_eq_pure_zero (by cost_step)
+  | cons x xs =>
+    rw [reservoir.eq_2, map_eq_bind_pure_comp]
+    simp only [Function.comp_def]
+    rw [costPMF_bind_pure, costPMF_reservoirAux]
+    simp
 
 end ARA

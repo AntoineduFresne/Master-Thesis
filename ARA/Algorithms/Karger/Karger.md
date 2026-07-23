@@ -32,17 +32,25 @@ points, both forced by executability: multiplicity is carried by
 repetition in a `List` rather than by GraphLib's `Edge.edgeLabel` over
 a noncomputable `Set` (our `List (Sym2 α)` is their
 `Set (Edge α (Fin m))` with the list position as the label), and
-contraction merges one endpoint into the other rather than
-quotienting the vertex type by a `Setoid`, so that the vertex type is
-preserved across the $n-2$ rounds.
+contraction works on **supervertices** — the working graph's vertices
+are the sets of original vertices merged so far, and contracting an
+edge unites its two endpoints — rather than quotienting the vertex
+type by a `Setoid`. The union of sets is symmetric, so contraction is
+a genuine function of the *unordered* edge (no orientation, no
+tie-break), and the vertex type is preserved across the $n-2$ rounds.
 
 ## 2. The algorithm
 
-**Contraction.** For an edge $e = \{u, v\} \in E$, the contracted
-multigraph $G / e$ has vertex set $V \setminus \{v\}$; every edge
-endpoint equal to $v$ is redirected to $u$, and the resulting loops
-(the parallel copies of $\{u,v\}$ itself) are deleted. Parallel edges
-are **kept**. Thus $|V(G/e)| = n - 1$ and $|E(G/e)| \le m$.
+**Contraction.** The working graph's vertices are **supervertices**:
+pairwise-disjoint nonempty sets of original vertices, initially the
+singletons $\{v\}$, $v \in V$. For an edge $e = \{S, T\}$ of the
+working graph, the contracted multigraph $G / e$ replaces the two
+supervertices $S$ and $T$ by their union $S \cup T$; every edge
+endpoint equal to $S$ or $T$ is redirected to $S \cup T$, and the
+resulting loops (the parallel copies of $\{S,T\}$ itself) are
+deleted. Parallel edges are **kept**. Merging is symmetric in $S$ and
+$T$, and by disjointness the union is a *new* supervertex, so
+$|V(G/e)| = |V(G)| - 1$ and $|E(G/e)| \le |E(G)|$.
 
 **Randomness model.** Each round draws an edge uniformly from the
 current edge multiset, independently across rounds; drawing uniformly
@@ -54,17 +62,17 @@ proportional to its multiplicity.
 1. Repeat $n - 2$ times (stopping early if no edge remains): draw an
    edge $e$ uniformly from the current edge multiset and replace the
    current graph by its contraction along $e$.
-2. Return the **cut** induced by the surviving supervertices together
-   with its value: the pair $(S, c)$ where $S \subseteq V$ is the set
-   of original vertices merged into one of the two remaining
-   supervertices, and $c$ is the number of remaining edges.
+2. Return the **partition** $\{S, \bar S\}$ formed by the surviving
+   supervertices, together with its value: each remaining supervertex
+   is the set of original vertices merged into it — one side of the
+   cut — and $c$ is the number of remaining edges.
 
-Each supervertex is a set of original vertices, and when two remain
-the surviving edges are exactly the original edges crossing that
-two-set partition — so the reported $c$ *is* $w(S)$ (Lemma 1' below),
-computed for free rather than recounted. The analysis inducts on $c$
-and the bridge promotes every statement about it to a statement about
-the cut $S$ itself.
+When two supervertices remain the surviving edges are exactly the
+original edges crossing that two-set partition — so the reported $c$
+*is* $w(S)$ for each side $S$ (Lemma 1' below), computed for free
+rather than recounted. The analysis inducts on the minimum-cut value
+of the working graph and the bridge promotes every statement about it
+to a statement about the returned sides themselves.
 
 **Cost model.** Each contraction round costs the number of edges of
 the current graph (the pass that redirects and filters the edge
@@ -83,22 +91,24 @@ loops (copies of $\{u,v\}$) never cross: $w_G(S) = w_{G/e}(S')$. Both
 sides of $S$ are nonempty because both sides of $S'$ are.
 $\blacksquare$
 
-**Theorem 1 (the output is a cut).** On every run the output $(S,c)$
-satisfies: $S$ is a genuine cut of $G$ ($\emptyset \ne S \subsetneq V$),
-$c = w(S)$, and $c \ge \lambda(G)$ — the algorithm never undershoots.
+**Theorem 1 (the output is a cut).** On every run the output
+$(\{S, \bar S\}, c)$ satisfies: each side is a genuine cut of $G$
+($\emptyset \ne S \subsetneq V$), $c = w(S)$ for each side, and
+$c \ge \lambda(G)$ — the algorithm never undershoots.
 
-**Lemma 1' (the bridge).** Let $\rho : V \to V$ send each original
-vertex to the supervertex holding it at the end of a run. Then every
-cut $S'$ of the final graph pulls back along $\rho$ to a cut of $G$
-of the *same value*, and consequently
+**Lemma 1' (the bridge).** Throughout a run the supervertices form a
+partition of $V$ into nonempty parts, and every cut $\mathcal{S}$ of
+the working graph flattens (take the union of its supervertices) to a
+cut of $G$ of the *same value*. Consequently
 $$w(S) = c$$
-on every run: the returned cut has exactly the value the run reports.
+on every run and for each returned side $S$: the returned cut has
+exactly the value the run reports.
 
-*Proof.* Induction on the rounds. The base case is $\rho = \mathrm{id}$.
-For the step, contracting $\{u,v\}$ replaces $\rho$ by
-$(\text{redirect } v \mapsto u) \circ \rho$, and Lemma 1 applied to
-the pullback of $S'$ gives equality of the two cut values. At the end
-two supervertices remain, so by Section 2 every cut of the final graph
+*Proof.* Induction on the rounds. The base case is the singleton
+partition. For the step, contracting $\{S,T\}$ replaces the parts
+$S, T$ by $S \cup T$, which preserves the partition property (by
+disjointness) and the flattening of any cut. At the end two
+supervertices remain, so by Section 2 every cut of the final graph
 has value equal to its edge count. $\blacksquare$
 
 *Proof.* By induction on the number of rounds, using Lemma 1: the
@@ -121,7 +131,8 @@ value. Together with Lemma 1: contracting a non-crossing edge
 preserves $\lambda$ exactly when $S$ is minimum.
 
 **Theorem 2 (success probability).** For $n \ge 2$, the algorithm
-returns an actual *minimum cut* with probability
+returns an actual *minimum cut* — both sides of the returned
+partition are cuts of value exactly $\lambda(G)$ — with probability
 $$\Pr\bigl[w(\mathrm{Karger}(G)) = \lambda(G)\bigr]
  \;\ge\; \frac{2}{n(n-1)} .$$
 By Lemma 1' it suffices to prove the same bound for the reported
@@ -146,6 +157,15 @@ $$\Pr[\text{success}] \ \ge\
   \Bigl(1 - \frac{2}{n}\Bigr)\cdot\frac{2}{(n-1)(n-2)}
   \ =\ \frac{n-2}{n}\cdot\frac{2}{(n-1)(n-2)}
   \ =\ \frac{2}{n(n-1)} . \qquad\blacksquare$$
+
+**Theorem 2' (partial contraction).** The induction proves more: for
+any target $2 \le t \le n$, stopping after $n - t$ rounds leaves a
+working graph on $t$ supervertices whose minimum-cut value still
+equals $\lambda(G)$ with probability at least
+$$\frac{t(t-1)}{n(n-1)}
+ \;=\; \prod_{i=0}^{n-t-1}\Bigl(1 - \frac{2}{n-i}\Bigr).$$
+Theorem 2 is the case $t = 2$; the case $t = \lceil 1 + n/\sqrt2\,\rceil$,
+where the bound is $\ge 1/2$, is the step Karger–Stein recurses on.
 
 ## 5. Amplification
 

@@ -209,7 +209,9 @@ private lemma expected_cost_randMax_step
 private lemma expected_cost_randMax_nil
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] :
     𝔼_runtime[RandMax ([] : List α) | M] = 0 := by
-  rw [RandMax.eq_1]; cost_step
+  -- `cost_step RandMax` = unfold one layer of `RandMax` (its equation
+  -- lemmas), then peel — no compiler-generated `.eq_1` name needed.
+  cost_step RandMax
 
 /-- **Exact expected cost.** `RandMax` performs exactly `n` comparisons
 in expectation (in fact, always): one per round, `n` rounds. -/
@@ -233,7 +235,7 @@ theorem randMax_cost_exact
       push_cast
       ring
     -- …so the average of `n` copies of `n` is `n`.
-    rw [Finset.sum_congr rfl fun i _ => hterm i, uniform_avg_const _]
+    exact uniform_avg_eq_of_forall hterm
 
 /-!
 ## Where to go from here

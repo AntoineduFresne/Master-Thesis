@@ -130,14 +130,28 @@ attribute [toPMF_simp] LawfulRandMonad.toPMF_bind
 attribute [toPMF_simp] MonadCost.tick_default
 attribute [toPMF_simp] pure_bind bind_pure map_pure
 
+-- The support/pointwise tier: after `toPMF_pure`/`toPMF_bind` have
+-- unfolded the subterms (simp works innermost-first), these finish a
+-- membership or point-probability goal. Composite `toPMF`-level forms
+-- (`mem_support_toPMF_pure`, `toPMF_pure_apply`, …) exist as named
+-- API in `LawfulRandMonad` for `rw`-style use.
+attribute [toPMF_simp] PMF.mem_support_pure_iff PMF.mem_support_bind_iff
+attribute [toPMF_simp] PMF.pure_apply
+
 /-- `toPMF_step` pushes `toPMF` through one algorithm branch: lawful
 `tick`s vanish, `toPMF` distributes over `bind` and evaluates on
 `pure`. What remains is the branch's case split plus the recursive
 calls, to be closed by the inductive hypotheses and (for the Dirac
 tier) the `@[spec_transport]` lemmas. Tier-agnostic: the same
-normalizer drives Dirac, distributional and support proofs. -/
-scoped macro "toPMF_step" : tactic =>
-  `(tactic| simp only [toPMF_simp])
+normalizer drives Dirac, distributional and support proofs.
+
+Accepts a location: `toPMF_step at h` normalizes a hypothesis — the
+form support proofs (`h : out ∈ (…).support`) live on. -/
+scoped syntax "toPMF_step" (Lean.Parser.Tactic.location)? : tactic
+
+scoped macro_rules
+  | `(tactic| toPMF_step $[$loc:location]?) =>
+    `(tactic| simp only [toPMF_simp] $[$loc:location]?)
 
 /-- `dirac_finish` attempts to close a branch goal outright: push
 `toPMF` through with `toPMF_step`, split the branch's `if`s (when

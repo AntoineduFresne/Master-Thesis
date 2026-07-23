@@ -125,6 +125,6 @@ $\le n-1$, and $(n-1) + \binom{n-1}{2} = \binom{n}{2}$. $\blacksquare$
   dispatch above.
 * Prefix sums of harmonic numbers:
   $\sum_{r=1}^{m} H_r = (m+1)H_m - m$ and
-  $\sum_{r=1}^{m} (r+1)H_r = \frac{(m+1)(m+2)}{2}H_{m+1}
-   - \frac{m(m+5)}{4}$ (and the variant for $\sum r H_r$).
+  $\sum_{r=1}^{m} (r+1)H_r = \frac{(m+1)(m+2)}{2}H_{m}
+   - \frac{m(m+3)}{4}$ (and the variant for $\sum r H_r$).
 * $\sum_{j=0}^{n-1} \max(j, n-1-j) \le \tfrac34 n^2$.

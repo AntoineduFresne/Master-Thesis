@@ -115,25 +115,33 @@ directly out of `geometric` stages composed by `bind`.
 
 ## Module dependency structure
 
-Folders are thematic and the *folder* order is now strictly layered —
+Folders are thematic and the *folder* order is strictly layered —
 `Randomness/` (what a random program means) below `Complexity/` (what
 it costs) below `Correctness/` (what it outputs, incl. amplification);
-the file DAG is acyclic and points strictly downward:
+the file DAG is acyclic, points strictly downward, and no Randomness
+file imports a Complexity or Correctness file (the sampler *cost*
+facts live in `Complexity/SamplerCosts`, not with the samplers):
 
 ```
 cslib.TimeM ← Complexity/TimeMT ← Complexity/MonadCost ──────┐
 Mathlib.PMF ← SimpAttr ← Tactics ← Randomness/LawfulRandMonad ┤
                                         │                     │
-                                        ├← Randomness/Prob    └← Complexity/TimedSemantics
-                                        │      │                          │
-                                        │      ├← Randomness/Geometric    │
-                                        │      ├← Complexity/Variance     │
-                                        │      └← Complexity/ExpectedCost ┘
+                                        ├← Randomness/Prob    └←──┬← Complexity/TimedSemantics
+                                        │      │                  │           │
+                                        │      ├← Randomness/Geometric        │
+                                        │      ├← Randomness/RandVec          │
+                                        │      │       (+ Helpers/Partition)  │
+                                        │      ├← Complexity/Variance         │
+                                        │      └← Complexity/ExpectedCost ←───┘
                                         │                │
-                                        │                ├← Randomness/RandVec
-                                        │                ├← Complexity/TailBounds
-                                        └← Correctness/Correctness ← Correctness/Amplify
-Helpers/*     ← Mathlib only (pure mathematics, no Infrastructure)
+                                        │                ├← Complexity/SamplerCosts (+ RandVec)
+                                        │                ├← Complexity/TailBounds   (+ Variance)
+                                        │                └← Correctness/Amplify     (+ Correctness)
+                                        └←──┬← Correctness/Correctness
+                 Complexity/MonadCost ←─────┘
+Helpers/*     ← Mathlib only (pure mathematics, no Infrastructure;
+                Infrastructure may consume Helpers — RandVec uses
+                Partition's counting lemma)
 Algorithms/*  ← Infrastructure + Helpers + fine-grained Mathlib extras
                 (Treap consumes the Fisher–Yates shuffle; SchwartzZippel
                 consumes Mathlib's `MvPolynomial.schwartz_zippel_totalDegree`)
@@ -142,8 +150,9 @@ Algorithms/*  ← Infrastructure + Helpers + fine-grained Mathlib extras
 `Prob.lean` is deliberately the lowest probability layer: a
 pure-distribution study (`Geometric`, `CouponCollector`) uses
 `expVal`, `𝔼[·]`, `prob` and the `ℙ[·]` notation without importing
-any cost machinery. `RandVec` sits above `ExpectedCost` only because
-it also proves its samplers free.
+any cost machinery, and the samplers (`RandVec`) sit at the same
+cost-free level — their "the samplers are free" theorems are
+cost-tier facts and live in `Complexity/SamplerCosts`.
 
 ## Known limitations
 

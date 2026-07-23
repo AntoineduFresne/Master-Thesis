@@ -65,10 +65,18 @@ lemma expVal_bind {α β : Type*} (p : PMF α) (f : α → PMF β)
   rw [ENNReal.tsum_comm]
   exact tsum_congr fun a => tsum_congr fun b => by ring
 
-lemma expVal_const {α : Type*} (p : PMF α) (c : ENNReal) :
-    expVal p (fun _ => c) = c := by
-  unfold expVal
+/-- **Averaging a constant.** The `expVal_const` fact in the unfolded
+form a cost proof actually meets: after the bind lemmas have peeled a
+branch whose cost is a constant, the goal is literally `∑' a, p a * c`.
+Tagged `@[expected_cost_simp]` so `cost_step` closes such a branch
+outright instead of stopping one rewrite short. -/
+@[expected_cost_simp] lemma pmf_tsum_mul_const {α : Type*} (p : PMF α)
+    (c : ENNReal) : ∑' a, p a * c = c := by
   rw [ENNReal.tsum_mul_right, PMF.tsum_coe, one_mul]
+
+lemma expVal_const {α : Type*} (p : PMF α) (c : ENNReal) :
+    expVal p (fun _ => c) = c :=
+  pmf_tsum_mul_const p c
 
 lemma expVal_mono {α : Type*} (p : PMF α) {g₁ g₂ : α → ENNReal}
     (h : ∀ a, g₁ a ≤ g₂ a) : expVal p g₁ ≤ expVal p g₂ :=
@@ -116,6 +124,29 @@ lemma expVal_toPMF_randIdx_bind
   rw [tsum_fintype]
   simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
   rw [← Finset.mul_sum]
+
+/-- `expVal` of a `pure` program — the base case of every
+output-functional induction. -/
+lemma expVal_toPMF_pure
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α : Type} (a : α) (g : α → ENNReal) :
+    expVal (inst.toPMF (pure a : M α)) g = g a := by
+  rw [inst.toPMF_pure, pmf_pure_eq, expVal_pure]
+
+/-- **Divide-and-conquer expectation**: the expected value of a
+functional of two computations run in sequence and combined by a pure
+function is the iterated expectation — the `expVal` sibling of
+`expected_cost_toPMF_seq₂` and `mem_support_toPMF_seq₂`. -/
+lemma expVal_toPMF_seq₂
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α β γ : Type} (m₁ : M α) (m₂ : M β) (g : α → β → γ)
+    (h : γ → ENNReal) :
+    expVal (inst.toPMF (m₁ >>= fun a => m₂ >>= fun b =>
+        pure (g a b))) h =
+      expVal (inst.toPMF m₁) fun a =>
+        expVal (inst.toPMF m₂) fun b => h (g a b) := by
+  simp only [inst.toPMF_bind, pmf_bind_eq, expVal_bind, inst.toPMF_pure,
+    pmf_pure_eq, expVal_pure]
 
 /-!
 ## The mean of a `ℕ`-valued distribution
@@ -255,6 +286,22 @@ lemma prob_bind {α β : Type*} (p : PMF α) (f : α → PMF β) (s : Set β) :
     ENNReal.tsum_comm]
   exact tsum_congr fun a => ENNReal.tsum_mul_left
 
+/-- **Uniform-pivot step for events**: the probability of an event
+over `randIdx >>= branch` is the uniform average of the branch
+probabilities — the `prob` sibling of `expVal_toPMF_randIdx_bind` and
+`toPMF_randIdx_bind_apply`. -/
+lemma prob_toPMF_randIdx_bind
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {γ : Type*} {δ : Type} {L : List γ} (hL : 0 < L.length)
+    (f : Fin L.length → M δ) (Ev : Set δ) :
+    prob (inst.toPMF (randIdx L hL >>= f)) Ev =
+      (L.length : ENNReal)⁻¹ *
+        ∑ i : Fin L.length, prob (inst.toPMF (f i)) Ev := by
+  have : Nonempty (Fin L.length) := ⟨⟨0, hL⟩⟩
+  rw [inst.toPMF_bind, inst.toPMF_randIdx, pmf_bind_eq, prob_bind, tsum_fintype]
+  simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
+  rw [← Finset.mul_sum]
+
 /-- A point mass assigns probability `1` to any event containing it.
 (Kept for symmetry with `prob_pure_of_notMem`, which the amplification
 argument uses.) -/
@@ -313,6 +360,23 @@ returns a cut; the analysis bounds the cut's value). `prob_map` and
 read-out be reused verbatim for the other, with no re-induction: the
 only obligation is that the two read-outs agree on the run's support.
 -/
+
+/-- Event monotonicity **up to the support**: an event that implies
+another on the support is at most as probable. The `≤`-sibling of
+`prob_congr_of_support`, for strengthening an event along an invariant
+(`karger_finds_min` upgrades a value event to a cut event with it). -/
+lemma prob_mono_of_support {α : Type*} {p : PMF α} {s t : Set α}
+    (h : ∀ a ∈ p.support, a ∈ s → a ∈ t) :
+    prob p s ≤ prob p t := by
+  refine ENNReal.tsum_le_tsum fun a => ?_
+  by_cases hs : a ∈ s
+  · by_cases hsup : a ∈ p.support
+    · rw [Set.indicator_of_mem hs, Set.indicator_of_mem (h a hsup hs)]
+    · rw [Set.indicator_apply_eq_zero.mpr
+        fun _ => (PMF.apply_eq_zero_iff p a).mpr hsup]
+      exact zero_le
+  · rw [Set.indicator_of_notMem hs]
+    exact zero_le
 
 /-- Probability of an event under a pushforward is the probability of
 its preimage. -/
