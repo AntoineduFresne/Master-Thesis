@@ -28,11 +28,11 @@ import ARA.Algorithms.Tutorial
 import ARA.Algorithms.Quicksort.Quicksort
 import ARA.Algorithms.Quickselect.Quickselect
 import ARA.Algorithms.Karger.Karger
+import ARA.Algorithms.Karger.KargerVariants
+import ARA.Algorithms.Karger.KargerOrder
+import ARA.Algorithms.Karger.KargerEnum
+import ARA.Algorithms.Karger.KargerFresh
 import ARA.Algorithms.KargerStein.KargerStein
-import ARA.Algorithms.KargerVariants.KargerVariants
-import ARA.Algorithms.KargerVariants.KargerOrder
-import ARA.Algorithms.KargerVariants.KargerEnum
-import ARA.Algorithms.KargerVariants.KargerFresh
 import ARA.Algorithms.ReservoirSampling.ReservoirSampling
 import ARA.Algorithms.Freivalds.Freivalds
 import ARA.Algorithms.SchwartzZippel.SchwartzZippel

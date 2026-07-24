@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 
-import ARA.Algorithms.KargerVariants.KargerVariants
+import ARA.Algorithms.Karger.KargerVariants
 
 /-!
 # Karger, fresh-vertex model: delete both endpoints, glue to a new one

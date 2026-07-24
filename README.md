@@ -70,8 +70,9 @@ ARA/
 │   └── HarmonicSums.lean      prefix sums Σ H_r, Σ r·H_r, Σ (r+1)·H_r
 └── Algorithms/
     ├── Tutorial.lean          ← start here
-    ├── Quicksort/             Quickselect/       Karger/
-    ├── KargerStein/           KargerVariants/
+    ├── Quicksort/             Quickselect/       KargerStein/
+    ├── Karger/                (Karger + the 3 rename-model variants:
+    │                           KargerOrder / KargerEnum / KargerFresh)
     ├── ReservoirSampling/     Freivalds/         Treap/
     ├── FisherYates/           SchwartzZippel/    CouponCollector/
     │
