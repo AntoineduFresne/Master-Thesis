@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Randomness.RandVec
 import ARA.Infrastructure.Complexity.SamplerCosts
 import ARA.Helpers.Counting
@@ -95,7 +96,7 @@ theorem freivalds_complete
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B = C) :
-    ℙ[freivalds A B C = true | M] = 1 := by
+    ℙ_{M}[freivalds A B C = true] = 1 := by
   have hcheck : ∀ r, freivaldsCheck A B C r = true := fun r =>
     (freivaldsCheck_iff A B C r).mpr (by rw [h, sub_self, Matrix.zero_mulVec])
   rw [freivalds]
@@ -170,7 +171,7 @@ theorem freivalds_sound
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) (h : A * B ≠ C) :
-    ℙ[freivalds A B C = true | M] ≤ 1 / 2 := by
+    ℙ_{M}[freivalds A B C = true] ≤ 1 / 2 := by
   -- A nonzero witness entry of `D = A*B − C`.
   have hD : ∃ i j, (A * B - C) i j ≠ 0 := by
     by_contra hall
@@ -224,7 +225,7 @@ recomputing `A * B`. -/
 theorem freivalds_cost_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) :
-    𝔼_runtime[freivalds A B C | M] = ((3 * n * n : ℕ) : ENNReal) := by
+    𝔼_{M}[cost freivalds A B C] = ((3 * n * n : ℕ) : ENNReal) := by
   rw [freivalds]
   cost_step
 

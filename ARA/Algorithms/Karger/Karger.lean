@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Amplify
 import ARA.Helpers.MultiGraph
@@ -143,12 +144,12 @@ The `>>=`/`pure`-vs-`PMF.bind`/`PMF.pure` bridges (`pmf_bind_eq`,
 
 /-- A `Fin`-indexed sum of a function of the list entries is the sum
 over the mapped list. -/
-private lemma sum_univ_getElem {β : Type} (l : List β) (f : β → ℝ≥0∞) :
+lemma sum_univ_getElem {β : Type} (l : List β) (f : β → ℝ≥0∞) :
     (∑ i : Fin l.length, f l[(i : ℕ)]) = (l.map f).sum := by
   rw [← List.ofFn_getElem_eq_map l f, List.sum_ofFn]
 
 /-- Summing `q` over the entries *not* satisfying `p` counts them. -/
-private lemma sum_map_ite_zero {β : Type} (p : β → Prop) [DecidablePred p]
+lemma sum_map_ite_zero {β : Type} (p : β → Prop) [DecidablePred p]
     (q : ℝ≥0∞) :
     ∀ l : List β,
       (l.map fun e => if p e then 0 else q).sum =
@@ -179,7 +180,7 @@ cut has `c ≤ m` crossing edges with `c * (k + s + 3) ≤ 2 * m` (the
 counting bound), then picking a non-crossing edge and surviving
 afterwards with probability `N / ((k+s+2)(k+s+1))` beats
 `N / ((k+s+3)(k+s+2))`. -/
-private lemma step_bound {m c k s N : ℕ} (hm : 0 < m) (hc : c ≤ m)
+lemma step_bound {m c k s N : ℕ} (hm : 0 < m) (hc : c ≤ m)
     (hbound : c * (k + s + 3) ≤ 2 * m) :
     ((N : ℕ) : ℝ≥0∞) / (((k + s + 3) * (k + s + 2) : ℕ) : ℝ≥0∞) ≤
       ((m : ℕ) : ℝ≥0∞)⁻¹ *
@@ -228,7 +229,7 @@ theorem support_contractAux
     (t : ℕ) (ht2 : 2 ≤ t) :
     ∀ (k : ℕ) (g : MultiGraph (Finset α)), g.WF → g.verts.card = k + t →
       Tracks g₀ g →
-      ∀ h ∈ 𝒟[contractAux k g | M].support,
+      ∀ h ∈ 𝒟_{M}[contractAux k g].support,
         h.WF ∧ t ≤ h.verts.card ∧ h.verts.card ≤ g.verts.card ∧
           (h.verts.card = t ∨ h.edges = []) ∧
           h.edges.length ≤ g.edges.length ∧
@@ -278,7 +279,7 @@ theorem success_contractAux
       g.verts.card = k + (s + 2) →
       (((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
           (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞) ≤
-        ℙ[contractAux k g ∈ {h | h.minCutValue = g.minCutValue} | M] := by
+        ℙ_{M}[contractAux k g ∈ {h | h.minCutValue = g.minCutValue}] := by
   intro k g
   induction k, g using contractAux.induct with
   | case1 g =>
@@ -381,7 +382,7 @@ theorem karger_isCut
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    ∀ o ∈ 𝒟[Karger g | M].support,
+    ∀ o ∈ 𝒟_{M}[Karger g].support,
       (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
   intro o ho
   unfold Karger at ho
@@ -402,7 +403,7 @@ theorem karger_success_prob
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      ℙ[Karger g ∈ {o | o.2 = g.minCutValue} | M] := by
+      ℙ_{M}[Karger g ∈ {o | o.2 = g.minCutValue}] := by
   have hmain := success_contractAux (M := M) (s := 0) (g.verts.card - 2) g.super
     hwf.super (supDisjoint_super g) (by rw [card_verts_super]; omega)
   rw [minCutValue_super h2,
@@ -435,8 +436,8 @@ theorem karger_finds_min
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      ℙ[Karger g ∈ {o | ∀ S ∈ o.1,
-          g.IsCut S ∧ g.cutValue S = g.minCutValue} | M] := by
+      ℙ_{M}[Karger g ∈ {o | ∀ S ∈ o.1,
+          g.IsCut S ∧ g.cutValue S = g.minCutValue}] := by
   refine le_trans (karger_success_prob g hwf h2)
     (prob_mono_of_support fun o ho hval => ?_)
   obtain ⟨hall, -⟩ := karger_isCut g hwf h2 o ho
@@ -453,8 +454,8 @@ theorem karger_amplified
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (k : ℕ) :
     1 - (1 - 2 / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞)) ^ k ≤
-      ℙ[amplify (argmin Prod.snd) k (Karger g)
-          ∈ {o | o.2 = g.minCutValue} | M] :=
+      ℙ_{M}[amplify (argmin Prod.snd) k (Karger g)
+          ∈ {o | o.2 = g.minCutValue}] :=
   amplify_argmin_success
     (fun o ho => (karger_isCut g hwf h2 o ho).2)
     (karger_success_prob g hwf h2) k
@@ -472,7 +473,7 @@ The bound holds for **arbitrary** graphs — no well-formedness needed. -/
 lemma expected_cost_contractAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
     ∀ (k : ℕ) (g : MultiGraph (Finset α)),
-      𝔼_runtime[(contractAux k g : TimeMT ℕ M (MultiGraph (Finset α)))] ≤
+      𝔼_{M}[cost (contractAux k g : TimeMT ℕ M (MultiGraph (Finset α)))] ≤
         (k : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
   intro k g
   induction k, g using contractAux.induct with
@@ -500,7 +501,7 @@ expectation — for arbitrary inputs. -/
 theorem karger_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) :
-    𝔼_runtime[Karger g | M] ≤
+    𝔼_{M}[cost Karger g] ≤
       ((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
   unfold Karger
   rw [expected_cost_toPMF_bind_pure]
@@ -511,7 +512,7 @@ theorem karger_cost_le
 `(n - 2) m` bound. -/
 lemma expected_cost_karger_ne_top
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (g : MultiGraph α) :
-    𝔼_runtime[Karger g | M] ≠ ⊤ :=
+    𝔼_{M}[cost Karger g] ≠ ⊤ :=
   ne_top_of_le_ne_top
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
     (karger_cost_le g)
@@ -519,7 +520,7 @@ lemma expected_cost_karger_ne_top
 /-- Real-valued corollary: the expected cost is at most `(n - 2) * m`. -/
 theorem karger_cost_le_real
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (g : MultiGraph α) :
-    𝔼ℝ_runtime[Karger g | M] ≤
+    𝔼ℝ_{M}[cost Karger g] ≤
       ((g.verts.card - 2 : ℕ) : ℝ) * (g.edges.length : ℝ) := by
   have := ENNReal.toReal_mono
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
@@ -539,7 +540,7 @@ single-run bound `(n − 2) m`. -/
 theorem karger_amplified_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) (k : ℕ) :
-    𝔼_runtime[amplify (argmin Prod.snd) (k + 1) (Karger g) | M] ≤
+    𝔼_{M}[cost amplify (argmin Prod.snd) (k + 1) (Karger g)] ≤
       (k + 1 : ℝ≥0∞) *
         (((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞)) := by
   rw [expected_cost_amplify]

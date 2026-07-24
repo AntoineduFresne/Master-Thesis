@@ -30,10 +30,10 @@ ARA/
 ├── Infrastructure/
 │   ├── Randomness/     the semantic layer: what a random program *means*
 │   │   ├── LawfulRandMonad.lean   `RandMonad` (uniform `randFin`) + `toPMF`
-│   │   │                          semantics, 𝒟[e | M], post-processing lemmas
+│   │   │                          semantics, 𝒟_{M}[e], post-processing lemmas
 │   │   ├── Prob.lean              the probability core: `expVal`, `𝔼[·]`, the
 │   │   │                          event algebra `prob`, Markov, and the
-│   │   │                          output notation ℙ[e = v | M] / ℙ[e ∈ S | M]
+│   │   │                          output notation ℙ_{M}[e = v] / ℙ_{M}[e ∈ S]
 │   │   ├── RandVec.lean           list, 0/1 and finite-grid entropy sources
 │   │   │                          (`randIdx`, `randBit`/`randVec`,
 │   │   │                          `randElem`/`randVecOn`) with the counting
@@ -47,12 +47,12 @@ ARA/
 │   │   ├── MonadCost.lean         abstract `tick` (no-op by default)
 │   │   ├── TimedSemantics.lean    clock erasure, `LawfulRandMonad (TimeMT ℕ M)`,
 │   │   │                          `LawfulMonadCost` (ticks invisible to `toPMF`)
-│   │   ├── ExpectedCost.lean      𝔼_runtime[e | M], cost_step, uniform-step
+│   │   ├── ExpectedCost.lean      𝔼_{M}[cost e], cost_step, uniform-step
 │   │   │                          lemmas, `costPMF` (the cost law itself)
 │   │   ├── SamplerCosts.lean      the samplers are free (cost-tier facts
 │   │   │                          about `Randomness/RandVec`'s samplers)
 │   │   ├── Variance.lean          `variance`, Var = E[g²] − E[g]², Chebyshev
-│   │   └── TailBounds.lean        ℙ_runtime[e > k | M]: Markov and Chebyshev
+│   │   └── TailBounds.lean        ℙ_{M}[cost e > k]: Markov and Chebyshev
 │   │                              tail bounds on the running time
 │   ├── Correctness/    proving what comes out
 │   │   ├── Correctness.lean       Dirac / distributional / support recipes,
@@ -71,7 +71,7 @@ ARA/
 └── Algorithms/
     ├── Tutorial.lean          ← start here
     ├── Quicksort/             Quickselect/       Karger/
-    ├── KargerStein/
+    ├── KargerStein/           KargerVariants/
     ├── ReservoirSampling/     Freivalds/         Treap/
     ├── FisherYates/           SchwartzZippel/    CouponCollector/
     │
@@ -91,6 +91,7 @@ analysis; together they are the proof that the framework is usable.
 | **Quickselect** | Dirac: always the k-th order statistic | exact Knuth 1971 bivariate-harmonic formula; `≤ 4n`; $\leq$  `C(n,2)` for duplicates |
 | **Karger** | returns an actual **minimum cut** with prob. `≥ 2/(n(n−1))` (`karger_finds_min`); one-sided error (support) | amplified: `k` runs fail with prob. `≤ (1−2/(n(n−1)))^k`; cost `≤ (n−2)·m` |
 | **Karger–Stein** | returns an actual **minimum cut** with prob. `≥ 1/(d+3)`, `d = ksDepth n ≈ 2·log₂ n` (`kargerStein_finds_min`); one-sided error | recursive contraction to `t(n) ≈ n/√2` (integer `t(n)`, no `√2` anywhere); cost `≤ (2^(d+2)−2)·n·m` |
+| **Karger variants** | the same theorems under a **pluggable contraction rule** (`MergeRule`): order / upfront-labeling / fresh-vertex merges, one shared analysis (`kargerVia_*`) | exhibit: what each contraction model assumes, and why the supervertex merge is the canonical one |
 | **Reservoir sampling** | exact output distribution: `P[a] = count a / n` | exactly `n − 1` coins on every run (cost law), single pass |
 | **Fisher–Yates** | exact output distribution: uniform over all `n!` permutations | free — a sampler, no ticks |
 | **Schwartz–Zippel** | complete + sound (`≤ deg/\|S\|`, any integral domain) | one wholesale evaluation |
@@ -104,12 +105,12 @@ All proofs rely (after "#print axioms") only on `propext`,
 ## Notation used throughout some algorithm
 
 ```lean
-𝒟[Quicksort L | M]              -- output distribution at random monad M
-𝔼_runtime[Quicksort L | M]      -- expected runtime (ℝ≥0∞) at random monad M
-𝔼ℝ_runtime[Quicksort L | M]     -- the same, as a real number
-ℙ_runtime[Quicksort L > k | M]  -- tail probability; ≤ 𝔼_runtime[…]/(k+1) by Markov
-ℙ[Karger g = g.minCutValue | M] -- output probability (correctness twin of 𝔼_runtime)
-ℙ[reservoir L ∈ S | M]          -- probability of an event
+𝒟_{M}[Quicksort L]              -- output distribution at random monad M
+𝔼_{M}[cost Quicksort L]      -- expected runtime (ℝ≥0∞) at random monad M
+𝔼ℝ_{M}[cost Quicksort L]     -- the same, as a real number
+ℙ_{M}[cost Quicksort L > k]  -- tail probability; ≤ 𝔼_{M}[cost …]/(k+1) by Markov
+ℙ_{M}[Karger g = g.minCutValue] -- output probability (correctness twin of 𝔼_{M}[cost ·])
+ℙ_{M}[reservoir L ∈ S]          -- probability of an event
 expVal (toPMF (treap L)) g      -- E[g(output)]
 𝔼[couponCollector n]            -- mean of a ℕ-valued law (e.g. a cost law)
 x ⊖ y                           -- |x − y| in ℝ≥0∞ (Chebyshev deviations)

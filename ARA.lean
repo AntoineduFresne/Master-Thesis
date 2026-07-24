@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.SimpAttr
 import ARA.Infrastructure.Tactics
 import ARA.Infrastructure.Randomness.LawfulRandMonad
@@ -28,6 +29,10 @@ import ARA.Algorithms.Quicksort.Quicksort
 import ARA.Algorithms.Quickselect.Quickselect
 import ARA.Algorithms.Karger.Karger
 import ARA.Algorithms.KargerStein.KargerStein
+import ARA.Algorithms.KargerVariants.KargerVariants
+import ARA.Algorithms.KargerVariants.KargerOrder
+import ARA.Algorithms.KargerVariants.KargerEnum
+import ARA.Algorithms.KargerVariants.KargerFresh
 import ARA.Algorithms.ReservoirSampling.ReservoirSampling
 import ARA.Algorithms.Freivalds.Freivalds
 import ARA.Algorithms.SchwartzZippel.SchwartzZippel

@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Complexity.TailBounds
 import ARA.Infrastructure.Correctness.Correctness
@@ -43,10 +44,10 @@ serves as:
 ## Notation
 
 The expected runtime of a timed computation is written with the
-`𝔼_runtime[e | M]` (or `𝔼ℝ_runtime[e | M]` for a real value) notation
+`𝔼_{M}[cost e]` (or `𝔼ℝ_{M}[cost e]` for a real value) notation
 from `ARA.Infrastructure.Complexity.ExpectedCost`. For example:
 
-  `𝔼ℝ_runtime[Quicksort L | M]`
+  `𝔼ℝ_{M}[cost Quicksort L]`
 
 reads as "the expected runtime of Quicksort on `L`, run over the random
 monad `M`, as a real number". The `| M` fixes the monad the polymorphic
@@ -143,7 +144,6 @@ private abbrev qs_branch
   let S2 ← Quicksort (rest.filter (· ≥ pivot))
   return (S1 ++ [pivot] ++ S2)
 
-
 -- ### Structural decomposition
 
 /-- `Quicksort L` on a nonempty list decomposes as
@@ -180,7 +180,7 @@ independently of the random pivot choices and of the ticks. -/
 theorem quicksort_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
-    𝒟[Quicksort L | M] = PMF.pure (L.mergeSort (· ≤ ·)) := by
+    𝒟_{M}[Quicksort L] = PMF.pure (L.mergeSort (· ≤ ·)) := by
   dirac_correct Quicksort
 
 /-- The output is a sorted permutation of the input (existential
@@ -188,7 +188,7 @@ specification form of `quicksort_correct`). -/
 theorem quicksort_correct_spec
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (L : List α) :
     ∃ Output : List α,
-      𝒟[Quicksort L | M] = pure Output ∧
+      𝒟_{M}[Quicksort L] = pure Output ∧
       Output.SortedLE ∧ Output.Perm L :=
   ⟨L.mergeSort (· ≤ ·), quicksort_correct L, sortedLE_mergeSort,
     mergeSort_perm L _⟩
@@ -206,7 +206,7 @@ theorem quicksort_correct_pmf (L : List α) :
 random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
 instantiates directly — erasing the clock *is* its `toPMF`. -/
 theorem quicksort_correct_timed_pmf (L : List α) :
-    𝒟[Quicksort L | TimeMT ℕ PMF] = PMF.pure (L.mergeSort (· ≤ ·)) :=
+    𝒟_{TimeMT ℕ PMF}[Quicksort L] = PMF.pure (L.mergeSort (· ≤ ·)) :=
   quicksort_correct (M := TimeMT ℕ PMF) L
 
 -- ----------------------------------------
@@ -238,8 +238,8 @@ private noncomputable def qsStepCost (M : Type → Type) [Monad M]
     [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (i : Fin L.length) : ENNReal :=
   ((L.eraseIdx i).length : ENNReal) +
-    𝔼_runtime[Quicksort (pivotLT L i) | M] +
-    𝔼_runtime[Quicksort (pivotGE L i) | M]
+    𝔼_{M}[cost Quicksort (pivotLT L i)] +
+    𝔼_{M}[cost Quicksort (pivotGE L i)]
 
 /-- The expected cost of `qs_branch` is
 `|rest| + E[QS (pivotLT L i)] + E[QS (pivotGE L i)]`: peel the tick,
@@ -248,7 +248,7 @@ private lemma expected_cost_qs_branch
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (i : Fin L.length) :
-    𝔼_runtime[qs_branch (TimeMT ℕ M) L i] = qsStepCost M L i := by
+    𝔼_{M}[cost qs_branch (TimeMT ℕ M) L i] = qsStepCost M L i := by
   unfold qs_branch qsStepCost
   cost_step
   rw [expected_cost_toPMF_seq₂, ← add_assoc]
@@ -256,7 +256,7 @@ private lemma expected_cost_qs_branch
 /-- The empty list costs nothing. -/
 lemma expected_cost_quicksort_nil
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] :
-    𝔼_runtime[Quicksort ([] : List α) | M] = 0 := by
+    𝔼_{M}[cost Quicksort ([] : List α)] = 0 := by
   rw [Quicksort.eq_1]; cost_step
 
 /-- The expected cost of `Quicksort` on a nonempty list is the uniform
@@ -266,7 +266,7 @@ lemma expected_cost_quicksort_step
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (head : α) (tail : List α) :
-    𝔼_runtime[Quicksort (head :: tail) | M] =
+    𝔼_{M}[cost Quicksort (head :: tail)] =
     ((head :: tail).length : ENNReal)⁻¹ *
       ∑ i : Fin (head :: tail).length, qsStepCost M (head :: tail) i := by
   rw [quicksort_eq_bind head tail]
@@ -294,7 +294,7 @@ with duplicates), the expected cost of `Quicksort` is bounded by
 theorem quicksort_cost_le
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
-    𝔼_runtime[Quicksort L | M] ≤
+    𝔼_{M}[cost Quicksort L] ≤
       (L.length.choose 2 : ENNReal) := by
   induction L using Quicksort.induct with
   | case1 =>
@@ -334,7 +334,7 @@ theorem quicksort_cost_le
 theorem quicksort_cost_le_real
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
-    𝔼ℝ_runtime[Quicksort L | M] ≤ L.length.choose 2 := by
+    𝔼ℝ_{M}[cost Quicksort L] ≤ L.length.choose 2 := by
   have := ENNReal.toReal_mono (ENNReal.natCast_ne_top _)
     (quicksort_cost_le (M := M) L)
   simpa using this
@@ -346,7 +346,7 @@ expected-cost theorem upgrades this way. -/
 theorem quicksort_runtime_tail
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) :
-    ℙ_runtime[Quicksort L > k | M] ≤
+    ℙ_{M}[cost Quicksort L > k] ≤
       (L.length.choose 2 : ENNReal) / (k + 1) :=
   le_trans (runtime_markov_gt _ k)
     (ENNReal.div_le_div_right (quicksort_cost_le L) _)
@@ -357,7 +357,7 @@ exact-formula theorem below. -/
 lemma expected_cost_quicksort_ne_top
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] (L : List α) :
-    𝔼_runtime[Quicksort L | M] ≠ ⊤ :=
+    𝔼_{M}[cost Quicksort L] ≠ ⊤ :=
   ne_top_of_le_ne_top (ENNReal.natCast_ne_top _)
     (quicksort_cost_le L)
 
@@ -406,7 +406,7 @@ theorem quicksort_cost_exact
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (hnd : L.Nodup) :
-    𝔼ℝ_runtime[Quicksort L | M] =
+    𝔼ℝ_{M}[cost Quicksort L] =
     (expected_qs_cost L.length : ℚ) := by
   revert hnd
   induction L using Quicksort.induct with
@@ -474,7 +474,7 @@ theorem quicksort_cost_exact
 expected runtime of the instrumented algorithm interpreted in `PMF`,
 one tick per pivot comparison. -/
 noncomputable def quicksortComparisons (L : List α) : ENNReal :=
-  𝔼_runtime[Quicksort L | PMF]
+  𝔼_{PMF}[cost Quicksort L]
 
 /-- **Expected cost is at most quadratic** on arbitrary lists
 (possibly with duplicates). -/

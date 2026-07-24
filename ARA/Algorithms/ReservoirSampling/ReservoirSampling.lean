@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Correctness
 
@@ -96,7 +97,7 @@ private lemma toPMF_reservoirAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq α]
     (xs : List α) (seen : ℕ) (hseen : seen ≠ 0) (cur y : α) :
-    𝒟[reservoirAux seen cur xs | M] y =
+    𝒟_{M}[reservoirAux seen cur xs] y =
     ((if y = cur then (seen : ENNReal) else 0) + (xs.count y : ENNReal)) /
       ((seen : ENNReal) + (xs.length : ENNReal)) := by
   revert hseen
@@ -111,7 +112,7 @@ private lemma toPMF_reservoirAux
   | case2 seen cur x xs ih =>
     intro _
     have hstep : ∀ i : Fin (seen + 1),
-        𝒟[reservoirAux (seen + 1) (if i.val = 0 then x else cur) xs | M] y =
+        𝒟_{M}[reservoirAux (seen + 1) (if i.val = 0 then x else cur) xs] y =
           ((if y = (if i.val = 0 then x else cur)
               then ((seen + 1 : ℕ) : ENNReal) else 0) +
             (xs.count y : ENNReal)) /
@@ -155,7 +156,7 @@ theorem reservoir_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq α]
     (L : List α) (a : α) :
-    ℙ[reservoir L = some a | M] =
+    ℙ_{M}[reservoir L = some a] =
       (L.count a : ENNReal) / (L.length : ENNReal) := by
   cases L with
   | nil =>
@@ -176,7 +177,7 @@ theorem reservoir_none_eq_zero
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (L : List α) (hL : L ≠ []) :
-    ℙ[reservoir L = none | M] = 0 := by
+    ℙ_{M}[reservoir L = none] = 0 := by
   cases L with
   | nil => exact absurd rfl hL
   | cons x xs =>
@@ -188,7 +189,7 @@ theorem reservoir_correct_of_nodup
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq α]
     (L : List α) (hnd : L.Nodup) (a : α) (ha : a ∈ L) :
-    ℙ[reservoir L = some a | M] =
+    ℙ_{M}[reservoir L = some a] =
       ((L.length : ENNReal))⁻¹ := by
   rw [reservoir_correct, List.count_eq_one_of_mem hnd ha]
   simp
@@ -209,7 +210,7 @@ with a constant recurrence.
 private lemma expected_cost_reservoirAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (xs : List α) (seen : ℕ) (cur : α) :
-    𝔼_runtime[reservoirAux seen cur xs | M] = (xs.length : ENNReal) := by
+    𝔼_{M}[cost reservoirAux seen cur xs] = (xs.length : ENNReal) := by
   induction seen, cur, xs using reservoirAux.induct with
   | case1 seen cur =>
     rw [reservoirAux.eq_1, expected_cost_toPMF_pure]
@@ -218,7 +219,7 @@ private lemma expected_cost_reservoirAux
     haveI : NeZero (seen + 1) := ⟨seen.succ_ne_zero⟩
     rw [reservoirAux.eq_2, expected_cost_uniform_step_fin]
     have hbranch : ∀ i : Fin (seen + 1),
-        𝔼_runtime[(MonadCost.tick 1 : TimeMT ℕ M Unit) >>= fun _ =>
+        𝔼_{M}[cost (MonadCost.tick 1 : TimeMT ℕ M Unit) >>= fun _ =>
           reservoirAux (seen + 1) (if i.val = 0 then x else cur) xs] =
         1 + (xs.length : ENNReal) := by
       intro i
@@ -234,7 +235,7 @@ flips/ticks on a list of length `n` — a single pass. -/
 theorem reservoir_cost_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) :
-    𝔼_runtime[reservoir L | M] = ((L.length - 1 : ℕ) : ENNReal) := by
+    𝔼_{M}[cost reservoir L] = ((L.length - 1 : ℕ) : ENNReal) := by
   cases L with
   | nil =>
     rw [reservoir.eq_1, expected_cost_toPMF_pure]
@@ -246,7 +247,6 @@ theorem reservoir_cost_exact
 /-!
 ## Named corollaries at `M = PMF`
 -/
-
 
 /-- Uniformity at `M = PMF` (where `toPMF` is the identity). -/
 theorem reservoir_correct_pmf [DecidableEq α] (L : List α) (a : α) :

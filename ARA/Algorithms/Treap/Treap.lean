@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Correctness
 import ARA.Helpers.Partition
@@ -252,7 +253,7 @@ traversal is sorted and a permutation of `keys`. -/
 theorem randomBST_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
-    (ht : t ∈ 𝒟[randomBST keys | M].support) :
+    (ht : t ∈ 𝒟_{M}[randomBST keys].support) :
     t.inorder.Pairwise (· < ·) ∧ t.inorder.Perm keys := by
   rw [randomBST] at ht
   obtain ⟨perm, hperm, rfl⟩ := mem_support_toPMF_bind_pure.mp ht
@@ -293,7 +294,7 @@ has height at most `keys.length`. -/
 theorem randomBST_height_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (keys : List ℕ) (t : Tree)
-    (ht : t ∈ 𝒟[randomBST keys | M].support) :
+    (ht : t ∈ 𝒟_{M}[randomBST keys].support) :
     t.height ≤ keys.length := by
   rw [randomBST] at ht
   obtain ⟨perm, hperm, rfl⟩ := mem_support_toPMF_bind_pure.mp ht
@@ -409,7 +410,7 @@ set_option maxHeartbeats 400000 in
 theorem treap_expVal_exp_height
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) :
-    expVal 𝒟[treap L | M] (fun t => 2 ^ t.height) ≤
+    expVal 𝒟_{M}[treap L] (fun t => 2 ^ t.height) ≤
       ((L.length + 3).choose 3 : ENNReal) := by
   revert hnd
   induction L using treap.induct with
@@ -487,7 +488,7 @@ sharp constant is `≈ 3` in base 2, Devroye 1986). -/
 theorem treap_expected_height_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) :
-    expVal 𝒟[treap L | M] (fun t => (t.height : ENNReal)) ≤
+    expVal 𝒟_{M}[treap L] (fun t => (t.height : ENNReal)) ≤
       ((3 * Nat.log 2 (L.length + 3) + 4 : ℕ) : ENNReal) := by
   -- `k` is one more than the log of the exponential-height bound.
   refine le_trans (expVal_mono _ fun t =>
@@ -540,7 +541,7 @@ theorem treap_expected_height_le_pmf (keys : List ℕ) (hnd : keys.Nodup) :
 theorem treap_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) (t : Tree)
-    (ht : t ∈ 𝒟[treap L | M].support) :
+    (ht : t ∈ 𝒟_{M}[treap L].support) :
     t.inorder.Pairwise (· < ·) ∧ t.inorder.Perm L := by
   revert hnd t
   induction L using treap.induct with
@@ -594,7 +595,7 @@ the twin of `randomBST_height_le` for the other model. -/
 theorem treap_height_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List ℕ) (hnd : L.Nodup) (t : Tree)
-    (ht : t ∈ 𝒟[treap L | M].support) :
+    (ht : t ∈ 𝒟_{M}[treap L].support) :
     t.height ≤ L.length := by
   obtain ⟨-, hperm⟩ := treap_correct L hnd t ht
   calc t.height ≤ t.size := Tree.height_le_size t

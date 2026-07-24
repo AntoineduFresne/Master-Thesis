@@ -26,8 +26,8 @@ cost machinery to use it.
   (singletons, complements, `bind`, `pure`).
 * `mul_prob_ge_le_expVal` / `prob_ge_le_expVal_div` — Markov's
   inequality on `expVal`, the estimate every tail bound rests on.
-* `ℙ[e = v | M]` / `ℙ[e ∈ S | M]` — the output-probability notation,
-  correctness twin of `𝔼_runtime[e | M]`.
+* `ℙ_{M}[e = v]` / `ℙ_{M}[e ∈ S]` — the output-probability notation,
+  correctness twin of `𝔼_{M}[cost e]`.
 -/
 
 namespace ARA
@@ -453,32 +453,32 @@ lemma prob_map_congr_of_support
 /-!
 ## Success probability of outputs
 
-`ℙ[e = v | M]` / `ℙ[e ∈ S | M]` are the correctness twins of
-`ℙ_runtime[e > k | M]`: the probability that the algorithm `e`, run
+`ℙ_{M}[e = v]` / `ℙ_{M}[e ∈ S]` are the correctness twins of
+`ℙ_{M}[cost e > k]`: the probability that the algorithm `e`, run
 at the random monad `M`, outputs exactly `v` (resp. lands in the
 event `S`). A Monte-Carlo statement then reads as English:
-`2 / (n(n−1)) ≤ ℙ[Karger g = g.minCutValue | M]`. Both expand to the
+`2 / (n(n−1)) ≤ ℙ_{M}[Karger g = g.minCutValue]`. Both expand to the
 underlying `toPMF`/`prob` form so `simp`/`rw` match lemmas without
 unfolding hints; `prob_singleton` mediates between the two.
 -/
 
-/-- `ℙ[e = v | M]` — probability that the algorithm `e`, run at the
+/-- `ℙ_{M}[e = v]` — probability that the algorithm `e`, run at the
 random monad `M`, outputs exactly `v`. -/
-scoped macro "ℙ[" e:term:51 " = " v:term:51 " | " M:term "]" : term =>
+scoped macro "ℙ_{" M:term "}[" e:term:51 " = " v:term:51 "]" : term =>
   `(LawfulRandMonad.toPMF ($e : $M _) $v)
 
 /-- `ℙ[m = v]` — output probability of an already-typed
-computation. -/
+computation (no monad index needed). -/
 scoped macro "ℙ[" m:term:51 " = " v:term "]" : term =>
   `(LawfulRandMonad.toPMF $m $v)
 
-/-- `ℙ[e ∈ S | M]` — probability that the algorithm `e`, run at the
+/-- `ℙ_{M}[e ∈ S]` — probability that the algorithm `e`, run at the
 random monad `M`, outputs a value in the event `S`. -/
-scoped macro "ℙ[" e:term:51 " ∈ " S:term:51 " | " M:term "]" : term =>
+scoped macro "ℙ_{" M:term "}[" e:term:51 " ∈ " S:term:51 "]" : term =>
   `(prob (LawfulRandMonad.toPMF ($e : $M _)) $S)
 
 /-- `ℙ[m ∈ S]` — event probability of an already-typed
-computation. -/
+computation (no monad index needed). -/
 scoped macro "ℙ[" m:term:51 " ∈ " S:term "]" : term =>
   `(prob (LawfulRandMonad.toPMF $m) $S)
 

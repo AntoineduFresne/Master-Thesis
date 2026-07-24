@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import Cslib.Algorithms.Lean.TimeM
 
 /-!
@@ -98,8 +99,6 @@ theorem run_lift [Zero T] [Functor M] (ma : M α) :
 @[simp]
 theorem run_monadLift [Zero T] [Add T] [Monad M] (ma : M α) :
     (monadLift ma : TimeMT T M α).run = (fun a => (⟨a, 0⟩ : TimeM T α)) <$> ma := rfl
-
-
 
 /-! ## Lawfulness
 

@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Tactics
 
 /-!
@@ -202,21 +203,21 @@ lemma mem_support_toPMF_seq₂
 /-!
 ### Notation
 
-`𝒟[e | M]` is the correctness twin of `𝔼_runtime[e | M]`: the output
+`𝒟_{M}[e]` is the correctness twin of `𝔼_{M}[cost e]`: the output
 distribution of a monad-polymorphic algorithm, read at the random
 monad `M`. A Dirac-correctness theorem then reads as English:
-`𝒟[RandMax L | M] = PMF.pure (listMax L)` — "the distribution of
+`𝒟_{M}[RandMax L] = PMF.pure (listMax L)` — "the distribution of
 `RandMax` over `M` is a point mass at the maximum".
 -/
 
-/-- `𝒟[e | M]` ≡ `LawfulRandMonad.toPMF (e : M _)` — the output
-distribution of the algorithm `e` at the random monad `M`. Expands to
-the underlying form so `simp`/`rw` match the `toPMF` lemmas. -/
-scoped macro "𝒟[" e:term " | " M:term "]" : term =>
+/-- `𝒟_{M}[e]` ≡ `LawfulRandMonad.toPMF (e : M _)` — the output
+distribution ("law") of the algorithm `e` at the random monad `M`.
+Expands to the underlying form so `simp`/`rw` match the `toPMF` lemmas. -/
+scoped macro "𝒟_{" M:term "}[" e:term "]" : term =>
   `(LawfulRandMonad.toPMF ($e : $M _))
 
 /-- `𝒟[m]` ≡ `LawfulRandMonad.toPMF m`, for an already-typed
-computation. -/
+computation (no monad index needed). -/
 scoped macro "𝒟[" m:term "]" : term =>
   `(LawfulRandMonad.toPMF $m)
 

@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Randomness.RandVec
 import ARA.Infrastructure.Complexity.ExpectedCost
 
@@ -30,7 +31,7 @@ variable {R : Type} [Zero R] [One R]
 /-- `randBit` performs no ticks. -/
 @[expected_cost_simp] lemma expected_cost_randBit
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] :
-    𝔼_runtime[(randBit : TimeMT ℕ M R)] = 0 := by
+    𝔼_{M}[cost (randBit : TimeMT ℕ M R)] = 0 := by
   unfold randBit
   cost_step
 
@@ -38,7 +39,7 @@ variable {R : Type} [Zero R] [One R]
 @[expected_cost_simp] lemma expected_cost_randVec
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
     ∀ n : ℕ,
-    𝔼_runtime[(randVec n : TimeMT ℕ M (Fin n → R))] = 0 := by
+    𝔼[cost (randVec n : TimeMT ℕ M (Fin n → R))] = 0 := by
   intro n
   induction n with
   | zero =>
@@ -56,7 +57,7 @@ variable {R : Type} [Zero R] [One R]
 @[expected_cost_simp] lemma expected_cost_randElem
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] {α : Type}
     (s : Finset α) (hs : s.Nonempty) :
-    𝔼_runtime[randElem s hs | M] = 0 := by
+    𝔼_{M}[cost randElem s hs] = 0 := by
   unfold randElem
   cost_step
 
@@ -64,7 +65,7 @@ variable {R : Type} [Zero R] [One R]
 @[expected_cost_simp] lemma expected_cost_randVecOn
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] {α : Type}
     (s : Finset α) (hs : s.Nonempty) :
-    ∀ n : ℕ, 𝔼_runtime[randVecOn s hs n | M] = 0 := by
+    ∀ n : ℕ, 𝔼_{M}[cost randVecOn s hs n] = 0 := by
   intro n
   induction n with
   | zero =>

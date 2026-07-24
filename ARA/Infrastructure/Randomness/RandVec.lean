@@ -176,7 +176,7 @@ noncomputable def randElem {M} [Monad M] [RandMonad M] {α : Type} (s : Finset �
 /-- `randElem` draws **uniformly**: its law is `uniformOfFinset`. -/
 lemma toPMF_randElem {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] {α : Type} (s : Finset α) (hs : s.Nonempty) :
-    𝒟[randElem s hs | M] = PMF.uniformOfFinset s hs := by
+    𝒟_{M}[randElem s hs] = PMF.uniformOfFinset s hs := by
   haveI : NeZero s.toList.length := ⟨(by simpa using hs.card_pos : 0 < s.toList.length).ne'⟩
   ext a
   rw [PMF.uniformOfFinset_apply, randElem, inst.toPMF_bind, inst.toPMF_randIdx,
@@ -232,7 +232,7 @@ lemma toPMF_randVecOn_apply {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] {α : Type} [DecidableEq α]
     (s : Finset α) (hs : s.Nonempty) :
     ∀ (n : ℕ) (f : Fin n → α),
-      𝒟[randVecOn s hs n | M] f =
+      𝒟_{M}[randVecOn s hs n] f =
         if f ∈ Fintype.piFinset (fun _ : Fin n => s)
         then ((s.card : ENNReal) ^ n)⁻¹ else 0 := by
   intro n
@@ -249,7 +249,7 @@ lemma toPMF_randVecOn_apply {M} [Monad M] [LawfulMonad M]
     rw [randVecOn, inst.toPMF_bind, toPMF_randElem, pmf_bind_eq, PMF.bind_apply]
     have hinner : ∀ b, inst.toPMF ((randVecOn s hs n : M (Fin n → α)) >>=
         fun rest => pure (Fin.cons b rest)) f =
-        if f 0 = b then 𝒟[randVecOn s hs n | M] (Fin.tail f) else 0 :=
+        if f 0 = b then 𝒟_{M}[randVecOn s hs n] (Fin.tail f) else 0 :=
       fun b => toPMF_bind_pure_finCons (randVecOn s hs n) b f
     rw [tsum_eq_single (f 0) (fun b hb => by
         rw [hinner b, if_neg fun h => hb h.symm, mul_zero]),
@@ -273,7 +273,7 @@ uniform distribution on `piFinset (fun _ => s) = sⁿ`. -/
 lemma toPMF_randVecOn {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] {α : Type}
     (s : Finset α) (hs : s.Nonempty) (n : ℕ) :
-    𝒟[randVecOn s hs n | M] =
+    𝒟_{M}[randVecOn s hs n] =
       PMF.uniformOfFinset (Fintype.piFinset fun _ : Fin n => s)
         ⟨fun _ => hs.choose, Fintype.mem_piFinset.mpr fun _ => hs.choose_spec⟩ := by
   classical
@@ -342,7 +342,7 @@ def randElemSorted {M} [Monad M] [RandMonad M]
 /-- The sorted sampler has the same law as the abstract one. -/
 lemma toPMF_randElemSorted {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] (s : Finset α) (hs : s.Nonempty) :
-    𝒟[randElemSorted s hs | M] = PMF.uniformOfFinset s hs := by
+    𝒟_{M}[randElemSorted s hs] = PMF.uniformOfFinset s hs := by
   haveI : NeZero (s.sort (· ≤ ·)).length :=
     ⟨by rw [Finset.length_sort]; exact hs.card_pos.ne'⟩
   ext a
@@ -381,7 +381,7 @@ def randVecOnSorted {M} [Monad M] [RandMonad M]
 every theorem about `randVecOn` applies to the executable variant. -/
 lemma toPMF_randVecOnSorted {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] (s : Finset α) (hs : s.Nonempty) :
-    ∀ n, 𝒟[randVecOnSorted s hs n | M] = 𝒟[randVecOn s hs n | M] := by
+    ∀ n, 𝒟_{M}[randVecOnSorted s hs n] = 𝒟_{M}[randVecOn s hs n] := by
   intro n
   induction n with
   | zero => rfl

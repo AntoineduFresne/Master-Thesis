@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Correctness
 import ARA.Helpers.Partition
@@ -133,7 +134,6 @@ private abbrev qsel_branch
   else
     Quickselect (rest.filter (· ≥ pivot)) (k - lt.length - 1)
 
-
 -- ### Structural decomposition
 
 /-- `Quickselect` on a nonempty list decomposes as
@@ -228,7 +228,7 @@ theorem quickselect_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (L : List α) (k : ℕ) :
-    𝒟[Quickselect L k | M] = PMF.pure (orderStat L k) := by
+    𝒟_{M}[Quickselect L k] = PMF.pure (orderStat L k) := by
   dirac_correct Quickselect
   -- Leftover base case: `orderStat` of `[]` is `default`.
   simp [orderStat, LawfulRandMonad.toPMF_pure, pmf_pure_eq]
@@ -242,7 +242,7 @@ theorem quickselect_correct_pmf (L : List α) (k : ℕ) :
 random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
 instantiates directly — erasing the clock *is* its `toPMF`. -/
 theorem quickselect_correct_timed_pmf (L : List α) (k : ℕ) :
-    𝒟[Quickselect L k | TimeMT ℕ PMF] = PMF.pure (orderStat L k) :=
+    𝒟_{TimeMT ℕ PMF}[Quickselect L k] = PMF.pure (orderStat L k) :=
   quickselect_correct (M := TimeMT ℕ PMF) L k
 
 -- ----------------------------------------
@@ -277,10 +277,10 @@ private noncomputable def qselRecCost (M : Type → Type) [Monad M]
     [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) (i : Fin L.length) : ENNReal :=
   if k < (pivotLT L i).length then
-    𝔼_runtime[Quickselect (pivotLT L i) k | M]
+    𝔼_{M}[cost Quickselect (pivotLT L i) k]
   else if k = (pivotLT L i).length then 0
   else
-    𝔼_runtime[Quickselect (pivotGE L i) (k - (pivotLT L i).length - 1) | M]
+    𝔼_{M}[cost Quickselect (pivotGE L i) (k - (pivotLT L i).length - 1)]
 
 /-- The per-pivot step cost: the partition work plus `qselRecCost`. -/
 private noncomputable def qselStepCost (M : Type → Type) [Monad M]
@@ -294,7 +294,7 @@ private lemma expected_cost_qsel_branch
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (k : ℕ) (i : Fin L.length) :
-    𝔼_runtime[qsel_branch (TimeMT ℕ M) L k i] = qselStepCost M L k i := by
+    𝔼_{M}[cost qsel_branch (TimeMT ℕ M) L k i] = qselStepCost M L k i := by
   -- Peel the tick with the bridge lemmas, then the `pure` branch is free.
   unfold qsel_branch qselStepCost qselRecCost
   cost_step
@@ -310,7 +310,7 @@ lemma expected_cost_quickselect_step
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (head : α) (tail : List α) (k : ℕ) :
-    𝔼_runtime[Quickselect (head :: tail) k | M] =
+    𝔼_{M}[cost Quickselect (head :: tail) k] =
     ((head :: tail).length : ENNReal)⁻¹ *
       ∑ i : Fin (head :: tail).length, qselStepCost M (head :: tail) k i := by
   rw [quickselect_eq_bind head tail k]
@@ -320,7 +320,7 @@ lemma expected_cost_quickselect_step
 /-- The empty list costs nothing (for any rank). -/
 lemma expected_cost_quickselect_nil
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (k : ℕ) :
-    𝔼_runtime[Quickselect ([] : List α) k | M] = 0 := by
+    𝔼_{M}[cost Quickselect ([] : List α) k] = 0 := by
   rw [Quickselect.eq_1]; cost_step
 
 /-!
@@ -339,7 +339,7 @@ is bounded by `L.length.choose 2`. Tight on all-equal inputs. -/
 theorem quickselect_cost_le_quadratic
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) :
-    𝔼_runtime[Quickselect L k | M] ≤
+    𝔼_{M}[cost Quickselect L k] ≤
       (L.length.choose 2 : ENNReal) := by
   induction L, k using Quickselect.induct with
   | case1 k =>
@@ -367,7 +367,7 @@ Real-valued corollary of `quickselect_cost_le_quadratic`. -/
 theorem quickselect_cost_le_quadratic_real
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) :
-    𝔼ℝ_runtime[Quickselect L k | M] ≤ L.length.choose 2 := by
+    𝔼ℝ_{M}[cost Quickselect L k] ≤ L.length.choose 2 := by
   have := ENNReal.toReal_mono (ENNReal.natCast_ne_top _)
     (quickselect_cost_le_quadratic (M := M) L k)
   simpa using this
@@ -378,7 +378,7 @@ exact-formula theorem below. -/
 lemma expected_cost_quickselect_ne_top
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) (k : ℕ) :
-    𝔼_runtime[Quickselect L k | M] ≠ ⊤ :=
+    𝔼_{M}[cost Quickselect L k] ≠ ⊤ :=
   ne_top_of_le_ne_top (ENNReal.natCast_ne_top _)
     (quickselect_cost_le_quadratic L k)
 
@@ -393,7 +393,7 @@ theorem quickselect_cost_le_linear
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
     (L : List α) (k : ℕ) (hnd : L.Nodup) :
-    𝔼_runtime[Quickselect L k | M] ≤
+    𝔼_{M}[cost Quickselect L k] ≤
       4 * (L.length : ENNReal) := by
   revert hnd
   induction L, k using Quickselect.induct with
@@ -637,7 +637,7 @@ expectation. -/
 theorem quickselect_cost_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) (k : ℕ) (hnd : L.Nodup) (hk : k < L.length) :
-    𝔼ℝ_runtime[Quickselect L k | M] =
+    𝔼ℝ_{M}[cost Quickselect L k] =
       (expected_qsel_cost L.length k : ℚ) := by
   revert hnd hk
   induction L, k using Quickselect.induct with
@@ -729,7 +729,7 @@ theorem quickselect_cost_exact
 the expected runtime of the instrumented algorithm interpreted in
 `PMF`, one tick per pivot comparison. -/
 noncomputable def quickselectComparisons (L : List α) (k : ℕ) : ENNReal :=
-  𝔼_runtime[Quickselect L k | PMF]
+  𝔼_{PMF}[cost Quickselect L k]
 
 /-- **Expected cost is linear.** Selecting from a list of `n` distinct
 elements takes at most `4 n` comparisons in expectation. -/

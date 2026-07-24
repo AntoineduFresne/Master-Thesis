@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Correctness
 import ARA.Helpers.Partition
@@ -82,7 +83,7 @@ noncomputable example : List ℕ → PMF (List ℕ) := shuffle
 theorem support_shuffle
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) :
-    ∀ out ∈ (𝒟[shuffle L | M]).support, out.Perm L := by
+    ∀ out ∈ (𝒟_{M}[shuffle L]).support, out.Perm L := by
   induction L using shuffle.induct with
   | case1 =>
     intro out hout
@@ -105,7 +106,7 @@ private lemma toPMF_shuffle_apply
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) :
     L.Nodup → ∀ out : List α, out.Perm L →
-      𝒟[shuffle L | M] out = ((L.length ! : ℕ) : ENNReal)⁻¹ := by
+      𝒟_{M}[shuffle L] out = ((L.length ! : ℕ) : ENNReal)⁻¹ := by
   induction L using shuffle.induct with
   | case1 =>
     intro _ out hout
@@ -122,7 +123,7 @@ private lemma toPMF_shuffle_apply
       have hbranch : ∀ i : Fin (x :: xs).length,
           inst.toPMF ((shuffle ((x :: xs).eraseIdx i) : M (List α)) >>=
             fun rest => pure ((x :: xs)[i] :: rest)) (h :: t) =
-          if h = (x :: xs)[i] then 𝒟[shuffle ((x :: xs).eraseIdx i) | M] t
+          if h = (x :: xs)[i] then 𝒟_{M}[shuffle ((x :: xs).eraseIdx i)] t
           else 0 := by
         intro i
         by_cases hx : h = (x :: xs)[i]
@@ -163,7 +164,7 @@ the exchangeability lemma of the shuffle. -/
 theorem shuffle_perm_apply
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {L out : List α} (hnd : L.Nodup) (hperm : out.Perm L) :
-    ℙ[shuffle L = out | M] = ((L.length ! : ℕ) : ENNReal)⁻¹ :=
+    ℙ_{M}[shuffle L = out] = ((L.length ! : ℕ) : ENNReal)⁻¹ :=
   toPMF_shuffle_apply L hnd out hperm
 
 /-- **Fisher–Yates samples uniformly.** On a duplicate-free list the
@@ -172,7 +173,7 @@ permutations of the input. -/
 theorem shuffle_uniform
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [DecidableEq α] {L : List α} (hnd : L.Nodup) :
-    𝒟[shuffle L | M] =
+    𝒟_{M}[shuffle L] =
       PMF.uniformOfFinset L.permutations.toFinset
         ⟨L, List.mem_toFinset.mpr (List.mem_permutations.mpr (List.Perm.refl L))⟩ := by
   ext out
@@ -199,7 +200,7 @@ sampler, so client algorithms pay only for their own work. -/
 lemma expected_cost_shuffle
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) :
-    𝔼_runtime[shuffle L | M] = 0 := by
+    𝔼_{M}[cost shuffle L] = 0 := by
   induction L using shuffle.induct with
   | case1 => rw [shuffle.eq_1, expected_cost_toPMF_pure]
   | case2 x xs ih =>

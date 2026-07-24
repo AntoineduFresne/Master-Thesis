@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Randomness.RandVec
 import ARA.Infrastructure.Complexity.SamplerCosts
 import ARA.Infrastructure.Correctness.Correctness
@@ -71,7 +72,7 @@ theorem schwartzZippel_complete
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (S : Finset R) (hS : S.Nonempty) :
-    ℙ[schwartzZippel (0 : MvPolynomial (Fin n) R) S hS = true | M] = 1 := by
+    ℙ_{M}[schwartzZippel (0 : MvPolynomial (Fin n) R) S hS = true] = 1 := by
   rw [schwartzZippel, toPMF_tick_bind, toPMF_randVecOn_true]
   rw [show ((Fintype.piFinset fun _ : Fin n => S).filter
       fun f => decide (MvPolynomial.eval f (0 : MvPolynomial (Fin n) R) = 0)) =
@@ -90,7 +91,7 @@ theorem schwartzZippel_sound [IsDomain R]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     {P : MvPolynomial (Fin n) R} (hP : P ≠ 0) (S : Finset R)
     (hS : S.Nonempty) :
-    ℙ[schwartzZippel P S hS = true | M] ≤
+    ℙ_{M}[schwartzZippel P S hS = true] ≤
       (P.totalDegree : ℝ≥0∞) / (S.card : ℝ≥0∞) := by
   rw [schwartzZippel, toPMF_tick_bind, toPMF_randVecOn_true]
   -- Align the accepting count with Mathlib's Schwartz–Zippel form.
@@ -112,7 +113,7 @@ run (the sampler is free). -/
 theorem schwartzZippel_cost_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (P : MvPolynomial (Fin n) R) (S : Finset R) (hS : S.Nonempty) :
-    𝔼_runtime[schwartzZippel P S hS | M] = 1 := by
+    𝔼_{M}[cost schwartzZippel P S hS] = 1 := by
   rw [schwartzZippel]
   cost_step
 

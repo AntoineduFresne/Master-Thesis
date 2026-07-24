@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Infrastructure.Complexity.ExpectedCost
 import ARA.Infrastructure.Correctness.Correctness
 import ARA.Helpers.Partition
@@ -164,7 +165,7 @@ theorem randMax_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (L : List α) :
-    𝒟[RandMax L | M] = PMF.pure (listMax L) := by
+    𝒟_{M}[RandMax L] = PMF.pure (listMax L) := by
   dirac_correct RandMax
 
 /-- Correctness at `M = PMF` (where `toPMF` is the identity). -/
@@ -190,25 +191,25 @@ following a fixed pattern:
 private lemma expected_cost_randMax_branch
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) (i : Fin L.length) :
-    𝔼_runtime[randMax_branch (TimeMT ℕ M) L i] =
-    1 + 𝔼_runtime[RandMax (L.eraseIdx i) | M] := by
+    𝔼_{M}[cost randMax_branch (TimeMT ℕ M) L i] =
+    1 + 𝔼_{M}[cost RandMax (L.eraseIdx i)] := by
   unfold randMax_branch
   cost_step
 
 private lemma expected_cost_randMax_step
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (head : α) (tail : List α) :
-    𝔼_runtime[RandMax (head :: tail) | M] =
+    𝔼_{M}[cost RandMax (head :: tail)] =
     ((head :: tail).length : ENNReal)⁻¹ *
       ∑ i : Fin (head :: tail).length,
-        (1 + 𝔼_runtime[RandMax ((head :: tail).eraseIdx i) | M]) := by
+        (1 + 𝔼_{M}[cost RandMax ((head :: tail).eraseIdx i)]) := by
   rw [RandMax.eq_2]
   exact expected_cost_uniform_step' (by simp)
     fun i => expected_cost_randMax_branch (head :: tail) i
 
 private lemma expected_cost_randMax_nil
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] :
-    𝔼_runtime[RandMax ([] : List α) | M] = 0 := by
+    𝔼_{M}[cost RandMax ([] : List α)] = 0 := by
   -- `cost_step RandMax` = unfold one layer of `RandMax` (its equation
   -- lemmas), then peel — no compiler-generated `.eq_1` name needed.
   cost_step RandMax
@@ -218,7 +219,7 @@ in expectation (in fact, always): one per round, `n` rounds. -/
 theorem randMax_cost_exact
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     (L : List α) :
-    𝔼_runtime[RandMax L | M] = (L.length : ENNReal) := by
+    𝔼_{M}[cost RandMax L] = (L.length : ENNReal) := by
   induction L using RandMax.induct with
   | case1 =>
     rw [expected_cost_randMax_nil]
@@ -227,7 +228,7 @@ theorem randMax_cost_exact
     rw [expected_cost_randMax_step head tail]
     -- Every branch recurses on `tail.length` elements…
     have hterm : ∀ i : Fin (head :: tail).length,
-        1 + 𝔼_runtime[RandMax ((head :: tail).eraseIdx i) | M] =
+        1 + 𝔼_{M}[cost RandMax ((head :: tail).eraseIdx i)] =
         ((head :: tail).length : ENNReal) := by
       intro i
       rw [ih i, length_eraseIdx_cons]

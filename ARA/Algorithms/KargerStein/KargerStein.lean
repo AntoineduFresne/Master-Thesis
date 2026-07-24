@@ -3,6 +3,7 @@ Copyright (c) 2026 Antoine du Fresne von Hohenesche. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
+
 import ARA.Algorithms.Karger.Karger
 
 /-!
@@ -145,7 +146,7 @@ private lemma support_ksLeaf
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
     {g : MultiGraph (Finset α)} (hwf : g.WF) (h2 : 2 ≤ g.verts.card)
     (ht : Tracks g₀ g) :
-    ∀ o ∈ 𝒟[(contractAux (g.verts.card - 2) g >>= fun h =>
+    ∀ o ∈ 𝒟_{M}[(contractAux (g.verts.card - 2) g >>= fun h =>
         pure (h.verts, h.edges.length) : M (Finset (Finset α) × ℕ))].support,
       (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
         g₀.minCutValue ≤ o.2 ∧ g.minCutValue ≤ o.2 := by
@@ -167,7 +168,7 @@ private lemma success_ksLeaf
     {g : MultiGraph (Finset α)} (hwf : g.WF) (h2 : 2 ≤ g.verts.card)
     (ht : Tracks g₀ g) :
     (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      ℙ[(contractAux (g.verts.card - 2) g >>= fun h =>
+      ℙ_{M}[(contractAux (g.verts.card - 2) g >>= fun h =>
           pure (h.verts, h.edges.length) : M (Finset (Finset α) × ℕ))
         ∈ {o | o.2 = g.minCutValue}] := by
   have hmain := success_contractAux (M := M) (s := 0) (g.verts.card - 2) g
@@ -207,7 +208,7 @@ private lemma support_kargerSteinAux_edgeless
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] :
     ∀ fuel (g : MultiGraph (Finset α)), g.edges = [] →
-      ∀ o ∈ 𝒟[kargerSteinAux fuel g | M].support, o = (g.verts, 0) := by
+      ∀ o ∈ 𝒟_{M}[kargerSteinAux fuel g].support, o = (g.verts, 0) := by
   intro fuel g
   induction fuel, g using kargerSteinAux.induct with
   | case1 g =>
@@ -243,7 +244,7 @@ private lemma support_kargerSteinAux
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α} :
     ∀ fuel (g : MultiGraph (Finset α)), g.WF → 2 ≤ g.verts.card →
       Tracks g₀ g →
-      ∀ o ∈ 𝒟[kargerSteinAux fuel g | M].support,
+      ∀ o ∈ 𝒟_{M}[kargerSteinAux fuel g].support,
         (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
           g₀.minCutValue ≤ o.2 ∧ g.minCutValue ≤ o.2 := by
   intro fuel g
@@ -313,7 +314,7 @@ private theorem success_kargerSteinAux
     ∀ fuel (g : MultiGraph (Finset α)), g.WF → Tracks g₀ g →
       2 ≤ g.verts.card → ksDepth g.verts.card ≤ fuel →
       ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-        ℙ[kargerSteinAux fuel g ∈ {o | o.2 = g.minCutValue} | M] := by
+        ℙ_{M}[kargerSteinAux fuel g ∈ {o | o.2 = g.minCutValue}] := by
   intro fuel g
   induction fuel, g using kargerSteinAux.induct with
   | case1 g =>
@@ -363,7 +364,7 @@ private theorem success_kargerSteinAux
       have hp : (1 : ℝ≥0∞) / 2 *
           (((1 : ℕ) : ℝ≥0∞) /
             ((ksDepth (ksTarget g.verts.card) + 3 : ℕ) : ℝ≥0∞)) ≤
-          ℙ[(contractAux (g.verts.card - ksTarget g.verts.card) g >>=
+          ℙ_{M}[(contractAux (g.verts.card - ksTarget g.verts.card) g >>=
               kargerSteinAux fuel : M _) ∈ {o | o.2 = g.minCutValue}] := by
         refine le_prob_toPMF_bind h1 ?_
         intro g' hg'good hg'supp
@@ -397,7 +398,7 @@ private theorem success_kargerSteinAux
             show (0 : ℕ) = g.minCutValue
             rw [← hg'min, hmin0]
       -- One-sidedness of the branch, for the amplify composition.
-      have hsupp : ∀ o ∈ 𝒟[(contractAux
+      have hsupp : ∀ o ∈ 𝒟_{M}[(contractAux
             (g.verts.card - ksTarget g.verts.card) g >>=
             kargerSteinAux fuel : M _)].support,
           g.minCutValue ≤ o.2 := by
@@ -472,7 +473,7 @@ theorem kargerStein_isCut
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    ∀ o ∈ 𝒟[KargerStein g | M].support,
+    ∀ o ∈ 𝒟_{M}[KargerStein g].support,
       (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
   intro o ho
   obtain ⟨hcut, hle, -⟩ := support_kargerSteinAux (M := M)
@@ -488,7 +489,7 @@ theorem kargerStein_success_prob
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-      ℙ[KargerStein g ∈ {o | o.2 = g.minCutValue} | M] := by
+      ℙ_{M}[KargerStein g ∈ {o | o.2 = g.minCutValue}] := by
   have hmain := success_kargerSteinAux (M := M) (ksDepth g.verts.card) g.super
     hwf.super (Tracks.super g) (by rw [card_verts_super]; omega)
     (le_of_eq (congrArg ksDepth (card_verts_super g)))
@@ -504,8 +505,8 @@ theorem kargerStein_finds_min
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-      ℙ[KargerStein g ∈ {o | ∀ S ∈ o.1,
-          g.IsCut S ∧ g.cutValue S = g.minCutValue} | M] := by
+      ℙ_{M}[KargerStein g ∈ {o | ∀ S ∈ o.1,
+          g.IsCut S ∧ g.cutValue S = g.minCutValue}] := by
   refine le_trans (kargerStein_success_prob g hwf h2)
     (prob_mono_of_support fun o ho hval => ?_)
   obtain ⟨hall, -⟩ := kargerStein_isCut g hwf h2 o ho
@@ -523,7 +524,7 @@ private lemma cost_kargerSteinAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {g₀ : MultiGraph α} :
     ∀ fuel (g : MultiGraph (Finset α)), g.WF → Tracks g₀ g →
-      𝔼_runtime[(kargerSteinAux fuel g : TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
+      𝔼_{M}[cost (kargerSteinAux fuel g : TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
         ((2 ^ (fuel + 2) - 2 : ℕ) : ℝ≥0∞) *
           ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞) := by
   intro fuel g
@@ -545,7 +546,7 @@ private lemma cost_kargerSteinAux
     rw [kargerSteinAux.eq_2]
     · rw [if_pos h4, show (2 : ℕ) = 1 + 1 from by norm_num,
         expected_cost_amplify]
-      have hbr : 𝔼_runtime[(contractAux
+      have hbr : 𝔼[cost (contractAux
             (g.verts.card - ksTarget g.verts.card) g >>=
             kargerSteinAux fuel : TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
           ((2 ^ (fuel + 2) - 1 : ℕ) : ℝ≥0∞) *
@@ -623,7 +624,7 @@ the run invariant. -/
 theorem kargerStein_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) (hwf : g.WF) :
-    𝔼_runtime[KargerStein g | M] ≤
+    𝔼_{M}[cost KargerStein g] ≤
       ((2 ^ (ksDepth g.verts.card + 2) - 2 : ℕ) : ℝ≥0∞) *
         ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞) := by
   unfold KargerStein

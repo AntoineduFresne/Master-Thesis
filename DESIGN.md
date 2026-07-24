@@ -101,26 +101,7 @@ Costs likewise: upper bounds live in `ℝ≥0∞` (no summability
 bookkeeping), exact formulas descend to `ℝ` via `toReal` with
 finiteness supplied by the coarse bound. On top of expectations sits
 the tail-bound tier (`TailBounds.lean`): Markov's inequality upgrades
-any expected-cost theorem to `ℙ_runtime[m > k] ≤ 𝔼_runtime[m]/(k+1)`
-for free — since costs are `ℕ`-valued, the strict form divides by
-`k + 1` and needs no `k ≠ 0` hypothesis. The second-moment upgrade is
-`Variance.lean` (`Var = E[g²] − E[g]²` and Chebyshev, with the
-`ℝ≥0∞`-symmetric deviation `absSub`), and beyond the expectation the
-running time has a *law*: `costPMF`. That third reading is what a
-*determinism* claim needs — `schwartzZippel_costPMF` and
-`costPMF_shuffle` say those algorithms cost `1` and `0` on **every**
-run, which no expectation can express — and the coupon collector
-studies the same tier from the other side, building a cost law
-directly out of `geometric` stages composed by `bind`.
-
-## Module dependency structure
-
-Folders are thematic and the *folder* order is strictly layered —
-`Randomness/` (what a random program means) below `Complexity/` (what
-it costs) below `Correctness/` (what it outputs, incl. amplification);
-the file DAG is acyclic, points strictly downward, and no Randomness
-file imports a Complexity or Correctness file (the sampler *cost*
-facts live in `Complexity/SamplerCosts`, not with the samplers):
+any expected-cost theorem to `ℙ[cost m > k] ≤ 𝔼_{`Complexity/SamplerCosts`, not with the samplers):
 
 ```
 cslib.TimeM ← Complexity/TimeMT ← Complexity/MonadCost ──────┐
@@ -149,7 +130,26 @@ Algorithms/*  ← Infrastructure + Helpers + fine-grained Mathlib extras
 
 `Prob.lean` is deliberately the lowest probability layer: a
 pure-distribution study (`Geometric`, `CouponCollector`) uses
-`expVal`, `𝔼[·]`, `prob` and the `ℙ[·]` notation without importing
+`expVal`, `𝔼[·}[cost m]/(k+1)`
+for free — since costs are `ℕ`-valued, the strict form divides by
+`k + 1` and needs no `k ≠ 0` hypothesis. The second-moment upgrade is
+`Variance.lean` (`Var = E[g²] − E[g]²` and Chebyshev, with the
+`ℝ≥0∞`-symmetric deviation `absSub`), and beyond the expectation the
+running time has a *law*: `costPMF`. That third reading is what a
+*determinism* claim needs — `schwartzZippel_costPMF` and
+`costPMF_shuffle` say those algorithms cost `1` and `0` on **every**
+run, which no expectation can express — and the coupon collector
+studies the same tier from the other side, building a cost law
+directly out of `geometric` stages composed by `bind`.
+
+## Module dependency structure
+
+Folders are thematic and the *folder* order is strictly layered —
+`Randomness/` (what a random program means) below `Complexity/` (what
+it costs) below `Correctness/` (what it outputs, incl. amplification);
+the file DAG is acyclic, points strictly downward, and no Randomness
+file imports a Complexity or Correctness file (the sampler *cost*
+facts live]`, `prob` and the `ℙ[·]` notation without importing
 any cost machinery, and the samplers (`RandVec`) sit at the same
 cost-free level — their "the samplers are free" theorems are
 cost-tier facts and live in `Complexity/SamplerCosts`.

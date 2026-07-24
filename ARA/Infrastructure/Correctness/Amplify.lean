@@ -275,7 +275,7 @@ theorem amplify_max_success
 theorem expected_cost_amplify
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] {β : Type}
     (best : β → β → β) (k : ℕ) (m : TimeMT ℕ M β) :
-    𝔼_runtime[amplify best (k + 1) m] = (k + 1 : ℝ≥0∞) * 𝔼_runtime[m] := by
+    𝔼[cost amplify best (k + 1) m] = (k + 1 : ℝ≥0∞) * 𝔼[cost m] := by
   induction k with
   | zero => simp only [zero_add, Nat.cast_zero, amplify_one, one_mul]
   | succ k ih =>

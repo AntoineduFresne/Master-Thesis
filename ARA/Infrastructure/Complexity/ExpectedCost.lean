@@ -32,7 +32,7 @@ representation of a timed result.
 * `costPMF` — the cost distribution itself, the third reading of a
   cost analysis, with `costPMF_eq_pure_zero` / `costPMF_tick_bind`
   for deterministic-cost claims
-* `𝔼_runtime[·]` / `𝔼ℝ_runtime[·]` notation and the `cost_step` /
+* `𝔼[cost ·]` / `𝔼ℝ[cost ·]` notation and the `cost_step` /
   `runtime_simp` tactics
 * the uniform-pivot recipes (`expected_cost_uniform_step`, the
   `uniform_avg_*` closing lemmas)
@@ -353,14 +353,16 @@ lemma expected_cost_toPMF_seq₂
 
 * `TimedPMF m`      — distribution over `(value, time)` pairs obtained
   by interpreting `m : TimeMT ℕ M α` via a `LawfulRandMonad`.
-* `𝔼_runtime[m]`    — `expected_cost (TimedPMF m) : ℝ≥0∞`. Expands to
-  the underlying form so `simp`/`rw` match the bridge lemmas without
-  unfolding hints.
-* `𝔼ℝ_runtime[m]`   — the same as a real number, for closed-form
+* `𝔼[cost m]`      — `expected_cost (TimedPMF m) : ℝ≥0∞`, for an
+  already-timed `m`. `cost` marks that the averaged quantity is the
+  running time; expands to the underlying form so `simp`/`rw` match
+  the bridge lemmas without unfolding hints.
+* `𝔼ℝ[cost m]`     — the same as a real number, for closed-form
   bounds like `2(n+1)H(n) − 4n`.
-* `𝔼_runtime[e | M]` / `𝔼ℝ_runtime[e | M]` — the forms to use with a
-  monad-polymorphic algorithm `e` (the typical case): they instantiate
-  `e` at `TimeMT ℕ M`, where the instances `instRandMonadTimeMT` and
+* `𝔼_{M}[cost e]` / `𝔼ℝ_{M}[cost e]` — the forms to use with a
+  monad-polymorphic algorithm `e` (the typical case): the expectation
+  `𝔼_{M}` of the running-time random variable `cost e`, instantiating
+  `e` at `TimeMT ℕ M`, where `instRandMonadTimeMT` and
   `instMonadCostTimeMT` are picked up automatically. -/
 
 /-- The distribution over `(value, time)` pairs obtained by interpreting
@@ -372,26 +374,29 @@ noncomputable abbrev TimedPMF
     (m : TimeMT ℕ M α) : PMF (TimeM ℕ α) :=
   inst.toPMF m.run
 
-/-- `𝔼_runtime[m]` ≡ `expected_cost (TimedPMF m)`, the expected runtime
-of `m` as `ENNReal`. Expands to the underlying form so `simp`/`rw` can
-match bridge lemmas like `expected_cost_toPMF_bind`. -/
-scoped notation "𝔼_runtime[" m "]" => expected_cost (TimedPMF m)
+/-- `𝔼[cost m]` ≡ `expected_cost (TimedPMF m)`, the expected runtime
+of an already-timed `m` as `ENNReal`. `cost` marks that the quantity
+averaged is the running time; expands to the underlying form so
+`simp`/`rw` can match bridge lemmas like `expected_cost_toPMF_bind`. -/
+scoped macro "𝔼[cost " m:term "]" : term =>
+  `(expected_cost (TimedPMF $m))
 
-/-- `𝔼ℝ_runtime[m]` ≡ `(𝔼_runtime[m]).toReal`, the expected runtime of `m`
+/-- `𝔼ℝ[cost m]` ≡ `(𝔼[cost m]).toReal`, the expected runtime of `m`
 as `ℝ`. Use type ascription `(f L : TimeMT ℕ M _)` when `f` is polymorphic. -/
-scoped macro "𝔼ℝ_runtime[" m:term "]" : term =>
+scoped macro "𝔼ℝ[cost " m:term "]" : term =>
   `((expected_cost (TimedPMF $m)).toReal)
 
-/-- `𝔼_runtime[e | M]` — expected runtime (`ℝ≥0∞`) of the
+/-- `𝔼_{M}[cost e]` — expected runtime (`ℝ≥0∞`) of the
 monad-polymorphic algorithm `e`, instantiated at the random monad `M`
-and timed via `TimeMT ℕ M`. Sugar for the type ascription
-`𝔼_runtime[(e : TimeMT ℕ M _)]`; both elaborate to the same term. -/
-scoped macro "𝔼_runtime[" e:term " | " M:term "]" : term =>
+and timed via `TimeMT ℕ M`: the expectation `𝔼_{M}` of the
+running-time random variable `cost e`; elaborates to
+`expected_cost (TimedPMF (e : TimeMT ℕ M _))`. -/
+scoped macro "𝔼_{" M:term "}[cost " e:term "]" : term =>
   `(expected_cost (TimedPMF ($e : TimeMT ℕ $M _)))
 
-/-- `𝔼ℝ_runtime[e | M]` — real-valued expected runtime of the
+/-- `𝔼ℝ_{M}[cost e]` — real-valued expected runtime of the
 monad-polymorphic algorithm `e` at the random monad `M`. -/
-scoped macro "𝔼ℝ_runtime[" e:term " | " M:term "]" : term =>
+scoped macro "𝔼ℝ_{" M:term "}[cost " e:term "]" : term =>
   `((expected_cost (TimedPMF ($e : TimeMT ℕ $M _))).toReal)
 
 /-!
@@ -419,7 +424,7 @@ the cost is fully computed or only an opaque recursive call remains
 ### Example
 
 ```
-lemma my_algo_cost : 𝔼_runtime[(myAlgo n : TimeMT ℕ M _)] = ... := by
+lemma my_algo_cost : 𝔼[cost (myAlgo n : TimeMT ℕ M _)] = ... := by
   rw [myAlgo.eq_def]   -- unfold the algorithm
   cost_step            -- peel `tick`/`lift`/`pure`/`bind` away
   ...                  -- handle the recursive part
@@ -427,15 +432,15 @@ lemma my_algo_cost : 𝔼_runtime[(myAlgo n : TimeMT ℕ M _)] = ... := by
 -/
 
 /-- `cost_step` peels one or more `TimeMT` combinators off the head of
-an `𝔼_runtime[·]` expression by chaining the `expected_cost_simp` set.
+an `𝔼[cost ·]` expression by chaining the `expected_cost_simp` set.
 
 This rewrites:
-* `𝔼_runtime[tick t >>= f]`  ↦  `t + 𝔼_runtime[f ()]`
-* `𝔼_runtime[lift m >>= f]`  ↦  `∑' a, toPMF m a * 𝔼_runtime[f a]`
-* `𝔼_runtime[pure a >>= f]`  ↦  `𝔼_runtime[f a]`
-* `𝔼_runtime[pure a]`        ↦  `0`
-* `𝔼_runtime[tick t]`        ↦  `t`
-* `𝔼_runtime[lift m]`        ↦  `0`
+* `𝔼[cost tick t >>= f]`  ↦  `t + 𝔼[cost f ()]`
+* `𝔼[cost lift m >>= f]`  ↦  `∑' a, toPMF m a * 𝔼[cost f a]`
+* `𝔼[cost pure a >>= f]`  ↦  `𝔼[cost f a]`
+* `𝔼[cost pure a]`        ↦  `0`
+* `𝔼[cost tick t]`        ↦  `t`
+* `𝔼[cost lift m]`        ↦  `0`
 
 When an extra rewrite is needed (e.g. unfolding a recursive call),
 combine with `simp only [expected_cost_simp, my_lemma]` directly.
@@ -473,7 +478,10 @@ scoped macro_rules
   | `(tactic| runtime_simp) =>
     `(tactic| ((try dsimp only []); simp only [expected_cost_simp, pmf_simp_attr]; try norm_num))
   | `(tactic| runtime_simp $loc:location) =>
-    `(tactic| ((try dsimp only [] $loc:location); simp only [expected_cost_simp, pmf_simp_attr] $loc:location; try norm_num))
+    `(tactic|
+      ((try dsimp only [] $loc:location);
+       simp only [expected_cost_simp, pmf_simp_attr] $loc:location;
+       try norm_num))
 
 /-!
 ## Uniform-pivot recipes
@@ -484,7 +492,7 @@ one `rw` plus its branch decomposition:
 
 ```
 lemma expected_cost_myAlgo_step ... :
-    𝔼_runtime[(myAlgo (x :: xs) : TimeMT ℕ M _)] =
+    𝔼[cost (myAlgo (x :: xs) : TimeMT ℕ M _)] =
     ((x :: xs).length : ENNReal)⁻¹ * ∑ i, (branch cost i) := by
   rw [myAlgo_timed_eq_bind, expected_cost_uniform_step]
   congr 1
@@ -503,8 +511,8 @@ lemma expected_cost_uniform_step
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {α : Type*} {β : Type} {L : List α} (hL : 0 < L.length)
     (f : Fin L.length → TimeMT ℕ M β) :
-    𝔼_runtime[(randIdx L hL : TimeMT ℕ M _) >>= f] =
-    (L.length : ENNReal)⁻¹ * ∑ i : Fin L.length, 𝔼_runtime[f i] := by
+    𝔼[cost (randIdx L hL : TimeMT ℕ M _) >>= f] =
+    (L.length : ENNReal)⁻¹ * ∑ i : Fin L.length, 𝔼[cost f i] := by
   have : Nonempty (Fin L.length) := ⟨⟨0, hL⟩⟩
   show expected_cost (inst.toPMF
     (TimeMT.lift (randIdx L hL : M _) >>= f).run) = _
@@ -520,8 +528,8 @@ lemma expected_cost_uniform_step'
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     {α : Type*} {β : Type} {L : List α} (hL : 0 < L.length)
     {f : Fin L.length → TimeMT ℕ M β} {c : Fin L.length → ENNReal}
-    (h : ∀ i, 𝔼_runtime[f i] = c i) :
-    𝔼_runtime[(randIdx L hL : TimeMT ℕ M _) >>= f] =
+    (h : ∀ i, 𝔼[cost f i] = c i) :
+    𝔼[cost (randIdx L hL : TimeMT ℕ M _) >>= f] =
     (L.length : ENNReal)⁻¹ * ∑ i : Fin L.length, c i := by
   rw [expected_cost_uniform_step hL f]
   congr 1
@@ -534,8 +542,8 @@ that draw from `Fin n` directly (e.g. reservoir sampling's
 lemma expected_cost_uniform_step_fin
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {β : Type} (n : ℕ) [NeZero n] (f : Fin n → TimeMT ℕ M β) :
-    𝔼_runtime[(RandMonad.randFin n : TimeMT ℕ M _) >>= f] =
-    (n : ENNReal)⁻¹ * ∑ i : Fin n, 𝔼_runtime[f i] := by
+    𝔼[cost (RandMonad.randFin n : TimeMT ℕ M _) >>= f] =
+    (n : ENNReal)⁻¹ * ∑ i : Fin n, 𝔼[cost f i] := by
   have : Nonempty (Fin n) := ⟨⟨0, Nat.pos_of_ne_zero (NeZero.ne n)⟩⟩
   show expected_cost (inst.toPMF
     (TimeMT.lift (RandMonad.randFin n : M _) >>= f).run) = _
@@ -582,14 +590,14 @@ step; the finiteness certificate is the bound itself. -/
 lemma runtime_toReal_le
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] {α : Type}
     {m : TimeMT ℕ M α} {c : ENNReal}
-    (h : 𝔼_runtime[m] ≤ c) (hc : c ≠ ⊤) :
-    𝔼ℝ_runtime[m] ≤ c.toReal :=
+    (h : 𝔼[cost m] ≤ c) (hc : c ≠ ⊤) :
+    𝔼ℝ[cost m] ≤ c.toReal :=
   ENNReal.toReal_mono hc h
 
 /-!
 ## The cost distribution
 
-Beyond its expectation (`𝔼_runtime`) and its tail bounds
+Beyond its expectation (`𝔼[cost ·]`) and its tail bounds
 (`ℙ_runtime`), the running time of a computation has a *law*:
 `costPMF m`, the third reading of a cost analysis. It is what a
 *determinism* claim needs — `schwartzZippel_costPMF` and
@@ -608,11 +616,11 @@ noncomputable def costPMF {M : Type → Type} [Monad M] [LawfulMonad M]
 
 /-- **A vanishing mean forces a Dirac law at `0`.** Costs are
 `ℕ`-valued, so "free in expectation" and "free on every run" coincide:
-this upgrades any `𝔼_runtime[…] = 0` theorem (every sampler has one)
+this upgrades any `𝔼[cost …] = 0` theorem (every sampler has one)
 to a statement about the cost *law*. -/
 lemma costPMF_eq_pure_zero {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] {β : Type} {m : TimeMT ℕ M β}
-    (h : 𝔼_runtime[m] = 0) : costPMF m = PMF.pure 0 := by
+    (h : 𝔼[cost m] = 0) : costPMF m = PMF.pure 0 := by
   have hzero : ∀ tm : TimeM ℕ β, tm.time ≠ 0 → TimedPMF m tm = 0 := by
     intro tm hne
     rcases mul_eq_zero.mp (ENNReal.tsum_eq_zero.mp h tm) with h1 | h2
@@ -692,7 +700,7 @@ lemma costPMF_bind_pure {M} [Monad M] [LawfulMonad M]
 /-- The expected cost is the mean of the cost distribution. -/
 lemma expected_cost_eq_expVal_costPMF {M} [Monad M] [LawfulMonad M]
     [LawfulRandMonad M] {α : Type} (m : TimeMT ℕ M α) :
-    𝔼_runtime[m] = expVal (costPMF m) (fun t => (t : ENNReal)) := by
+    𝔼[cost m] = expVal (costPMF m) (fun t => (t : ENNReal)) := by
   rw [costPMF, expVal_map]
   rfl
 
