@@ -43,14 +43,10 @@ import ARA.Algorithms.Treap.Treap
 /-!
 # ARA — Analysis of Randomized Algorithms
 
-A framework for analyzing randomized algorithms in Lean 4, designed so
-that one algorithm definition serves both as an executable program and
-as the object of formal correctness and complexity proofs.
-
 This root module imports the whole framework; `lake build` builds
 everything. The library is organized in three layers:
 
-* `ARA/Infrastructure/` — the engine a user never has to modify:
+* `ARA/Infrastructure/`:
   the cost transformer (`TimeMT`), the randomness interface
   (`RandMonad`/`LawfulRandMonad`), abstract cost ticks (`MonadCost`),
   expected cost and output-functional expectations (`ExpectedCost`),
@@ -58,17 +54,10 @@ everything. The library is organized in three layers:
   combinator (`Amplify`),
   the correctness recipes (`Correctness`), and the simp sets/tactics
   (`SimpAttr`, `Tactics`).
-* `ARA/Helpers/` — shared mathematics used by several algorithms
+
+* `ARA/Helpers/`: shared mathematics used by several algorithms
   (e.g. `Partition`: pivot-partition list lemmas and rank reindexing).
-* `ARA/Algorithms/` — the case studies proving the framework usable,
-  and `Tutorial`, the copy-me template for verifying your own
-  algorithm. **Start there.**
 
-## Design
-
-The design rationale — the shallow no-embedding choice, `PMF` and the
-Giry monad, the one-definition-four-readings architecture, the
-correctness tiers, and the known limitations — lives in `DESIGN.md`
-at the repository root. The user-facing walkthrough is
-`ARA/Algorithms/Tutorial.lean`.
+* `ARA/Algorithms/`: some case studies proving the framework usable,
+  and `Tutorial`, a self-contained tutorial on how to use the framework.
 -/
