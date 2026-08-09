@@ -21,18 +21,18 @@ An algorithm is Dirac-correct when its output distribution is a
 point mass at the specification value. The recipe for proving
 `toPMF (myAlgo args) = PMF.pure (spec args)`:
 
-1. **Spec-transport lemmas** (the mathematics): for each branch, prove
+1. Spec-transport lemmas, the mathematics. For each branch, prove
    how the specification commutes with it (e.g. `orderStat_lt_branch`:
    "if the rank falls in the `<`-side, the order statistic of `L` is
    the order statistic of that side"). Tag them `@[spec_transport]`.
-2. **Induct**: `induction args using myAlgo.induct`; expose the pivot
+2. Induct. `induction args using myAlgo.induct`, then expose the pivot
    choice with the algorithm's `_eq_bind` decomposition lemma.
-3. **Collapse**: `refine toPMF_randIdx_bind_dirac fun i => ?_` reduces
+3. Collapse. `refine toPMF_randIdx_bind_dirac fun i => ?_` reduces
    the goal to a single branch at a fixed pivot `i`.
-4. **Discharge the branch**: `toPMF_step` pushes `toPMF` through the
+4. Discharge the branch. `toPMF_step` pushes `toPMF` through the
    monadic structure (lawful `tick`s vanish, `bind`/`pure`
-   distribute); close each case with the inductive hypotheses and the
-   transport lemmas — or try `dirac_finish`, which attempts all of
+   distribute). Close each case with the inductive hypotheses and the
+   transport lemmas, or try `dirac_finish`, which attempts all of
    step 4 at once and leaves open exactly the missing mathematics.
 
 ## Distributional correctness (Monte Carlo algorithms)
@@ -40,21 +40,21 @@ point mass at the specification value. The recipe for proving
 When the output is genuinely random (e.g. `Karger`), correctness is a
 property of the distribution: typically a support statement
 (one-sided error) plus a success-probability bound, and for the exact
-tier the full output law. The recipe mirrors the Dirac one — unfold,
+tier the full output law. The recipe mirrors the Dirac one. Unfold,
 peel (`toPMF_step` / `toPMF_tick_bind`), uniform-average the pivot,
-discharge each branch, count — with these generic primitives:
+discharge each branch and count, with these generic primitives:
 
-* `toPMF_randIdx_bind_apply` — the output probability is the uniform
+* `toPMF_randIdx_bind_apply`: the output probability is the uniform
   average of the branch probabilities (probabilistic analogue of
   `expected_cost_uniform_step`);
-* `le_toPMF_randIdx_bind` — lower-bound the success probability by a
+* `le_toPMF_randIdx_bind`: lower-bound the success probability by a
   single good pivot;
-* `support_toPMF_randIdx_bind` — the support is the union of the
+* `support_toPMF_randIdx_bind`: the support is the union of the
   branch supports;
 * `toPMF_bind_pure_apply` / `toPMF_map_apply` (+ their `_eq_zero`
-  off-range forms) — pure post-processing along an injective function
+  off-range forms): pure post-processing along an injective function
   just transports probabilities;
-* `mem_support_toPMF_bind_pure` — the support of a post-processed
+* `mem_support_toPMF_bind_pure`: the support of a post-processed
   computation is the image of the support.
 -/
 
@@ -67,7 +67,7 @@ attribute [toPMF_simp] pmf_bind_eq pmf_pure_eq pmf_map_eq
 
 /-! ### Dirac correctness -/
 
-/-- **Dirac collapse.** If every pivot branch produces the same point
+/-- Dirac collapse. If every pivot branch produces the same point
 mass, the uniform pivot choice is invisible: the whole computation is
 that point mass. This is the generic closing step of a Las Vegas
 correctness proof. -/
@@ -146,8 +146,8 @@ calls, to be closed by the inductive hypotheses and (for the Dirac
 tier) the `@[spec_transport]` lemmas. Tier-agnostic: the same
 normalizer drives Dirac, distributional and support proofs.
 
-Accepts a location: `toPMF_step at h` normalizes a hypothesis — the
-form support proofs (`h : out ∈ (…).support`) live on. -/
+Accepts a location: `toPMF_step at h` normalizes a hypothesis, which
+is the form support proofs (`h : out ∈ (…).support`) live on. -/
 scoped syntax "toPMF_step" (Lean.Parser.Tactic.location)? : tactic
 
 scoped macro_rules
@@ -172,7 +172,7 @@ the IHs over the pivot), collapse of the uniform pivot choice
 (`toPMF_randIdx_bind_dirac`), then `dirac_finish` per branch, with a
 `rfl` fallback for base cases whose spec reduces definitionally.
 
-Any goal it leaves open is exactly the missing mathematics — state
+Any goal it leaves open is exactly the missing mathematics. State
 the `@[spec_transport]` lemma it needs and it will close. -/
 scoped macro "dirac_correct" f:ident : tactic =>
   `(tactic| (fun_induction $f <;>

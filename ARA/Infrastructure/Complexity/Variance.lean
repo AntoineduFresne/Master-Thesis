@@ -11,21 +11,21 @@ import ARA.Infrastructure.Randomness.Prob
 
 The second-moment upgrade of the tail-bound tier: where Markov bounds
 `ℙ(g ≥ k)` by `E[g]/k`, Chebyshev bounds the probability of a
-*deviation from the mean* by `Var[g]/k²` — strictly sharper whenever
+*deviation from the mean* by `Var[g]/k²`, strictly sharper whenever
 the second moment is controlled, and much cheaper than Chernoff.
 
 Everything lives in `ℝ≥0∞`, where subtraction truncates; the absolute
 deviation is therefore taken symmetrically:
-`absSub x y = (x − y) + (y − x)` — exactly one summand is nonzero, so
+`absSub x y = (x − y) + (y − x)`: exactly one summand is nonzero, so
 this is `|x − y|`.
 
 ## Main declarations
 
-* `absSub x y` (`x ⊖ y`) — `|x − y|` in `ℝ≥0∞`
-* `variance` — `Var[g] = E[(g ⊖ E[g])²]`
-* `variance_add_sq_mean` / `variance_eq_sub` — the classical identity
+* `absSub x y` (`x ⊖ y`): `|x − y|` in `ℝ≥0∞`
+* `variance`: `Var[g] = E[(g ⊖ E[g])²]`
+* `variance_add_sq_mean` / `variance_eq_sub`: the classical identity
   `Var[g] = E[g²] − E[g]²` (no hypothesis beyond a finite mean)
-* `chebyshev` — `ℙ(|g − E[g]| ≥ k) ≤ Var[g] / k²`
+* `chebyshev`: `ℙ(|g − E[g]| ≥ k) ≤ Var[g] / k²`
 -/
 
 namespace ARA
@@ -34,11 +34,11 @@ open ENNReal
 
 /-! ## The symmetric distance -/
 
-/-- `|x − y|` in `ℝ≥0∞`: truncated subtraction in both directions —
+/-- `|x − y|` in `ℝ≥0∞`: truncated subtraction in both directions,
 exactly one summand is nonzero. Written `x ⊖ y`. -/
 noncomputable def absSub (x y : ℝ≥0∞) : ℝ≥0∞ := (x - y) + (y - x)
 
-/-- `x ⊖ y` — the symmetric distance `|x − y|` in `ℝ≥0∞`, where
+/-- `x ⊖ y`: the symmetric distance `|x − y|` in `ℝ≥0∞`, where
 ordinary subtraction truncates. -/
 scoped notation:70 x " ⊖ " y => absSub x y
 
@@ -51,7 +51,7 @@ lemma absSub_comm (x y : ℝ≥0∞) : absSub x y = absSub y x := by
 lemma absSub_of_le {x y : ℝ≥0∞} (h : y ≤ x) : absSub x y = x - y := by
   rw [absSub, tsub_eq_zero_of_le h, add_zero]
 
-/-- The algebraic core of the variance identity, valid for **all**
+/-- The algebraic core of the variance identity, valid for all
 `x, y : ℝ≥0∞` (including `∞`): `|x − y|² + 2xy = x² + y²`. -/
 lemma absSub_sq_add_two_mul (x y : ℝ≥0∞) :
     absSub x y ^ 2 + 2 * x * y = x ^ 2 + y ^ 2 := by
@@ -87,12 +87,12 @@ lemma absSub_sq_add_two_mul (x y : ℝ≥0∞) :
 
 /-! ## Variance -/
 
-/-- **Variance**: the expected squared deviation from the mean. -/
+/-- Variance: the expected squared deviation from the mean. -/
 noncomputable def variance {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) : ℝ≥0∞ :=
   expVal p (fun a => (g a ⊖ expVal p g) ^ 2)
 
-/-- The variance identity in cancellation-free form —
-`Var[g] + 2·E[g]² = E[g²] + E[g]²` — valid with **no** hypotheses. -/
+/-- The variance identity in cancellation-free form,
+`Var[g] + 2·E[g]² = E[g²] + E[g]²`, valid with no hypotheses. -/
 lemma variance_add_sq_mean {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) :
     variance p g + 2 * expVal p g ^ 2 =
       expVal p (fun a => g a ^ 2) + expVal p g ^ 2 := by
@@ -107,7 +107,7 @@ lemma variance_add_sq_mean {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) :
   rw [← pow_two] at h
   exact h
 
-/-- **The variance identity** `Var[g] = E[g²] − E[g]²`, whenever the
+/-- The variance identity `Var[g] = E[g²] − E[g]²`, whenever the
 mean is finite. -/
 theorem variance_eq_sub {α : Type*} (p : PMF α) (g : α → ℝ≥0∞)
     (hμ : expVal p g ≠ ⊤) :
@@ -122,7 +122,7 @@ theorem variance_eq_sub {α : Type*} (p : PMF α) (g : α → ℝ≥0∞)
 
 /-! ## Chebyshev's inequality -/
 
-/-- **Chebyshev's inequality**: the probability that `g` deviates from
+/-- Chebyshev's inequality: the probability that `g` deviates from
 its mean by at least `k` is at most `Var[g] / k²`. -/
 theorem chebyshev {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) {k : ℝ≥0∞}
     (hk0 : k ≠ 0) (hktop : k ≠ ⊤) :

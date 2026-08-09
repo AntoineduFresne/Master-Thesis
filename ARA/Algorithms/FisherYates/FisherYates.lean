@@ -13,9 +13,9 @@ import Mathlib.Data.List.Permutation
 # Fisher–Yates shuffle
 
 Shuffle a list by repeatedly moving a uniformly random remaining
-element to the front — the selection form of the Fisher–Yates
-algorithm. Its output distribution is **exactly uniform over the
-permutations** of the input: the canonical exact-distribution result
+element to the front, the selection form of the Fisher–Yates
+algorithm. Its output distribution is exactly uniform over the
+permutations of the input: the canonical exact-distribution result
 of the framework's distributional tier.
 
 Like `randBit`/`randVec`, the shuffle is a *sampler*: it consumes
@@ -25,13 +25,13 @@ their own work.
 
 ## Main results
 
-* `shuffle_uniform` — on a duplicate-free list, the output
+* `shuffle_uniform`: on a duplicate-free list, the output
   distribution is exactly uniform over `L.permutations`.
-* `shuffle_perm_apply` — pointwise form: each permutation of `L`
+* `shuffle_perm_apply`: pointwise form: each permutation of `L`
   appears with probability exactly `1 / n!`.
-* `support_shuffle` — for **any** list, every output is a permutation
+* `support_shuffle`: for any list, every output is a permutation
   of the input (no `Nodup` needed).
-* `expected_cost_shuffle` / `costPMF_shuffle` — the shuffle is free,
+* `expected_cost_shuffle` / `costPMF_shuffle`: the shuffle is free,
   on every run and not just on average.
 
 The pointwise form is the exchangeability lemma the treap
@@ -78,8 +78,8 @@ noncomputable example : List ℕ → PMF (List ℕ) := shuffle
 ## Support: outputs are permutations
 -/
 
-/-- Every output of the shuffle is a permutation of the input — for
-**any** list, duplicates allowed. -/
+/-- Every output of the shuffle is a permutation of the input, for
+any list, duplicates allowed. -/
 theorem support_shuffle
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) :
@@ -158,8 +158,8 @@ private lemma toPMF_shuffle_apply
           (Or.inl (ENNReal.natCast_ne_top _))]
       rw [Nat.factorial_succ, hfact]
 
-/-- **Pointwise uniformity.** On a duplicate-free list, each
-permutation of `L` is produced with probability exactly `1 / n!` —
+/-- Pointwise uniformity. On a duplicate-free list, each
+permutation of `L` is produced with probability exactly `1 / n!`,
 the exchangeability lemma of the shuffle. -/
 theorem shuffle_perm_apply
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -167,7 +167,7 @@ theorem shuffle_perm_apply
     ℙ_{M}[shuffle L = out] = ((L.length ! : ℕ) : ENNReal)⁻¹ :=
   toPMF_shuffle_apply L hnd out hperm
 
-/-- **Fisher–Yates samples uniformly.** On a duplicate-free list the
+/-- Fisher–Yates samples uniformly. On a duplicate-free list the
 output distribution is exactly the uniform distribution over all
 permutations of the input. -/
 theorem shuffle_uniform

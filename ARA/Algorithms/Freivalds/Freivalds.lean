@@ -26,14 +26,14 @@ specification, and as timed algorithm.
 
 ## Main results
 
-* `freivalds_complete` — **no false negatives**: if `A * B = C` the
+* `freivalds_complete`: no false negatives: if `A * B = C` the
   test accepts with probability `1`.
-* `freivalds_sound` — **one-sided error**: if `A * B ≠ C` the test
+* `freivalds_sound`: one-sided error: if `A * B ≠ C` the test
   accepts with probability at most `1/2`. This is the framework's
   bounded-error tier (amplify by repetition). Proved over any
   `CommRing` by the pairing argument: flipping the `j`-th bit of a
   witness column pairs each accepting vector with a rejecting one.
-* `freivalds_cost_exact` / `freivalds_costPMF` — `3n²` ring multiplications
+* `freivalds_cost_exact` / `freivalds_costPMF`: `3n²` ring multiplications
   (three matrix-vector products), against `n³` for naive
   recomputation. Honesty note: the cost model charges the three
   matrix-vector products as one wholesale tick, so this theorem reads
@@ -56,7 +56,7 @@ def freivaldsCheck [DecidableEq R] (A B C : Matrix (Fin n) (Fin n) R)
   decide (A.mulVec (B.mulVec r) = C.mulVec r)
 
 /-- Freivalds' algorithm: sample a random `0/1` vector and run the
-verifier — `3n²` ring multiplications (three matrix-vector products)
+verifier: `3n²` ring multiplications (three matrix-vector products)
 instead of the `n³` of recomputing `A * B`. -/
 def freivalds {M} [Monad M] [RandMonad M] [MonadCost ℕ M] [DecidableEq R]
     (A B C : Matrix (Fin n) (Fin n) R) : M Bool := do
@@ -89,7 +89,7 @@ private lemma freivaldsCheck_iff [DecidableEq R]
   rw [freivaldsCheck, decide_eq_true_eq, Matrix.sub_mulVec,
     ← Matrix.mulVec_mulVec, sub_eq_zero]
 
-/-- **Completeness (no false negatives).** If `A * B = C`, Freivalds
+/-- Completeness (no false negatives). If `A * B = C`, Freivalds
 always accepts, over any `LawfulRandMonad` and any lawful cost
 model. -/
 theorem freivalds_complete
@@ -110,7 +110,7 @@ If `D := A*B − C` has a nonzero entry `D i j`, flipping the `j`-th bit
 of any test vector changes `(D r) i` by `± D i j ≠ 0`, so of the two
 vectors that differ exactly in bit `j`, at most one can pass the test.
 The flip is an involution, so at most half of the `2^n` vectors
-accept. This works over any `CommRing` — no field needed. -/
+accept. This works over any `CommRing`, with no field needed. -/
 
 /-- `mulVec` after updating one coordinate of the vector. -/
 private lemma mulVec_update (D : Matrix (Fin n) (Fin n) R)
@@ -165,8 +165,8 @@ private lemma not_check_both [DecidableEq R]
   · rw [hv, if_pos (by decide : (1 : Fin 2) + 1 = 0),
       if_neg (by decide : ¬ (1 : Fin 2) = 0)]; ring
 
-/-- **Soundness (one-sided error).** If `A * B ≠ C`, Freivalds accepts
-with probability at most `1/2` — over any commutative ring. -/
+/-- Soundness (one-sided error). If `A * B ≠ C`, Freivalds accepts
+with probability at most `1/2`, over any commutative ring. -/
 theorem freivalds_sound
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq R]
@@ -219,8 +219,8 @@ one `tick (3 * n * n)` and nothing else (the random vector is free,
 back; instrumenting `mulVec` per multiplication is future work.
 -/
 
-/-- **Exact cost.** Freivalds performs exactly `3n²` ring
-multiplications — three matrix-vector products — against the `n³` of
+/-- Exact cost. Freivalds performs exactly `3n²` ring
+multiplications (three matrix-vector products) against the `n³` of
 recomputing `A * B`. -/
 theorem freivalds_cost_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] [DecidableEq R]
@@ -229,7 +229,7 @@ theorem freivalds_cost_exact
   rw [freivalds]
   cost_step
 
-/-- **Deterministic cost.** The cost law is a point mass: *every* run
+/-- Deterministic cost. The cost law is a point mass: *every* run
 costs exactly `3n²`, not merely on average. -/
 theorem freivalds_costPMF
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] [DecidableEq R]

@@ -23,15 +23,15 @@ as specification (`M = PMF`), and as timed algorithm
 
 ## Main results
 
-* `reservoir_correct` — **exact uniformity**: each element is
+* `reservoir_correct`: exact uniformity: each element is
   returned with probability `count a / |L|`. Unlike
   `Quicksort`/`Quickselect`, the output distribution is not a point
   mass, this is an example of the framework's distributional tier, the
   headline claim of the `PMF` shallow embedding.
-* `reservoir_none_eq_zero` — the sampler never returns `none` on a nonempty
+* `reservoir_none_eq_zero`: the sampler never returns `none` on a nonempty
   list.
-* `reservoir_cost_exact` / `reservoir_costPMF` — one coin per stream
-  element after the first: exactly `n − 1` ticks, on every run — a
+* `reservoir_cost_exact` / `reservoir_costPMF`: one coin per stream
+  element after the first: exactly `n − 1` ticks, on every run, a
   single pass.
 -/
 
@@ -90,7 +90,7 @@ its `1/(seen+j)` coin and survives all later coins. Stated with
 multiplicities via `List.count`, over any `LawfulRandMonad`.
 -/
 
-/-- **Streaming invariant.** The output distribution of the core loop:
+/-- Streaming invariant. The output distribution of the core loop:
 `cur` weighted `seen`, every stream element weighted its multiplicity,
 normalized by the total number of elements seen at the end. -/
 private lemma toPMF_reservoirAux
@@ -148,7 +148,7 @@ private lemma toPMF_reservoirAux
     rw [← mul_assoc, ENNReal.inv_mul_cancel (by simp) (ENNReal.natCast_ne_top _),
       one_mul]
 
-/-- **Correctness (exact uniformity).** For any `LawfulRandMonad`, each
+/-- Correctness (exact uniformity). For any `LawfulRandMonad`, each
 element of `L` is returned with probability `count a / |L|`; on a
 distinct list, every element has probability exactly `1/n`. Note the
 statement is about the *whole distribution*, not a point mass. -/
@@ -230,8 +230,8 @@ private lemma expected_cost_reservoirAux
     push_cast
     ring
 
-/-- **Exact cost.** Reservoir sampling makes exactly `n − 1` coin
-flips/ticks on a list of length `n` — a single pass. -/
+/-- Exact cost. Reservoir sampling makes exactly `n − 1` coin
+flips/ticks on a list of length `n`, a single pass. -/
 theorem reservoir_cost_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (L : List α) :
@@ -255,7 +255,7 @@ theorem reservoir_correct_pmf [DecidableEq α] (L : List α) (a : α) :
   reservoir_correct (M := PMF) L a
 
 /-- The streaming loop's cost *law* is the point mass at the number of
-elements processed: one tick per element, on **every** run. -/
+elements processed: one tick per element, on every run. -/
 private lemma costPMF_reservoirAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
     ∀ (xs : List α) (seen : ℕ) (cur : α),
@@ -272,7 +272,7 @@ private lemma costPMF_reservoirAux
       rw [MonadCost.tick_timeMT, costPMF_tick_bind, ih i, PMF.pure_map]
       simp [Nat.add_comm]
 
-/-- **Deterministic cost.** The cost law of reservoir sampling is the
+/-- Deterministic cost. The cost law of reservoir sampling is the
 point mass at `n − 1`: a run makes exactly `n − 1` coin flips, not
 merely `n − 1` on average. -/
 theorem reservoir_costPMF

@@ -11,19 +11,19 @@ import Mathlib.NumberTheory.Harmonic.Defs
 # The coupon collector
 
 `n` coupon types, uniform independent draws: collecting every type
-takes `n·H(n)` draws in expectation — the classical harmonic-number
+takes `n·H(n)` draws in expectation, the classical harmonic-number
 bound, exactly.
 
 ## Modelling: a cost law, not a program
 
-This case study **deliberately bypasses the program layer**, and it is
+This case study deliberately bypasses the program layer, and it is
 the only one that does. "Draw until a new type appears" is a retry
 loop that terminates only *almost surely*, so it is not a structurally
 terminating Lean program and cannot be written in the `RandMonad` /
 `MonadCost` style of the other case studies; that is precisely the
 expressivity gate a sub-probability layer would open.
 
-What *is* expressible — and is the object below — is its **cost law**:
+What *is* expressible, and is the object below, is its cost law:
 each stage is a `geometricTrials` distribution (the number of draws
 until the current success probability `m/n` fires), and the stages
 compose by `bind`. So this file exercises the framework's
@@ -32,9 +32,9 @@ program tier, and the theorem is an exact expectation over that law.
 
 ## Main results
 
-* `couponCollector_cost_exact` — `𝔼[draws] = Σ_{r<n} n/(r+1)`, exactly,
+* `couponCollector_cost_exact`: `𝔼[draws] = Σ_{r<n} n/(r+1)`, exactly,
   in `ℝ≥0∞`.
-* `couponCollector_cost_exact_real` — the classical form
+* `couponCollector_cost_exact_real`: the classical form
   `𝔼[draws] = n·H(n)` in `ℝ`.
 -/
 
@@ -88,13 +88,13 @@ private lemma mean_couponCollectorAux (n : ℕ) :
     rw [couponCollectorAux, mean_bind_add, mean_geometricTrials hp0 hptop hp1,
       ih (Nat.le_of_succ_le hmn), Finset.sum_range_succ, hpinv, add_comm]
 
-/-- **The coupon collector, exactly** (in `ℝ≥0∞`): collecting all `n`
+/-- The coupon collector, exactly (in `ℝ≥0∞`): collecting all `n`
 types takes `Σ_{r<n} n/(r+1)` draws in expectation. -/
 theorem couponCollector_cost_exact (n : ℕ) :
     𝔼[couponCollector n] = ∑ r ∈ Finset.range n, (n : ℝ≥0∞) / ((r : ℝ≥0∞) + 1) :=
   mean_couponCollectorAux n n le_rfl
 
-/-- **The coupon collector, classically**: `n·H(n)` expected draws. -/
+/-- The coupon collector, classically: `n·H(n)` expected draws. -/
 theorem couponCollector_cost_exact_real (n : ℕ) :
     (𝔼[couponCollector n]).toReal = ((n * harmonic n : ℚ) : ℝ) := by
   rw [couponCollector_cost_exact,

@@ -10,20 +10,20 @@ import ARA.Infrastructure.Complexity.MonadCost
 /-!
 # Timed semantics
 
-The meaning of a `TimeMT`-timed computation — what it *outputs*, as
+The meaning of a `TimeMT`-timed computation, that is what it *outputs* as
 opposed to what it costs. Split out of `ExpectedCost` because none of
 it mentions an expected value; it sits between the cost transformer
 (`TimeMT`, `MonadCost`) and the cost analysis (`ExpectedCost`), which
 is why it lives in `Complexity/` even though what it delivers is
 correctness:
 
-* `RandMonad (TimeMT ℕ M)` — timed programs can flip coins;
-* the clock-erasure lemmas — `TimeM.ret <$> ·` distributes through
+* `RandMonad (TimeMT ℕ M)`: timed programs can flip coins;
+* the clock-erasure lemmas: `TimeM.ret <$> ·` distributes through
   the combinators;
-* `LawfulRandMonad (TimeMT ℕ M)` — the output distribution of a
+* `LawfulRandMonad (TimeMT ℕ M)`: the output distribution of a
   timed program is its clock erasure, so every generic correctness
   theorem instantiates at `TimeMT ℕ PMF` for free;
-* `LawfulMonadCost` — cost models whose `tick` is invisible to the
+* `LawfulMonadCost`: cost models whose `tick` is invisible to the
   output distribution (`toPMF_tick_bind` peels a lawful tick in one
   rewrite): one correctness statement covers every cost reading.
 
@@ -104,7 +104,7 @@ lemma TimeMT_erase_lift
 computation by erasing the clock (`TimeM.ret <$> ·.run`) and
 interpreting the result in `M`. The erasure lemmas above are exactly
 the three laws. Consequence: every generic correctness theorem
-instantiates at `M := TimeMT ℕ PMF` for free — correctness of the
+instantiates at `M := TimeMT ℕ PMF` for free, so correctness of the
 timed program is never a separate proof obligation. -/
 noncomputable instance instLawfulRandMonadTimeMT
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :
@@ -117,11 +117,11 @@ noncomputable instance instLawfulRandMonadTimeMT
     intro hn
     rw [randFin_timeMT, TimeMT_erase_lift, inst.toPMF_randFin]
 
-/-- A cost model is **lawful** when ticking is invisible to the output
+/-- A cost model is lawful when ticking is invisible to the output
 distribution. Both canonical instances qualify: the no-op default and
 the accumulating `TimeMT` one. A correctness theorem stated with
 `[MonadCost C M] [LawfulMonadCost C M]` therefore covers every cost
-reading of the algorithm at once — in particular it instantiates at
+reading of the algorithm at once. In particular it instantiates at
 `M := TimeMT ℕ PMF` with real ticks, so timed correctness is free. -/
 class LawfulMonadCost (C : Type) (M : Type → Type)
     [Monad M] [LawfulMonad M] [LawfulRandMonad M] [MonadCost C M] :

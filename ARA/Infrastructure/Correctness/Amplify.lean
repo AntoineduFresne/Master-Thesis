@@ -20,29 +20,29 @@ probability at least
 ```
 
 so the failure probability decays geometrically in the number of runs
-— the "repeat and keep the best" argument, proved once, inherited by
+This is the "repeat and keep the best" argument, proved once and inherited by
 every Monte-Carlo algorithm (`karger_amplified` is the first client).
 
 The hypotheses are phrased on an *invariant* set `V` containing the
-support of one run — typically supplied by the algorithm's one-sided
+support of one run, typically supplied by the algorithm's one-sided
 correctness theorem ("every output is at least the minimum cut"):
 
-* `hclosed` — `best` does not leave `V`;
-* `hkeep` — on `V`, `best` returns a success as soon as either
+* `hclosed`: `best` does not leave `V`;
+* `hkeep`: on `V`, `best` returns a success as soon as either
   argument is one.
 
 ## Main declarations
 
-* `amplify` — `k` independent runs combined with `best`
-* `support_amplify_subset` — one-sided correctness survives
+* `amplify`: `k` independent runs combined with `best`
+* `support_amplify_subset`: one-sided correctness survives
   amplification
-* `prob_amplify_compl_le` — the failure product `q ^ k`
-* `amplify_success` — the amplification theorem `1 − (1 − p) ^ k`
-* `amplify_min_success` / `amplify_max_success` — the ready-made form
+* `prob_amplify_compl_le`: the failure product `q ^ k`
+* `amplify_success`: the amplification theorem `1 − (1 − p) ^ k`
+* `amplify_min_success` / `amplify_max_success`: the ready-made form
   for one-sided algorithms on a linear order: the hypotheses are
   exactly the support and success theorems such an algorithm already
   provides
-* `expected_cost_amplify` — `k + 1` runs cost `k + 1` times one run
+* `expected_cost_amplify`: `k + 1` runs cost `k + 1` times one run
 
 Statements are phrased with the `ℙ[m ∈ S]` / `ℙ[m = v]` notation from
 `ARA.Infrastructure.Complexity.TailBounds`.
@@ -55,7 +55,7 @@ open scoped ENNReal
 
 /-! ## The combinator -/
 
-/-- `amplify best k m` — run `m` `k` times independently and combine
+/-- `amplify best k m`: run `m` `k` times independently and combine
 the answers with `best`. `k = 0` degenerates to a single run: a
 probabilistic computation cannot produce "no output". -/
 def amplify {M} [Monad M] {β : Type} (best : β → β → β) : ℕ → M β → M β
@@ -82,7 +82,7 @@ lemma amplify_succ_succ {M} [Monad M] {β : Type} (best : β → β → β)
 
 /-! ## The failure product -/
 
-/-- **Two-run failure bound.** If (on the supports) a failure of the
+/-- Two-run failure bound. If (on the supports) a failure of the
 combined answer `best a b` forces both runs to have failed, the failure
 probability of the combined run is at most the product of the
 individual failure probabilities. -/
@@ -145,7 +145,7 @@ lemma support_amplify_subset
       obtain ⟨b, hb, rfl⟩ := mem_support_toPMF_bind_pure.mp hc'
       exact hclosed a (hsupp ha) b (ih hb)
 
-/-- **Failure product.** All `k` runs must fail for the amplified run
+/-- Failure product. All `k` runs must fail for the amplified run
 to fail, so the failure probability is at most the `k`-th power of the
 single-run failure probability. -/
 theorem prob_amplify_compl_le
@@ -173,8 +173,8 @@ theorem prob_amplify_compl_le
         ?_
       exact le_trans (mul_le_mul' le_rfl ih) (le_of_eq (by ring))
 
-/-- **The amplification theorem.** If one run of `m` succeeds — lands
-in `S` — with probability at least `p`, then `k` independent runs
+/-- The amplification theorem. If one run of `m` succeeds, that is
+lands in `S`, with probability at least `p`, then `k` independent runs
 combined with a success-keeping `best` succeed with probability at
 least `1 − (1 − p) ^ k`. -/
 theorem amplify_success
@@ -199,8 +199,8 @@ theorem amplify_success
 def argmin {β γ : Type} [LinearOrder γ] (f : β → γ) (a b : β) : β :=
   if f a ≤ f b then a else b
 
-/-- **`amplify_success` for one-sided algorithms that return a
-witness.** If every output of `m` has measure at least `c` and `m`
+/-- `amplify_success` for one-sided algorithms that return a
+witness. If every output of `m` has measure at least `c` and `m`
 attains `c` with probability at least `p`, then keeping the
 smallest-measure answer over `k` independent runs attains `c` with
 probability at least `1 − (1 − p) ^ k`.

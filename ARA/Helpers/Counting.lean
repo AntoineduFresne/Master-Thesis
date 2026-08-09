@@ -13,7 +13,7 @@ import Mathlib.Data.Finset.Card
 Shared counting arguments for Monte-Carlo soundness proofs
 (Mathlib-only, no framework imports).
 
-* `two_mul_card_filter_le_of_involutive` — the **involution pairing**
+* `two_mul_card_filter_le_of_involutive`: the involution pairing
   principle: if an involution pairs every accepting element with a
   rejecting one, at most half the elements accept. This is the
   combinatorial core of `Freivalds`' 1/2 soundness bound (flip one bit
@@ -23,7 +23,7 @@ Shared counting arguments for Monte-Carlo soundness proofs
 
 namespace ARA
 
-/-- **Involution pairing.** If `ι` is an involution and every accepting
+/-- Involution pairing. If `ι` is an involution and every accepting
 element (`P x`) is paired with a rejecting one (`¬ P (ι x)`), then at
 most half of the elements accept: `2 · #accepting ≤ #β`. -/
 theorem two_mul_card_filter_le_of_involutive {β : Type*} [Fintype β]

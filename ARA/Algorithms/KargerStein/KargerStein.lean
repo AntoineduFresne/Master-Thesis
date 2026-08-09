@@ -12,27 +12,27 @@ import ARA.Algorithms.Karger.Karger
 A single contraction run succeeds with probability only `Θ(1/n²)`, but
 the *early* contractions are nearly safe and only the late ones are
 risky. Karger–Stein contracts down to `ksTarget n ≈ n/√2` supervertices
-— which preserves the minimum cut with probability `≥ 1/2`, by the
-*definition* of `ksTarget` — and spends the repetition budget on the
+which preserves the minimum cut with probability `≥ 1/2`, by the
+*definition* of `ksTarget`, and spends the repetition budget on the
 risky small graphs by recursing twice and keeping the better answer.
 
 ## Main results
 
-* `kargerStein_finds_min` — a run returns an actual **minimum cut**
+* `kargerStein_finds_min`: a run returns an actual minimum cut
   with probability at least `1 / (ksDepth n + 3)`, where `ksDepth n`
   is the recursion depth (`≈ 2·log₂ n`; the `⌈log⌉` form of the bound
   is stated in `KargerStein.md` §6).
-* `kargerStein_isCut` — one-sided error: every output is a partition
+* `kargerStein_isCut`: one-sided error: every output is a partition
   into genuine cuts of the reported value, never undershooting.
-* `kargerStein_cost_le` — expected cost at most `(2^(d+2) − 2)·n·m` in
+* `kargerStein_cost_le`: expected cost at most `(2^(d+2) − 2)·n·m` in
   the edge-list cost model (the interim bound of `KargerStein.md` §5;
   the level-sum `7n²m` refinement is future work).
 
 ## Architecture
 
 The recursion operates directly on the supervertex graphs of
-`ARA.Helpers.MultiGraph` — contraction preserves the vertex type, so
-no re-lifting is ever needed — and consumes Karger's shared kernel:
+`ARA.Helpers.MultiGraph`, since contraction preserves the vertex type, so
+no re-lifting is ever needed, and consumes Karger's shared kernel:
 `contractAux` (the loop), `success_contractAux` (survival of the
 minimum cut through partial contraction) and `support_contractAux`
 (the run invariant), together with the `amplify` layer for the
@@ -60,7 +60,7 @@ private lemma ksTarget_exists (n : ℕ) :
       _ ≤ 2 * (max n 2 * (max n 2 - 1)) := Nat.le_mul_of_pos_left _ (by omega)⟩
 
 /-- The contraction target: the least `t ≥ 2` at which the survival
-probability `t(t−1)/(n(n−1))` of a fixed minimum cut reaches `1/2` —
+probability `t(t−1)/(n(n−1))` of a fixed minimum cut reaches `1/2`,
 classically `⌈1 + n/√2⌉`, characterized integrally (no `√2`). -/
 def ksTarget (n : ℕ) : ℕ := Nat.find (ksTarget_exists n)
 
@@ -73,7 +73,7 @@ lemma ksTarget_bound (n : ℕ) :
     n * (n - 1) ≤ 2 * (ksTarget n * (ksTarget n - 1)) :=
   (Nat.find_spec (ksTarget_exists n)).2
 
-/-- The target genuinely shrinks the graph — exactly from `n = 4` on,
+/-- The target genuinely shrinks the graph, exactly from `n = 4` on,
 which delimits the recursion's base case. -/
 lemma ksTarget_lt {n : ℕ} (h4 : 4 ≤ n) : ksTarget n < n := by
   have hle : ksTarget n ≤ n - 1 := by
@@ -122,7 +122,7 @@ def kargerSteinAux {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
         let h ← contractAux (g.verts.card - 2) g
         pure (h.verts, h.edges.length)
 
-/-- **The Karger–Stein algorithm**: recursive contraction with fuel
+/-- The Karger–Stein algorithm: recursive contraction with fuel
 `ksDepth n` (exactly the recursion depth), on the supervertex lift. -/
 def KargerStein {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     (g : MultiGraph α) : M (Finset (Finset α) × ℕ) :=
@@ -305,7 +305,7 @@ private lemma ennreal_one_sub_inv_natCast {c : ℕ} (hc : 0 < c) :
   exact (ENNReal.eq_sub_of_add_eq
     ((ENNReal.div_lt_top (by simp) (by exact_mod_cast hc.ne')).ne) hsum).symm
 
-/-- **Success of a fueled run**: with fuel at least the recursion
+/-- Success of a fueled run: with fuel at least the recursion
 depth, a run reports the current minimum-cut value with probability at
 least `1/(ksDepth n + 3)`. -/
 private theorem success_kargerSteinAux
@@ -466,7 +466,7 @@ private theorem success_kargerSteinAux
 
 /-! ## Main theorems -/
 
-/-- **One-sided error.** Every output of Karger–Stein is a partition
+/-- One-sided error. Every output of Karger–Stein is a partition
 of `g` into genuine cuts of the reported value, and the reported value
 never undershoots the minimum. -/
 theorem kargerStein_isCut
@@ -482,7 +482,7 @@ theorem kargerStein_isCut
   exact ⟨hcut, hle⟩
 
 /-- Karger–Stein reports the minimum-cut value with probability at
-least `1/(ksDepth n + 3)` — with `ksDepth n ≈ 2 log₂ n`, an
+least `1/(ksDepth n + 3)`, and with `ksDepth n ≈ 2 log₂ n` this is an
 exponential improvement over a single run's `2/(n(n−1))`. -/
 theorem kargerStein_success_prob
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -496,9 +496,9 @@ theorem kargerStein_success_prob
   rw [minCutValue_super h2, card_verts_super] at hmain
   exact hmain
 
-/-- **The Karger–Stein theorem.** A single run returns an actual
-**minimum cut** — every reported side is a genuine cut of value
-exactly `minCutValue` — with probability at least
+/-- The Karger–Stein theorem. A single run returns an actual
+minimum cut (every reported side is a genuine cut of value
+exactly `minCutValue`) with probability at least
 `1/(ksDepth n + 3)`. -/
 theorem kargerStein_finds_min
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -517,7 +517,7 @@ theorem kargerStein_finds_min
 The interim bound of `KargerStein.md` §5: each of the `≤ 2^(fuel+1)`
 tree nodes runs a contraction pass of at most `n` rounds costing at
 most `m` each (edge counts and vertex counts never increase down a
-path — this is where well-formedness enters, unlike Karger's bound).
+path, which is where well-formedness enters, unlike Karger's bound).
 The level-sum refinement to `7 n² m` is future work. -/
 
 private lemma cost_kargerSteinAux
@@ -617,9 +617,9 @@ private lemma cost_kargerSteinAux
               Nat.le_mul_of_pos_left _ hpos
       exact_mod_cast hnat
 
-/-- **Expected cost of Karger–Stein** (interim bound, edge-list model):
-at most `(2^(d+2) − 2)·n·m` where `d = ksDepth n`. Needs `g.WF` —
-unlike Karger's bound — because the recursion's cost is controlled by
+/-- Expected cost of Karger–Stein (interim bound, edge-list model):
+at most `(2^(d+2) − 2)·n·m` where `d = ksDepth n`. Needs `g.WF`,
+unlike Karger's bound, because the recursion's cost is controlled by
 the run invariant. -/
 theorem kargerStein_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]

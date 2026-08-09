@@ -70,7 +70,7 @@ lemma ennreal_inv_nsmul_cancel {n : ℕ} [NeZero n] (t : ENNReal) :
   · exact_mod_cast NeZero.ne n
   · exact ENNReal.natCast_ne_top n
 
-/-! ##### A.2  PMF Monad Laws (@[simp] — safe normalization) -/
+/-! ##### A.2  PMF Monad Laws (@[simp], safe normalization) -/
 
 attribute [simp] PMF.pure_bind    -- `pure a >>= f = f a`
 attribute [simp] PMF.bind_pure    -- `p >>= pure = p`
@@ -114,7 +114,7 @@ attribute [grind =] PMF.pure_bindOnSupport
 attribute [grind =] PMF.bindOnSupport_apply
 
 /-! ================================================================
-    LAYER B: pmf_simp_attr — concrete probability computation
+    LAYER B: pmf_simp_attr, concrete probability computation
     ================================================================
 
   The simp set for computing things like P(X = 3) = 1/12: it collapses
@@ -242,9 +242,9 @@ lemma ennreal_div_le_div_nat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)
     (Or.inl (ENNReal.natCast_ne_top d))]
   exact_mod_cast h
 
-/-- **The ℚ≥0 → ℝ≥0∞ bridge** for probability bounds: a comparison of
-natural fractions proved in `ℚ≥0` — where Mathlib's counting results
-(e.g. Schwartz–Zippel) live — transfers directly to the `ℝ≥0∞` the
+/-- The ℚ≥0 → ℝ≥0∞ bridge for probability bounds: a comparison of
+natural fractions proved in `ℚ≥0`, where Mathlib's counting results
+(e.g. Schwartz–Zippel) live, transfers directly to the `ℝ≥0∞` the
 framework's probabilities live in. One call replaces the
 cross-multiplication ceremony. -/
 lemma ennreal_div_le_div_of_nnrat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)

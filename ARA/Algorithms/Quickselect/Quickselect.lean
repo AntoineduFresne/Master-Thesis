@@ -23,18 +23,18 @@ specification (`M = PMF`), and as timed algorithm (`M = TimeMT ℕ M'`).
 
 ## Main results
 
-* `quickselect_correct` — over any `LawfulRandMonad`, the output
+* `quickselect_correct`: over any `LawfulRandMonad`, the output
   distribution is the Dirac mass at the true order statistic
   `orderStat L k`; the answer never depends on the random pivots.
   No hypotheses on `L` or `k` are required.
-* `quickselect_cost_le_quadratic_real` — for arbitrary lists (possibly
+* `quickselect_cost_le_quadratic_real`: for arbitrary lists (possibly
   with duplicates) and any rank, the expected cost is at most `C(n,2)`,
   tight on all-equal inputs.
-* `quickselect_cost_le_linear` — with one tick per pivot
+* `quickselect_cost_le_linear`: with one tick per pivot
   comparison, the expected cost on a list of `n` distinct elements
   is at most `4 n`: a linear bound, in contrast to QuickSort's
   `Θ(n log n)`.
-* `quickselect_cost_exact` — Knuth's (1971) exact
+* `quickselect_cost_exact`: Knuth's (1971) exact
   expected cost of selecting rank `k` (0-indexed) from `n` distinct
   elements: `2(n + 3 + (n+1)·H(n) − (k+3)·H(k+1) − (n+2−k)·H(n−k))`
   comparisons.
@@ -89,7 +89,7 @@ def Quickselect_IO : List ℕ → ℕ → IO ℕ := Quickselect
 
 #eval Quickselect_IO [5, 3, 8, 1, 9, 2] 2
 
--- PMF reading (noncomputable specification; an `example` suffices —
+-- PMF reading (noncomputable specification; an `example` suffices,
 -- theorems are stated about `Quickselect` itself)
 noncomputable example : List ℕ → ℕ → PMF ℕ := Quickselect
 
@@ -160,7 +160,7 @@ sides).
 /-- Rank `k` falls in the `< pivot` side: the order statistic is found
 left of the pivot. Stated with a ℕ index in `simp`-normal form and
 oriented "branch = spec" (the pivot occurs on the left, so simp can
-instantiate it) — the convention `dirac_correct` consumes. -/
+instantiate it), the convention `dirac_correct` consumes. -/
 @[spec_transport]
 private lemma orderStat_lt_branch (L : List α) (i : ℕ) (hi : i < L.length)
     {k : ℕ} (hk : k < ((L.eraseIdx i).filter (· < L[i])).length) :
@@ -240,7 +240,7 @@ theorem quickselect_correct_pmf (L : List α) (k : ℕ) :
 
 /-- Timed PMF correctness for free: `TimeMT ℕ PMF` is itself a lawful
 random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
-instantiates directly — erasing the clock *is* its `toPMF`. -/
+instantiates directly, since erasing the clock *is* its `toPMF`. -/
 theorem quickselect_correct_timed_pmf (L : List α) (k : ℕ) :
     𝒟_{TimeMT ℕ PMF}[Quickselect L k] = PMF.pure (orderStat L k) :=
   quickselect_correct (M := TimeMT ℕ PMF) L k
@@ -270,8 +270,8 @@ bookkeeping is needed; the exact formula descends to `ℝ` via `toReal`,
 with finiteness supplied by the `C(n,2)` bound.
 -/
 
-/-- The recursive part of the per-pivot step cost — the cost of the
-branch actually taken, **named once** so no proof ever restates the
+/-- The recursive part of the per-pivot step cost, the cost of the
+branch actually taken, named once so no proof ever restates the
 if-tree. -/
 private noncomputable def qselRecCost (M : Type → Type) [Monad M]
     [LawfulMonad M] [LawfulRandMonad M]
@@ -372,7 +372,7 @@ theorem quickselect_cost_le_quadratic_real
     (quickselect_cost_le_quadratic (M := M) L k)
   simpa using this
 
-/-- Finiteness of the expected cost — a free corollary of the `C(n,2)`
+/-- Finiteness of the expected cost, a free corollary of the `C(n,2)`
 bound, no separate induction needed. Feeds the `toReal` steps of the
 exact-formula theorem below. -/
 lemma expected_cost_quickselect_ne_top
@@ -387,8 +387,8 @@ lemma expected_cost_quickselect_ne_top
 -/
 
 /-- With one tick per pivot comparison, selecting from a list
-of `n` **distinct** elements costs at most `4 n` comparisons
-in expectation — a linear bound, unlike QuickSort's `Θ(n log n)`. -/
+of `n` distinct elements costs at most `4 n` comparisons
+in expectation, a linear bound, unlike QuickSort's `Θ(n log n)`. -/
 theorem quickselect_cost_le_linear
     {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M]
@@ -629,7 +629,7 @@ private lemma qsel_cost_sum_eq (n k : ℕ) (hk : k < n) :
   field_simp
   ring
 
-/-- **Exact expected complexity of Quickselect** (Knuth 1971's analysis).
+/-- Exact expected complexity of Quickselect (Knuth 1971's analysis).
 Selecting rank `k` (0-indexed, `k < n`) from a list
 of `n` distinct elements costs exactly
 `2(n + 3 + (n+1)·H(n) − (k+3)·H(k+1) − (n+2−k)·H(n−k))` comparisons in
@@ -731,14 +731,14 @@ the expected runtime of the instrumented algorithm interpreted in
 noncomputable def quickselectComparisons (L : List α) (k : ℕ) : ENNReal :=
   𝔼_{PMF}[cost Quickselect L k]
 
-/-- **Expected cost is linear.** Selecting from a list of `n` distinct
+/-- Expected cost is linear. Selecting from a list of `n` distinct
 elements takes at most `4 n` comparisons in expectation. -/
 theorem quickselect_cost_le_linear_pmf
     (L : List α) (k : ℕ) (hnd : L.Nodup) :
     quickselectComparisons L k ≤ 4 * (L.length : ENNReal) :=
   quickselect_cost_le_linear L k hnd
 
-/-- **Exact expected cost** (Knuth 1971): selecting rank `k` from `n`
+/-- Exact expected cost (Knuth 1971): selecting rank `k` from `n`
 distinct elements takes exactly
 `2(n + 3 + (n+1)·H(n) − (k+3)·H(k+1) − (n+2−k)·H(n−k))` comparisons
 in expectation. -/

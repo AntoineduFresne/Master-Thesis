@@ -9,10 +9,10 @@ import ARA.Algorithms.Karger.Karger
 /-!
 # Karger with a pluggable contraction rule
 
-The main `Karger` file contracts by **taking unions of supervertices**.
+The main `Karger` file contracts by taking unions of supervertices.
 This exhibit runs the same algorithm under every *representative-style*
-contraction — the two endpoints of the drawn edge are replaced by a
-single vertex `w` of the **same type** — and shows that the entire
+contraction, the two endpoints of the drawn edge are replaced by a
+single vertex `w` of the same type, and shows that the entire
 analysis is a function of one choice: how `w` is picked.
 
 A `MergeRule` packages that choice (`pick`) together with the single
@@ -20,24 +20,24 @@ obligation the generic cut theory of `ARA.Helpers.MultiGraph` needs:
 the picked vertex collides with no *untouched* vertex (`fresh`).
 Everything else is proved here once, for every rule:
 
-* `kargerVia_value_ge` — one-sided error: the reported value never
+* `kargerVia_value_ge`: one-sided error: the reported value never
   undershoots the minimum-cut value;
-* `kargerVia_success_prob` — the reported value *is* the minimum-cut
+* `kargerVia_success_prob`: the reported value *is* the minimum-cut
   value with probability at least `2 / (n (n - 1))`;
-* `kargerVia_amplified` — keeping the smallest of `k` reported values
+* `kargerVia_amplified`: keeping the smallest of `k` reported values
   succeeds with probability at least `1 − (1 − 2/(n(n−1)))^k`;
-* `kargerVia_cost_le` — expected cost at most `(n - 2) * m`.
+* `kargerVia_cost_le`: expected cost at most `(n - 2) * m`.
 
 The three instantiations (`KargerOrder`, `KargerEnum`, `KargerFresh`)
-each discharge `fresh` in their own way — which is precisely where
+each discharge `fresh` in their own way, which is precisely where
 each model pays its price (a `LinearOrder`, an injective labeling, a
 name supply).
 
 ## What a rename model *cannot* give
 
 The merged vertex carries no history, so the algorithm here returns
-only the cut **value** (`M ℕ`), not the cut: recovering the partition
-would need a representative map threaded through the recursion — the
+only the cut value (`M ℕ`), not the cut: recovering the partition
+would need a representative map threaded through the recursion, and the
 bookkeeping the supervertex model gets for free, where a vertex *is*
 the set of original vertices merged into it. See
 `KargerVariants.md` for the full comparison.
@@ -54,7 +54,7 @@ variable {α : Type} [DecidableEq α]
 
 /-- A representative-style contraction rule: how to pick the merged
 vertex for a drawn edge, together with the one obligation the generic
-cut theory needs — the pick collides with no *untouched* vertex (it
+cut theory needs, the pick collides with no *untouched* vertex (it
 may well be one of the two endpoints). -/
 structure MergeRule (α : Type) [DecidableEq α] where
   /-- The merged vertex for the edge `e` of the current graph `g`. -/
@@ -108,10 +108,10 @@ def contractAuxVia {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
     else
       pure g
 
-/-- **Karger's algorithm under a contraction rule.** Contract random
+/-- Karger's algorithm under a contraction rule. Contract random
 edges until two vertices remain and report the number of surviving
-parallel edges — the value of the cut the run found. The vertex type
-never changes, but the output is only the **value**: the merged
+parallel edges, the value of the cut the run found. The vertex type
+never changes, but the output is only the value: the merged
 vertices carry no history. -/
 def KargerVia {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     (g : MultiGraph α) : M ℕ := do
@@ -120,7 +120,7 @@ def KargerVia {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
 
 /-! ## The run invariant -/
 
-/-- **The run invariant of the rule-driven contraction loop**:
+/-- The run invariant of the rule-driven contraction loop:
 well-formedness, the card window, a genuine end state, monotonicity of
 the edge count and of the minimum-cut value. (No `Tracks`: a rename
 model has no partition to track.) -/
@@ -164,7 +164,7 @@ theorem support_contractAuxVia
 /-! ## Survival of the minimum cut
 
 The proof is Karger's, verbatim: fix a minimum cut, count its crossing
-edges, contract a non-crossing one — only the per-step transport lemma
+edges, contract a non-crossing one. Only the per-step transport lemma
 (`minCutValue_contractEdgeTo_of_notCrossing`) knows which model runs.
 Note there is no disjointness hypothesis: freshness comes from the
 rule. -/
@@ -275,7 +275,7 @@ private lemma kargerVia_eq_map {M} [Monad M] [LawfulMonad M] [RandMonad M]
   rw [map_eq_bind_pure_comp]
   rfl
 
-/-- **One-sided error.** Every value a run reports is at least the
+/-- One-sided error. Every value a run reports is at least the
 minimum-cut value. -/
 theorem kargerVia_value_ge
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -317,7 +317,7 @@ theorem kargerVia_success_prob
       Nat.le_zero.mp (le_trans (minCutValue_le_length h h2') (le_of_eq hlen))
     rw [hlen, ← hev, hmin0]
 
-/-- **Amplified.** Keep the smallest of `k` reported values: the
+/-- Amplified. Keep the smallest of `k` reported values: the
 result is the minimum-cut value with probability at least
 `1 − (1 − 2/(n(n−1)))^k`. -/
 theorem kargerVia_amplified
@@ -356,9 +356,9 @@ lemma expected_cost_contractAuxVia
     rw [contractAuxVia.eq_2, dif_neg hm, expected_cost_toPMF_pure]
     exact bot_le
 
-/-- **Expected complexity**: with one tick per edge scanned during a
+/-- Expected complexity: with one tick per edge scanned during a
 contraction pass, any rule runs in expected cost at most `(n - 2) * m`
-— for arbitrary inputs. -/
+This holds for arbitrary inputs. -/
 theorem kargerVia_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) :

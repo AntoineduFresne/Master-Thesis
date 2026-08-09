@@ -11,15 +11,15 @@ import ARA.Infrastructure.Randomness.Prob
 
 `PMF` forces total mass `1`, so a genuine retry-until-success loop was
 not a program the framework could express (objective 2g; the design
-comparison lives in `archive/notes/spmf-design.md` — this file
+comparison lives in `archive/notes/spmf-design.md`. This file
 implements its recommendation).
 
 * The carrier is `SPMF := OptionT PMF`: total mass stays `1`, with
-  `none` carrying the **divergence** probability — so the monad and
+  `none` carrying the divergence probability, so the monad and
   its laws are free (`OptionT` of a lawful monad), and the type is
   equivalent to the textbook sub-probability monad
   `{f : α → ℝ≥0∞ // ∑' f ≤ 1}` (missing mass ↦ `none`).
-* `retry good p` is **conditioning, not domain theory**: the loop
+* `retry good p` is conditioning, not domain theory: the loop
   re-runs exactly the retryable failures (`some a` with `¬ good a`),
   so its law is `p` conditioned on `retryEvent good` = "success or
   divergence" (`PMF.filter`); the geometric series `∑ₖ rᵏ = (1−r)⁻¹`
@@ -31,14 +31,14 @@ implements its recommendation).
 
 ## Main declarations / results
 
-* `SPMF`, `SPMF.mass` — the carrier and its termination probability.
-* `RandMonad (OptionT M)` — any polymorphic algorithm runs inside.
+* `SPMF`, `SPMF.mass`, the carrier and its termination probability.
+* `RandMonad (OptionT M)`: any polymorphic algorithm runs inside.
 * `RetryMonad` with instances for `IO` and `SPMF`.
-* `retry_run_some_of_good` / `retry_run_some_of_not_good` — the output
+* `retry_run_some_of_good` / `retry_run_some_of_not_good`: the output
   law: good outcomes keep their probability, renormalized by
   `prob … (retryEvent good)`; non-good outcomes are impossible
   (one-sided correctness of the loop).
-* `mass_retry_eq_one` — **the Las Vegas theorem**: retrying a total
+* `mass_retry_eq_one`: the Las Vegas theorem: retrying a total
   program with positive success probability terminates almost surely.
 
 The cost reading (`TimeMT ℕ SPMF`, expected trials `1/p` via
@@ -61,7 +61,7 @@ abbrev SPMF (α : Type) : Type := OptionT PMF α
 instance {M : Type → Type} [Monad M] [RandMonad M] : RandMonad (OptionT M) where
   randFin n := OptionT.lift (RandMonad.randFin n)
 
-/-- **The retry primitive**: repeat `p` until the output satisfies
+/-- The retry primitive: repeat `p` until the output satisfies
 `good`. One definition, two readings: a genuine loop under `IO`, the
 conditional law under `SPMF`. -/
 class RetryMonad (M : Type → Type) where
@@ -70,7 +70,7 @@ class RetryMonad (M : Type → Type) where
 
 export RetryMonad (retry)
 
-/-- The executable reading: an actual retry loop. (`partial`: honest —
+/-- The executable reading: an actual retry loop. (`partial` is honest here:
 termination is a *probabilistic* statement, `mass_retry_eq_one`.) -/
 partial def retryIO {α : Type} (good : α → Bool) (p : IO α) : IO α := do
   let a ← p
@@ -111,7 +111,7 @@ noncomputable def mass (p : SPMF α) : ℝ≥0∞ := 1 - p.run none
   simp
 
 /-- The event a retry loop conditions on: the run is *not* a retryable
-failure — it either succeeded (`some a` with `good a`) or diverged
+failure: it either succeeded (`some a` with `good a`) or diverged
 (`none`). -/
 def retryEvent (good : α → Bool) : Set (Option α) :=
   {x | ∀ a, x = some a → good a}
@@ -129,7 +129,7 @@ def retryEvent (good : α → Bool) : Set (Option α) :=
     exact h
 
 open scoped Classical in
-/-- **Retry as conditioning.** Re-running exactly the retryable
+/-- Retry as conditioning. Re-running exactly the retryable
 failures means the final law is `p` conditioned on `retryEvent good`;
 if that event has no mass (the loop can neither succeed nor diverge)
 the loop runs forever. -/
@@ -153,7 +153,7 @@ theorem retry_run_some_of_good {good : α → Bool} {p : SPMF α}
     div_eq_mul_inv]
   rfl
 
-/-- **One-sided correctness of the loop**: a non-good outcome is
+/-- One-sided correctness of the loop: a non-good outcome is
 impossible. -/
 theorem retry_run_some_of_not_good {good : α → Bool} (p : SPMF α)
     {a : α} (ha : ¬ good a) :
@@ -167,7 +167,7 @@ theorem retry_run_some_of_not_good {good : α → Bool} (p : SPMF α)
   · show (PMF.pure (none : Option α)) (some a) = 0
     rw [PMF.pure_apply, if_neg (by simp)]
 
-/-- **The Las Vegas theorem.** Retrying a *total* program (`none` has
+/-- The Las Vegas theorem. Retrying a *total* program (`none` has
 no mass) whose success has positive probability terminates almost
 surely. -/
 theorem mass_retry_eq_one {good : α → Bool} {p : SPMF α}
@@ -185,7 +185,7 @@ theorem mass_retry_eq_one {good : α → Bool} {p : SPMF α}
   rw [hnone]
   simp
 
--- Smoke test: rejection sampling — draw from `Fin 6` until the draw
+-- Smoke test: rejection sampling, draw from `Fin 6` until the draw
 -- is nonzero; the loop terminates almost surely.
 example : mass (retry (fun i : Fin 6 => decide (i ≠ 0))
     (RandMonad.randFin 6 : SPMF (Fin 6))) = 1 := by

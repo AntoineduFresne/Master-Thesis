@@ -11,25 +11,25 @@ import ARA.Algorithms.Karger.KargerVariants
 
 The gluing picture of contraction: the drawn edge's two endpoints are
 *erased* and a brand-new vertex takes their place, inheriting all
-their edges. Nothing breaks in the recursion — the vertex type stays
+their edges. Nothing breaks in the recursion, the vertex type stays
 put, the vertex count drops by one per step, and the whole analysis
 below is inherited unchanged.
 
 The costs live elsewhere, and this file makes both concrete:
 
-* **The name supply.** A fresh vertex must come from somewhere. For an
-  arbitrary vertex type this needs `Infinite α` plus choice —
+* The name supply. A fresh vertex must come from somewhere. For an
+  arbitrary vertex type this needs `Infinite α` plus choice,
   noncomputable, which would kill the `IO` reading. Computably, this
   file fixes `α := ℕ` and picks `max + 1`: the supply *is* `ℕ`'s
-  order (`Finset.sup`). Freshness is an actual proof obligation here —
+  order (`Finset.sup`). Freshness is an actual proof obligation here,
   compare the trivial obligations of the order/enumeration rules.
-* **Anonymity.** The merged vertex carries no history, so the run's
+* Anonymity. The merged vertex carries no history, so the run's
   final two vertices are meaningless names and the output can only be
-  the cut **value**. (In the supervertex model the final two vertices
+  the cut value. (In the supervertex model the final two vertices
   *are* the two sides of the cut.)
 
 Done with the one canonical choice of new vertex that needs no supply
-and forgets nothing — `w := u ∪ v` — this model *is* the supervertex
+and forgets nothing (`w := u ∪ v`), this model *is* the supervertex
 model of the main `Karger` file.
 -/
 
@@ -38,8 +38,8 @@ namespace ARA
 open scoped ENNReal
 open MultiGraph
 
-/-- **The fresh-name rule on `ℕ`**: the merged vertex is one past the
-largest vertex ever seen — never previously used. The freshness
+/-- The fresh-name rule on `ℕ`: the merged vertex is one past the
+largest vertex ever seen, so never previously used. The freshness
 obligation is genuine (compare `orderRule`/`enumRule`), and the supply
 is `ℕ`'s order in disguise. -/
 def freshRule : MergeRule ℕ where
@@ -93,7 +93,7 @@ theorem kargerFresh_amplified
       ℙ_{M}[amplify min k (KargerFresh g) = g.minCutValue] :=
   kargerVia_amplified freshRule g hwf h2 k
 
-/-- Expected cost at most `(n - 2) * m` — one tick per edge scanned. -/
+/-- Expected cost at most `(n - 2) * m`, one tick per edge scanned. -/
 theorem kargerFresh_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph ℕ) :

@@ -23,10 +23,10 @@ for lists are provided as convenience functions.
 
 ## Main declarations
 
-* `RandMonad` — typeclass with primitive `randFin`
-* `randIdx` — derived helper for random list indexing
-* `LawfulRandMonad` — the lawful typeclass with `toPMF`
-* `LawfulRandMonad PMF` — canonical instance for `PMF`
+* `RandMonad`: typeclass with primitive `randFin`
+* `randIdx`: derived helper for random list indexing
+* `LawfulRandMonad`: the lawful typeclass with `toPMF`
+* `LawfulRandMonad PMF`: canonical instance for `PMF`
 -/
 
 namespace ARA
@@ -102,7 +102,7 @@ Generic consequences of the three laws: a trailing `return (f x)`
 transports probabilities along `f`.
 -/
 
-/-- Pure post-processing along an **injective** function transports
+/-- Pure post-processing along an injective function transports
 probabilities pointwise: the probability of `f a` is the probability
 of `a`. Generic form of "the trailing `return (f x)` is invisible". -/
 lemma toPMF_bind_pure_apply
@@ -159,7 +159,7 @@ lemma mem_support_toPMF_bind_pure
     rw [PMF.support_pure, Set.mem_singleton_iff]
 
 open scoped Classical in
-/-- Distribution of a `pure` program at a point — the
+/-- Distribution of a `pure` program at a point, the
 `toPMF_pure`/`pmf_pure_eq`/`PMF.pure_apply` triple in one step: the
 base case of every distributional induction. -/
 lemma toPMF_pure_apply
@@ -168,7 +168,7 @@ lemma toPMF_pure_apply
     inst.toPMF (pure a : M α) b = if b = a then 1 else 0 := by
   rw [inst.toPMF_pure, pmf_pure_eq, PMF.pure_apply]
 
-/-- The support of a `pure` program is the singleton — the base case
+/-- The support of a `pure` program is the singleton, the base case
 of every support induction. -/
 lemma mem_support_toPMF_pure
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -186,7 +186,7 @@ lemma mem_support_toPMF_bind
       ∃ a ∈ (inst.toPMF m).support, b ∈ (inst.toPMF (f a)).support := by
   rw [inst.toPMF_bind, pmf_bind_eq, PMF.mem_support_bind_iff]
 
-/-- **Divide-and-conquer support**: the support of two computations
+/-- Divide-and-conquer support: the support of two computations
 run in sequence and combined by a pure function is the image of the
 two supports. Use with an `⟨a, ha, b, hb, rfl⟩` pattern. -/
 lemma mem_support_toPMF_seq₂
@@ -206,11 +206,11 @@ lemma mem_support_toPMF_seq₂
 `𝒟_{M}[e]` is the correctness twin of `𝔼_{M}[cost e]`: the output
 distribution of a monad-polymorphic algorithm, read at the random
 monad `M`. A Dirac-correctness theorem then reads as English:
-`𝒟_{M}[RandMax L] = PMF.pure (listMax L)` — "the distribution of
+`𝒟_{M}[RandMax L] = PMF.pure (listMax L)`, that is "the distribution of
 `RandMax` over `M` is a point mass at the maximum".
 -/
 
-/-- `𝒟_{M}[e]` ≡ `LawfulRandMonad.toPMF (e : M _)` — the output
+/-- `𝒟_{M}[e]` ≡ `LawfulRandMonad.toPMF (e : M _)`: the output
 distribution ("law") of the algorithm `e` at the random monad `M`.
 Expands to the underlying form so `simp`/`rw` match the `toPMF` lemmas. -/
 scoped macro "𝒟_{" M:term "}[" e:term "]" : term =>

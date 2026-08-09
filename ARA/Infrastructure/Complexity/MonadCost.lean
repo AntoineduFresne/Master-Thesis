@@ -24,9 +24,9 @@ is verified exactly once.
 
 ## Main declarations
 
-* `MonadCost` — the typeclass
-* `instMonadCostDefault` — blanket no-op instance (low priority)
-* `instMonadCostTimeMT` — `TimeMT` instance that accumulates cost
+* `MonadCost`: the typeclass
+* `instMonadCostDefault`: blanket no-op instance (low priority)
+* `instMonadCostTimeMT`: `TimeMT` instance that accumulates cost
 -/
 
 namespace ARA

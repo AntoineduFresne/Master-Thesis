@@ -13,9 +13,9 @@ import Mathlib.Algebra.MvPolynomial.SchwartzZippel
 # Schwartz–Zippel polynomial identity testing
 
 Test whether a multivariate polynomial is identically zero by
-evaluating it at a **uniformly random point of a grid** `Sⁿ`: always
+evaluating it at a uniformly random point of a grid `Sⁿ`: always
 accept the zero polynomial, and accept a nonzero one with probability
-at most `totalDegree / #S` — the canonical Monte-Carlo algorithm of
+at most `totalDegree / #S`, the canonical Monte-Carlo algorithm of
 algebraic complexity, and the natural successor of `Freivalds`
 (matrix-product verification is the bilinear special case
 `xᵀ(AB − C)y` on the grid `{0,1}ⁿ`).
@@ -24,19 +24,19 @@ algebraic complexity, and the natural successor of `Freivalds`
 
 The sampler is `randVecOn S n` from `ARA.Infrastructure.Randomness.RandVec`
 (uniform on the grid; `toPMF_randVecOn_true` turns any acceptance
-probability into a grid count). The mathematical core — the
-Schwartz–Zippel counting bound — comes from Mathlib
+probability into a grid count). The mathematical core, the
+Schwartz–Zippel counting bound, comes from Mathlib
 (`MvPolynomial.schwartz_zippel_totalDegree`, stated in `ℚ≥0`); the
 bridge to the framework's `ℝ≥0∞` probabilities is a single
 cross-multiplication (`ennreal_div_le_div_nat`).
 
 ## Main results
 
-* `schwartzZippel_complete` — the zero polynomial is always accepted.
-* `schwartzZippel_sound` — a nonzero `P` is accepted with probability
+* `schwartzZippel_complete`: the zero polynomial is always accepted.
+* `schwartzZippel_sound`: a nonzero `P` is accepted with probability
   at most `P.totalDegree / #S`, over any integral domain.
-* `schwartzZippel_cost_exact` — exactly one (wholesale-ticked)
-  polynomial evaluation per run, and `schwartzZippel_costPMF` — the
+* `schwartzZippel_cost_exact`: exactly one (wholesale-ticked)
+  polynomial evaluation per run, and `schwartzZippel_costPMF`, the
   cost *law* is the point mass at `1`: deterministic, not just in
   expectation.
 -/
@@ -61,13 +61,13 @@ noncomputable def schwartzZippel {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
   pure (decide (MvPolynomial.eval r P = 0))
 
 -- PMF specification instance (the sampler enumerates an abstract
--- `Finset`, so the algorithm is noncomputable — no `IO` demo).
+-- `Finset`, so the algorithm is noncomputable, hence no `IO` demo).
 noncomputable example (P : MvPolynomial (Fin 3) ℤ) :
     PMF Bool := schwartzZippel P {0, 1, 2} (by simp)
 
 /-! ## Correctness -/
 
-/-- **Completeness.** The zero polynomial is always accepted. -/
+/-- Completeness. The zero polynomial is always accepted. -/
 theorem schwartzZippel_complete
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
@@ -82,7 +82,7 @@ theorem schwartzZippel_complete
   exact ENNReal.div_self (pow_ne_zero n (by exact_mod_cast hS.card_pos.ne'))
     (ENNReal.pow_ne_top (ENNReal.natCast_ne_top _))
 
-/-- **Soundness (Schwartz–Zippel).** Over an integral domain, a
+/-- Soundness (Schwartz–Zippel). Over an integral domain, a
 *nonzero* polynomial is accepted with probability at most
 `totalDegree / #S`: one-sided error, tunable via the size of the
 evaluation set. -/
@@ -108,7 +108,7 @@ theorem schwartzZippel_sound [IsDomain R]
 
 /-! ## Complexity -/
 
-/-- **Exact cost.** One wholesale-ticked polynomial evaluation per
+/-- Exact cost. One wholesale-ticked polynomial evaluation per
 run (the sampler is free). -/
 theorem schwartzZippel_cost_exact
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -117,7 +117,7 @@ theorem schwartzZippel_cost_exact
   rw [schwartzZippel]
   cost_step
 
-/-- **Deterministic cost.** The cost law is a point mass: *every* run
+/-- Deterministic cost. The cost law is a point mass: *every* run
 costs exactly one evaluation, not merely one on average. -/
 theorem schwartzZippel_costPMF
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]

@@ -12,13 +12,13 @@ import Mathlib.Data.Sym.Sym2.Order
 
 The contraction rule of the original ARA Karger (before the
 supervertex migration): the drawn edge's endpoints merge into their
-`inf`. The merge is symmetric — `inf` is commutative — so it is a
+`inf`. The merge is symmetric, because `inf` is commutative, so it is a
 genuine function of the unordered edge, and the freshness obligation
 is trivial (the pick *is* an endpoint).
 
-**The price is visible in every statement below**: the blanket
+The price is visible in every statement below: the blanket
 `[LinearOrder α]` hypothesis, an assumption with no mathematical
-content for the min-cut problem — the graph does not care that its
+content for the min-cut problem, the graph does not care that its
 vertices are ordered. And the output is only the cut *value*: the
 surviving `inf`-representatives carry no history, so the partition
 would need a representative map threaded through the recursion (this
@@ -44,8 +44,8 @@ lemma sym2_inf_mem (e : Sym2 α) : e.inf ∈ e := by
     · rw [inf_eq_right.mpr h]
       exact Sym2.mem_mk_right a b
 
-/-- **The order rule**: merge into the smaller endpoint. Freshness is
-trivial — the pick is an endpoint, hence not an untouched vertex. -/
+/-- The order rule: merge into the smaller endpoint. Freshness is
+trivial, the pick is an endpoint, hence not an untouched vertex. -/
 def orderRule : MergeRule α where
   pick _ e := e.inf
   fresh _ _ h := (Finset.mem_filter.mp h).2 (sym2_inf_mem _)
@@ -92,7 +92,7 @@ theorem kargerOrder_amplified
       ℙ_{M}[amplify min k (KargerOrder g) = g.minCutValue] :=
   kargerVia_amplified orderRule g hwf h2 k
 
-/-- Expected cost at most `(n - 2) * m` — one tick per edge scanned. -/
+/-- Expected cost at most `(n - 2) * m`, one tick per edge scanned. -/
 theorem kargerOrder_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) :

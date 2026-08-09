@@ -30,7 +30,7 @@ variable {α : Type*}
 /-! ### Pure list structure (no order) -/
 
 /-- Erasing a valid index from `head :: tail` leaves `tail.length`
-elements — the `rest` of every uniform-pivot step lemma. -/
+elements, the `rest` of every uniform-pivot step lemma. -/
 lemma length_eraseIdx_cons (head : α) (tail : List α)
     (i : Fin (head :: tail).length) :
     ((head :: tail).eraseIdx i).length = tail.length := by
@@ -53,9 +53,9 @@ lemma perm_getElem_cons_eraseIdx
           ‹i + 1 < List.length (hd :: tl)›))
       (List.Perm.swap ..)
 
-/-- **Counting accepting indices.** The number of positions of `L`
+/-- Counting accepting indices. The number of positions of `L`
 whose element satisfies `P`, written as a `Fin`-indexed sum of
-indicators — the pure list mathematics behind the list counting
+indicators, the pure list mathematics behind the list counting
 principle `toPMF_randIdx_bind_countP`.
 
 Proved by leaving the `Fin`-indexed world (`sum_ofFn` /

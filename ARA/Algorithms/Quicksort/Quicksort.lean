@@ -22,22 +22,22 @@ A single `Quicksort` definition is parameterized by both `RandMonad`
 instantiating with different `MonadCost` instances, the same code
 serves as:
 
-* **Untimed specification** (`M = PMF`, no-op `tick`)
-* **Timed specification** (`M = TimeMT ℕ PMF`, accumulating `tick`)
-* **Executable** (`M = IO`, no-op `tick`)
-* **Executable timed** (`M = TimeMT ℕ IO`, accumulating `tick`)
+* Untimed specification (`M = PMF`, no-op `tick`)
+* Timed specification (`M = TimeMT ℕ PMF`, accumulating `tick`)
+* Executable (`M = IO`, no-op `tick`)
+* Executable timed (`M = TimeMT ℕ IO`, accumulating `tick`)
 
 ## Main results
 
-* `quicksort_correct` — generic correctness over any
+* `quicksort_correct`: generic correctness over any
   `LawfulRandMonad`: the output distribution is the Dirac mass at
-  `L.mergeSort (· ≤ ·)` — the algorithm deterministically returns
+  `L.mergeSort (· ≤ ·)`, the algorithm deterministically returns
   the sorted list (existential form: `quicksort_correct_spec`).
-* `quicksort_cost_le_real` — For arbitrary lists (possibly with
+* `quicksort_cost_le_real`: For arbitrary lists (possibly with
   duplicates), bounds the expected cost by `C(n,2)`, tight on
   all-equal inputs. Its `ℝ≥0∞` core also supplies the finiteness
   fact needed by the exact-formula proof.
-* `quicksort_cost_exact` — Quantifies the exact expected
+* `quicksort_cost_exact`: Quantifies the exact expected
   cost over any `LawfulRandMonad`: sorting a list of `n` distinct
   elements requires exactly `2(n+1)H(n) - 4n` comparisons.
 
@@ -102,7 +102,7 @@ def Quicksort_IO : List ℕ → IO (List ℕ) := Quicksort
 
 #eval Quicksort_IO [8,4,1,2]
 
--- PMF reading (noncomputable specification; an `example` suffices —
+-- PMF reading (noncomputable specification; an `example` suffices,
 -- theorems are stated about `Quicksort` itself)
 noncomputable example : List ℕ → PMF (List ℕ) := Quicksort
 
@@ -173,7 +173,7 @@ private lemma mergeSort_partition_cons (L : List α) (i : ℕ) (h : i < L.length
       L.mergeSort (· ≤ ·) := by
   simpa using mergeSort_partition L ⟨i, h⟩
 
-/-- **Correctness.** For any lawful random monad and any lawful cost
+/-- Correctness. For any lawful random monad and any lawful cost
 model, `Quicksort` returns exactly the sorted list: its output
 distribution is the Dirac mass at `L.mergeSort (· ≤ ·)`,
 independently of the random pivot choices and of the ticks. -/
@@ -204,7 +204,7 @@ theorem quicksort_correct_pmf (L : List α) :
 
 /-- Timed PMF correctness for free: `TimeMT ℕ PMF` is itself a lawful
 random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
-instantiates directly — erasing the clock *is* its `toPMF`. -/
+instantiates directly, since erasing the clock *is* its `toPMF`. -/
 theorem quicksort_correct_timed_pmf (L : List α) :
     𝒟_{TimeMT ℕ PMF}[Quicksort L] = PMF.pure (L.mergeSort (· ≤ ·)) :=
   quicksort_correct (M := TimeMT ℕ PMF) L
@@ -232,7 +232,7 @@ is needed; the exact formula descends to `ℝ` via `toReal`, with
 finiteness supplied by the `C(n,2)` bound.
 -/
 
-/-- The per-pivot step cost, **named once** so no proof ever restates
+/-- The per-pivot step cost, named once so no proof ever restates
 it: the deterministic partition work plus the two recursive calls. -/
 private noncomputable def qsStepCost (M : Type → Type) [Monad M]
     [LawfulMonad M] [LawfulRandMonad M]
@@ -339,8 +339,8 @@ theorem quicksort_cost_le_real
     (quicksort_cost_le (M := M) L)
   simpa using this
 
-/-- **Runtime tail bound, for free**: a Quicksort run exceeds `k`
-comparisons with probability at most `C(n,2)/(k+1)` — Markov's
+/-- Runtime tail bound, for free: a Quicksort run exceeds `k`
+comparisons with probability at most `C(n,2)/(k+1)`, by Markov's
 inequality (`runtime_markov_gt`) applied to the `C(n,2)` bound. Any
 expected-cost theorem upgrades this way. -/
 theorem quicksort_runtime_tail
@@ -351,7 +351,7 @@ theorem quicksort_runtime_tail
   le_trans (runtime_markov_gt _ k)
     (ENNReal.div_le_div_right (quicksort_cost_le L) _)
 
-/-- Finiteness of the expected cost — a free corollary of the `C(n,2)`
+/-- Finiteness of the expected cost, a free corollary of the `C(n,2)`
 bound, no separate induction needed. Feeds the `toReal` steps of the
 exact-formula theorem below. -/
 lemma expected_cost_quicksort_ne_top
@@ -399,7 +399,7 @@ lemma expected_qs_sum_helper (n : ℕ) :
     have h_nz : (n : ℚ) + 1 ≠ 0 := by positivity
     field_simp; ring
 
-/-- **Exact expected complexity of Quicksort.** Sorting a list of `n`
+/-- Exact expected complexity of Quicksort. Sorting a list of `n`
 distinct elements costs exactly `2(n+1)H(n) − 4n` comparisons in
 expectation. -/
 theorem quicksort_cost_exact
@@ -476,13 +476,13 @@ one tick per pivot comparison. -/
 noncomputable def quicksortComparisons (L : List α) : ENNReal :=
   𝔼_{PMF}[cost Quicksort L]
 
-/-- **Expected cost is at most quadratic** on arbitrary lists
+/-- Expected cost is at most quadratic on arbitrary lists
 (possibly with duplicates). -/
 theorem quicksort_cost_le_pmf (L : List α) :
     quicksortComparisons L ≤ (L.length.choose 2 : ENNReal) :=
   quicksort_cost_le L
 
-/-- **Exact expected cost**: sorting `n` distinct elements takes
+/-- Exact expected cost: sorting `n` distinct elements takes
 exactly `2(n+1)·H(n) − 4n` comparisons in expectation. -/
 theorem quicksort_cost_exact_pmf (L : List α) (hnd : L.Nodup) :
     (quicksortComparisons L).toReal = (expected_qs_cost L.length : ℚ) :=

@@ -13,7 +13,7 @@ import Mathlib.Order.Lattice.Nat
 Pure graph theory, shared by the contraction algorithms (`Karger`, and
 `Karger–Stein` / Benczúr–Karger sparsification to come). Nothing here
 mentions randomness, cost, or `PMF`: it is Mathlib-only mathematics,
-and it is the part of the Karger development that ARA does **not**
+and it is the part of the Karger development that ARA does not
 claim as its own contribution.
 
 ## Standing in for GraphLib
@@ -33,7 +33,7 @@ Two divergences, both forced by executability and documented at their
 definitions: multiplicity is carried by repetition in a `List` rather
 than by an `Edge.edgeLabel` over a noncomputable `Set` (our
 `List (Sym2 α)` is their `Set (Edge α (Fin m))` with the list position
-as the label), and contraction is the **supervertex `∪`-merge** on
+as the label), and contraction is the supervertex `∪`-merge on
 `MultiGraph (Finset β)` rather than a quotient of the vertex type by a
 `Setoid`: merging is symmetric, so contraction is a genuine function
 of the unordered edge (no order, no choice, no tie-break), and the
@@ -49,7 +49,7 @@ variable {α : Type} [DecidableEq α]
 
 /-! ## The multigraph model -/
 
-/-- An **undirected** multigraph: a vertex set plus an edge list, with
+/-- An undirected multigraph: a vertex set plus an edge list, with
 parallel edges repeated (one entry per copy) and no loops.
 
 Endpoints are a `Sym2 α`, Mathlib's unordered pair, matching GraphLib's
@@ -89,7 +89,7 @@ multiplicity. -/
 
 /-- The crossing test, as a `Bool`, built with `Sym2.lift`. The
 symmetry argument is the *well-definedness obligation* of the lift, so
-a direction-sensitive crossing predicate cannot even be written down —
+a direction-sensitive crossing predicate cannot even be written down,
 this is what makes the model undirected by construction rather than by
 after-the-fact proof. -/
 def crossingB (S : Finset α) : Sym2 α → Bool :=
@@ -164,7 +164,7 @@ lemma minCutValue_le_length (g : MultiGraph α) (h2 : 2 ≤ g.verts.card) :
 The key quantitative fact behind Karger's analysis: every vertex
 degree is at least the minimum-cut value (its singleton is a cut), so
 `n * minCut ≤ Σ deg = 2 * m`. Note `degree` is the *incidence* degree
-— `v ∈ e` for the unordered edge `e` — which is why the handshake
+(`v ∈ e` for the unordered edge `e`), which is why the handshake
 identity below reads `2 * m` and not `m`. -/
 
 /-- The degree of `v`: the number of incident edges, with multiplicity. -/
@@ -223,7 +223,7 @@ private lemma sum_degree_aux (V : Finset α) (l : List (Sym2 α))
       List.length_cons]
     omega
 
-/-- **Handshake identity**: degrees sum to twice the edge count. -/
+/-- Handshake identity: degrees sum to twice the edge count. -/
 lemma sum_degree (g : MultiGraph α) (hwf : g.WF) :
     ∑ v ∈ g.verts, g.degree v = 2 * g.edges.length :=
   sum_degree_aux g.verts g.edges fun e he =>
@@ -347,18 +347,18 @@ Every representative-style contraction has the same shape: the two
 endpoints of the contracted edge leave the vertex set, a single merged
 vertex `w` enters, every edge is redirected through the merge, and the
 loops this creates (the parallel copies of the contracted edge) are
-dropped. The models differ **only in how `w` is chosen**: the smaller
+dropped. The models differ only in how `w` is chosen: the smaller
 endpoint under a linear order, the endpoint of smaller label under an
 upfront enumeration, a brand-new vertex, or the union of the endpoint
 supervertices (the supervertex model below).
 
-The entire cut theory needs exactly **one hypothesis** about that
+The entire cut theory needs exactly one hypothesis about that
 choice: `w` collides with no *untouched* vertex,
-`w ∉ g.verts.filter (· ∉ e)` — `w` may well be one of the endpoints.
+`w ∉ g.verts.filter (· ∉ e)`, since `w` may well be one of the endpoints.
 Everything else (cut lifting, cut survival, preservation of the
 minimum-cut value along a non-crossing contraction) is proved here
 once, and each model instantiates it by discharging the freshness
-obligation — which is precisely where each model pays its price. -/
+obligation, which is precisely where each model pays its price. -/
 
 section Rename
 
@@ -369,7 +369,7 @@ endpoints become `w`, everything else is unchanged. -/
 def redirectTo (e : Sym2 β) (w : β) (x : β) : β :=
   if x ∈ e then w else x
 
-/-- **Contract the edge `e` into the vertex `w`**: the endpoints leave,
+/-- Contract the edge `e` into the vertex `w`: the endpoints leave,
 `w` enters, every edge is redirected through `redirectTo e w` and the
 resulting loops are dropped; parallel edges are kept. -/
 def contractEdgeTo (g : MultiGraph β) (e : Sym2 β) (w : β) : MultiGraph β where
@@ -410,7 +410,7 @@ lemma card_verts_contractEdgeTo {g : MultiGraph β} {e : Sym2 β} {w : β}
       Finset.card_pair hnd]
     omega
 
-/-- Rename contraction preserves well-formedness — no hypothesis on
+/-- Rename contraction preserves well-formedness, with no hypothesis on
 `w` needed. -/
 theorem WF.contractEdgeTo {g : MultiGraph β} (hwf : g.WF)
     {e : Sym2 β} {w : β} : (g.contractEdgeTo e w).WF := by
@@ -443,7 +443,7 @@ lemma cutValue_contractEdgeTo_of_pointwise {g : MultiGraph β} (hwf : g.WF)
     (g.contractEdgeTo e w).cutValue S' = g.cutValue S :=
   countP_crossing_map_filter hwf _ hpt
 
-/-- **Cut lifting** (soundness): every cut of the contracted graph
+/-- Cut lifting (soundness): every cut of the contracted graph
 comes from a cut of `g` with the *same* value. Hence rename
 contraction can only increase the minimum-cut value. No hypothesis on
 `w` needed. -/
@@ -482,7 +482,7 @@ lemma exists_isCut_lift_contractEdgeTo {g : MultiGraph β} (hwf : g.WF)
     · exact (cutValue_contractEdgeTo_of_pointwise hwf fun x hx => by
         simp [Finset.mem_filter, hx]).symm
 
-/-- **Cut survival**: contracting an edge that does not cross a cut
+/-- Cut survival: contracting an edge that does not cross a cut
 `S` into a fresh-enough `w` keeps a merge-image of `S` a cut of the
 same value. -/
 lemma exists_isCut_contractEdgeTo_of_notCrossing {g : MultiGraph β}
@@ -581,7 +581,7 @@ lemma minCutValue_le_contractEdgeTo {g : MultiGraph β} (hwf : g.WF)
   exact minCutValue_le hScut
 
 /-- Contracting an edge that avoids a fixed minimum cut into a
-fresh-enough `w` preserves the minimum-cut value exactly — the
+fresh-enough `w` preserves the minimum-cut value exactly, the
 per-step fact of every rename-model Karger analysis. -/
 lemma minCutValue_contractEdgeTo_of_notCrossing {g : MultiGraph β}
     (hwf : g.WF) {e : Sym2 β} {w : β}
@@ -604,18 +604,18 @@ end Rename
 
 Contracting `s(S, T)` must produce a single merged vertex, and any
 rule that *keeps one of the two* is not a function of the unordered
-edge — the two choices give isomorphic but unequal graphs (this was
+edge, the two choices give isomorphic but unequal graphs (this was
 the old `[LinearOrder α]` artifact: keep `inf`, merge away `sup`).
 The supervertex model dissolves the problem: vertices are `Finset β`
-of original vertices and merging is `S ∪ T`, which is symmetric — so
+of original vertices and merging is `S ∪ T`, which is symmetric, so
 contraction is a genuine function of `Sym2 (Finset β)`, with no order
 and no choice, and the vertex type is preserved so the contraction
 loop stays a plain recursion. It is the rename contraction above at
 `w := unionOf e`, and its cut theory is instantiated from the generic
 lemmas.
 
-The price is an invariant: the supervertices must be **pairwise
-disjoint** (`SupDisjoint`) — without it the merged vertex can collide
+The price is an invariant: the supervertices must be pairwise
+disjoint (`SupDisjoint`), since without it the merged vertex can collide
 with a third supervertex and contraction drops the vertex count by
 two. Disjointness is exactly what discharges the generic freshness
 obligation (`unionOf_notMem_filter`). -/
@@ -624,7 +624,7 @@ section Super
 
 variable {β : Type} [DecidableEq β]
 
-/-- The union of the two endpoints of an unordered edge — well-defined
+/-- The union of the two endpoints of an unordered edge, well-defined
 by commutativity of `∪` (a genuine `Sym2.lift`: this symmetry is the
 point of the supervertex model). -/
 def unionOf : Sym2 (Finset β) → Finset β :=
@@ -638,12 +638,12 @@ Symmetric in the two endpoints by construction. -/
 def redirectS (e : Sym2 (Finset β)) (X : Finset β) : Finset β :=
   if X ∈ e then unionOf e else X
 
-/-- The supervertices are pairwise disjoint — the invariant that makes
+/-- The supervertices are pairwise disjoint, the invariant that makes
 the `∪`-merge well-behaved. -/
 def SupDisjoint (g : MultiGraph (Finset β)) : Prop :=
   ∀ S ∈ g.verts, ∀ T ∈ g.verts, S ≠ T → Disjoint S T
 
-/-- **Contract** the edge `e` by the supervertex merge: its two
+/-- Contract the edge `e` by the supervertex merge: its two
 endpoints leave the vertex set, their union enters, every edge is
 redirected through `redirectS e` and the resulting loops (the parallel
 copies of `e` itself) are dropped; parallel edges are kept. A genuine
@@ -688,7 +688,7 @@ lemma unionOf_notMem_filter {g : MultiGraph (Finset β)} (hdisj : SupDisjoint g)
     exact hnd (hSe.trans hTe.symm)
 
 /-- Contraction removes exactly one supervertex: two leave, their
-union enters — *fresh*, by disjointness. -/
+union enters, and it is *fresh*, by disjointness. -/
 lemma card_verts_contractEdge {g : MultiGraph (Finset β)} (hdisj : SupDisjoint g)
     {e : Sym2 (Finset β)} (hmem : ∀ X ∈ e, X ∈ g.verts) (hnd : ¬ e.IsDiag) :
     (g.contractEdge e).verts.card + 1 = g.verts.card :=
@@ -742,7 +742,7 @@ lemma cutValue_contractEdge_of_pointwise {g : MultiGraph (Finset β)} (hwf : g.W
     (g.contractEdge e).cutValue 𝒮' = g.cutValue 𝒮 :=
   countP_crossing_map_filter hwf _ hpt
 
-/-- **Cut lifting** (soundness of contraction): every cut of the
+/-- Cut lifting (soundness of contraction): every cut of the
 contracted graph comes from a cut of `g` with the *same* value. Hence
 contraction can only increase the minimum-cut value. -/
 lemma exists_isCut_lift {g : MultiGraph (Finset β)} (hwf : g.WF)
@@ -751,7 +751,7 @@ lemma exists_isCut_lift {g : MultiGraph (Finset β)} (hwf : g.WF)
     ∃ 𝒮, g.IsCut 𝒮 ∧ g.cutValue 𝒮 = (g.contractEdge e).cutValue 𝒮' :=
   exists_isCut_lift_contractEdgeTo hwf hmem h
 
-/-- **Cut survival**: contracting an edge that does not cross a cut
+/-- Cut survival: contracting an edge that does not cross a cut
 `𝒮` keeps a merge-image of `𝒮` a cut of the same value. -/
 lemma exists_isCut_contractEdge_of_notCrossing {g : MultiGraph (Finset β)}
     (hwf : g.WF) (hdisj : SupDisjoint g) {e : Sym2 (Finset β)}
@@ -771,7 +771,7 @@ lemma minCutValue_le_contractEdge {g : MultiGraph (Finset β)} (hwf : g.WF)
     (unionOf_notMem_filter hdisj hmem hnd) hmem hnd h3
 
 /-- Contracting an edge that avoids a fixed minimum cut preserves the
-minimum-cut value exactly — the per-step fact of Karger's analysis. -/
+minimum-cut value exactly, the per-step fact of Karger's analysis. -/
 lemma minCutValue_contractEdge_of_notCrossing {g : MultiGraph (Finset β)}
     (hwf : g.WF) (hdisj : SupDisjoint g) {e : Sym2 (Finset β)}
     (hmem : ∀ X ∈ e, X ∈ g.verts) (hnd : ¬ e.IsDiag) (h3 : 3 ≤ g.verts.card)
@@ -816,7 +816,7 @@ lemma minCutValue_le_contract {g : MultiGraph (Finset β)} (hwf : g.WF)
 
 /-- Enter the supervertex world: each vertex becomes its singleton.
 The contraction loop starts here, and the supervertices it merges are
-exactly the fibres a run has accumulated — the final vertex set *is*
+exactly the fibres a run has accumulated, the final vertex set *is*
 the reported cut, with no extra bookkeeping. -/
 def super (g : MultiGraph β) : MultiGraph (Finset β) where
   verts := g.verts.image fun a => {a}
@@ -860,7 +860,7 @@ lemma supDisjoint_super (g : MultiGraph β) : SupDisjoint (g.super) := by
 
 /-! ### Tracking the supervertices -/
 
-/-- The supervertex graph `g` **tracks** `g₀`: its vertices are
+/-- The supervertex graph `g` tracks `g₀`: its vertices are
 pairwise-disjoint nonempty sets of original vertices covering all of
 them, and every cut of `g` flattens (`⋃`) to a cut of `g₀` of the same
 value. A contraction run maintains this invariant, and at the end the
@@ -996,7 +996,7 @@ lemma Tracks.isCut_mem {g₀ : MultiGraph β} {g : MultiGraph (Finset β)}
   exact ⟨b, ht.subset T hT hb,
     fun hbS => Finset.disjoint_left.mp (ht.disj T hT S hS hTS) hb hbS⟩
 
-/-- **The bridge**: when a run finishes (two supervertices remain, or
+/-- The bridge: when a run finishes (two supervertices remain, or
 no edges do) every surviving supervertex cuts the tracked graph with
 value exactly the number of surviving edges. -/
 lemma Tracks.cutValue_mem {g₀ : MultiGraph β} {g : MultiGraph (Finset β)}

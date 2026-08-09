@@ -12,21 +12,21 @@ The generic probability functionals of a randomized computation,
 independent of any cost model: what an algorithm *outputs* with what
 probability, and the expected value of a functional of its output.
 Everything here is about `PMF` and `toPMF` alone, so it sits below
-both the correctness and the complexity layers — a pure-probability
+both the correctness and the complexity layers, a pure-probability
 case study (`Geometric`, `CouponCollector`) never has to import the
 cost machinery to use it.
 
 ## Main declarations
 
-* `expVal p g` — the expectation `Σ' a, p a * g a`, with the
+* `expVal p g`: the expectation `Σ' a, p a * g a`, with the
   `pure`/`bind`/`map`/uniform decomposition API. Used both for
   *structural* output functionals (a random tree's height) and, one
   layer up, as the definition behind `expected_cost`.
-* `prob p s` — the probability of an event, with the event algebra
+* `prob p s`: the probability of an event, with the event algebra
   (singletons, complements, `bind`, `pure`).
-* `mul_prob_ge_le_expVal` / `prob_ge_le_expVal_div` — Markov's
+* `mul_prob_ge_le_expVal` / `prob_ge_le_expVal_div`: Markov's
   inequality on `expVal`, the estimate every tail bound rests on.
-* `ℙ_{M}[e = v]` / `ℙ_{M}[e ∈ S]` — the output-probability notation,
+* `ℙ_{M}[e = v]` / `ℙ_{M}[e ∈ S]`: the output-probability notation,
   correctness twin of `𝔼_{M}[cost e]`.
 -/
 
@@ -38,8 +38,8 @@ open ENNReal
 ## Expected values of output functionals
 
 For randomized algorithms whose interesting measure is a *structural*
-functional of the output — the height of a random tree, the size of a
-random cut — rather than a tick count, we provide the bare expectation
+functional of the output, the height of a random tree, the size of a
+random cut, rather than a tick count, we provide the bare expectation
 `expVal p g = Σ' a, p a * g a` with the same `bind`/`pure`/uniform
 decomposition API as `expected_cost`.
 -/
@@ -65,7 +65,7 @@ lemma expVal_bind {α β : Type*} (p : PMF α) (f : α → PMF β)
   rw [ENNReal.tsum_comm]
   exact tsum_congr fun a => tsum_congr fun b => by ring
 
-/-- **Averaging a constant.** The `expVal_const` fact in the unfolded
+/-- Averaging a constant. The `expVal_const` fact in the unfolded
 form a cost proof actually meets: after the bind lemmas have peeled a
 branch whose cost is a constant, the goal is literally `∑' a, p a * c`.
 Tagged `@[expected_cost_simp]` so `cost_step` closes such a branch
@@ -109,9 +109,9 @@ lemma expVal_map {α β : Type*} (p : PMF α) (f : α → β) (g : β → ENNRea
   rw [PMF.map, expVal_bind]
   simp only [Function.comp_apply, expVal_pure]
 
-/-- **Uniform-pivot step for output functionals**: the expected value
+/-- Uniform-pivot step for output functionals: the expected value
 of `g` over `randIdx >>= branch` is the uniform average of the branch
-expectations — the `expVal` analogue of `expected_cost_uniform_step`. -/
+expectations, the `expVal` analogue of `expected_cost_uniform_step`. -/
 lemma expVal_toPMF_randIdx_bind
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {α : Type*} {β : Type} {L : List α} {hL : 0 < L.length}
@@ -125,7 +125,7 @@ lemma expVal_toPMF_randIdx_bind
   simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
   rw [← Finset.mul_sum]
 
-/-- `expVal` of a `pure` program — the base case of every
+/-- `expVal` of a `pure` program, the base case of every
 output-functional induction. -/
 lemma expVal_toPMF_pure
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -133,9 +133,9 @@ lemma expVal_toPMF_pure
     expVal (inst.toPMF (pure a : M α)) g = g a := by
   rw [inst.toPMF_pure, pmf_pure_eq, expVal_pure]
 
-/-- **Divide-and-conquer expectation**: the expected value of a
+/-- Divide-and-conquer expectation: the expected value of a
 functional of two computations run in sequence and combined by a pure
-function is the iterated expectation — the `expVal` sibling of
+function is the iterated expectation, the `expVal` sibling of
 `expected_cost_toPMF_seq₂` and `mem_support_toPMF_seq₂`. -/
 lemma expVal_toPMF_seq₂
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -152,20 +152,20 @@ lemma expVal_toPMF_seq₂
 ## The mean of a `ℕ`-valued distribution
 
 The special case of `expVal` that a *cost law* asks for. Naming it
-lets a statement read as its mathematics does — `𝔼[couponCollector n]`
+lets a statement read as its mathematics does: `𝔼[couponCollector n]`
 rather than `expVal (couponCollector n) (fun k => (k : ℝ≥0∞))`.
 -/
 
 /-- The mean of a distribution over `ℕ`. -/
 noncomputable def mean (p : PMF ℕ) : ENNReal := expVal p (fun k => (k : ENNReal))
 
-/-- `𝔼[p]` — the mean of the `ℕ`-valued distribution `p`. -/
+/-- `𝔼[p]`: the mean of the `ℕ`-valued distribution `p`. -/
 scoped notation "𝔼[" p "]" => mean p
 
 @[simp] lemma mean_pure (k : ℕ) : 𝔼[PMF.pure k] = (k : ENNReal) :=
   expVal_pure k _
 
-/-- **Linearity of expectation** in the form a staged cost law uses
+/-- Linearity of expectation in the form a staged cost law uses
 it: drawing `a`, then independently `b`, and reporting `a + b` costs
 `𝔼[P] + 𝔼[Q]`. -/
 lemma mean_bind_add (P Q : PMF ℕ) :
@@ -231,7 +231,7 @@ lemma prob_le_one {α : Type*} (p : PMF α) (s : Set α) :
 /-!
 ### The event algebra
 
-Singletons, complements, `bind` and `pure` — everything an event
+Singletons, complements, `bind` and `pure`: everything an event
 computation needs.
 -/
 
@@ -286,9 +286,9 @@ lemma prob_bind {α β : Type*} (p : PMF α) (f : α → PMF β) (s : Set β) :
     ENNReal.tsum_comm]
   exact tsum_congr fun a => ENNReal.tsum_mul_left
 
-/-- **Uniform-pivot step for events**: the probability of an event
+/-- Uniform-pivot step for events: the probability of an event
 over `randIdx >>= branch` is the uniform average of the branch
-probabilities — the `prob` sibling of `expVal_toPMF_randIdx_bind` and
+probabilities, the `prob` sibling of `expVal_toPMF_randIdx_bind` and
 `toPMF_randIdx_bind_apply`. -/
 lemma prob_toPMF_randIdx_bind
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -302,9 +302,9 @@ lemma prob_toPMF_randIdx_bind
   simp only [PMF.uniformOfFintype_apply, Fintype.card_fin]
   rw [← Finset.mul_sum]
 
-/-- **Sequential success composition**: to succeed after a bind it is
+/-- Sequential success composition: to succeed after a bind it is
 enough to land in a good set and then succeed from every good,
-reachable outcome — the "survive, then recurse" step of a recursive
+reachable outcome, the "survive, then recurse" step of a recursive
 Monte-Carlo analysis (Karger–Stein's branch bound). -/
 lemma le_prob_toPMF_bind
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -357,8 +357,8 @@ lemma prob_pure_of_notMem {α : Type*} {a : α} {s : Set α} (h : a ∉ s) :
 ## Markov's inequality for `expVal`
 -/
 
-/-- **Markov's inequality**, product form: `k · P(g ≥ k) ≤ E[g]`.
-No side conditions — this is the fundamental estimate. -/
+/-- Markov's inequality, product form: `k · P(g ≥ k) ≤ E[g]`.
+No side conditions. This is the fundamental estimate. -/
 theorem mul_prob_ge_le_expVal {α : Type*} (p : PMF α)
     (g : α → ENNReal) (k : ENNReal) :
     k * prob p {a | k ≤ g a} ≤ expVal p g := by
@@ -371,7 +371,7 @@ theorem mul_prob_ge_le_expVal {α : Type*} (p : PMF α)
   · rw [Set.indicator_of_notMem (show a ∉ {a | k ≤ g a} from h), mul_zero]
     exact zero_le
 
-/-- **Markov's inequality**, division form: `P(g ≥ k) ≤ E[g] / k`. -/
+/-- Markov's inequality, division form: `P(g ≥ k) ≤ E[g] / k`. -/
 theorem prob_ge_le_expVal_div {α : Type*} (p : PMF α)
     (g : α → ENNReal) {k : ENNReal} (hk0 : k ≠ 0) (hktop : k ≠ ⊤) :
     prob p {a | k ≤ g a} ≤ expVal p g / k := by
@@ -389,7 +389,7 @@ read-out be reused verbatim for the other, with no re-induction: the
 only obligation is that the two read-outs agree on the run's support.
 -/
 
-/-- Event monotonicity **up to the support**: an event that implies
+/-- Event monotonicity up to the support: an event that implies
 another on the support is at most as probable. The `≤`-sibling of
 `prob_congr_of_support`, for strengthening an event along an invariant
 (`karger_finds_min` upgrades a value event to a cut event with it). -/
@@ -413,8 +413,8 @@ lemma prob_map {α β : Type*} (p : PMF α) (f : α → β) (s : Set β) :
   rw [prob_eq_toOuterMeasure, prob_eq_toOuterMeasure,
     PMF.toOuterMeasure_map_apply]
 
-/-- **Post-processing transfer.** Two read-outs of the same
-computation — possibly into *different* types — that succeed together
+/-- Post-processing transfer. Two read-outs of the same
+computation (possibly into *different* types) that succeed together
 on the support have the same success probability. -/
 lemma prob_congr_of_support {α β γ : Type*} (p : PMF α)
     {f : α → β} {h : α → γ} {s : Set β} {t : Set γ}
@@ -462,22 +462,22 @@ underlying `toPMF`/`prob` form so `simp`/`rw` match lemmas without
 unfolding hints; `prob_singleton` mediates between the two.
 -/
 
-/-- `ℙ_{M}[e = v]` — probability that the algorithm `e`, run at the
+/-- `ℙ_{M}[e = v]`: probability that the algorithm `e`, run at the
 random monad `M`, outputs exactly `v`. -/
 scoped macro "ℙ_{" M:term "}[" e:term:51 " = " v:term:51 "]" : term =>
   `(LawfulRandMonad.toPMF ($e : $M _) $v)
 
-/-- `ℙ[m = v]` — output probability of an already-typed
+/-- `ℙ[m = v]`: output probability of an already-typed
 computation (no monad index needed). -/
 scoped macro "ℙ[" m:term:51 " = " v:term "]" : term =>
   `(LawfulRandMonad.toPMF $m $v)
 
-/-- `ℙ_{M}[e ∈ S]` — probability that the algorithm `e`, run at the
+/-- `ℙ_{M}[e ∈ S]`: probability that the algorithm `e`, run at the
 random monad `M`, outputs a value in the event `S`. -/
 scoped macro "ℙ_{" M:term "}[" e:term:51 " ∈ " S:term:51 "]" : term =>
   `(prob (LawfulRandMonad.toPMF ($e : $M _)) $S)
 
-/-- `ℙ[m ∈ S]` — event probability of an already-typed
+/-- `ℙ[m ∈ S]`: event probability of an already-typed
 computation (no monad index needed). -/
 scoped macro "ℙ[" m:term:51 " ∈ " S:term "]" : term =>
   `(prob (LawfulRandMonad.toPMF $m) $S)

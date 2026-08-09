@@ -9,9 +9,9 @@ import ARA.Infrastructure.Randomness.Prob
 /-!
 # The geometric distribution
 
-The law of the number of **failures before the first success** of a
+The law of the number of failures before the first success of a
 Bernoulli process with failure probability `q < 1`:
-`P(k) = qᵏ(1 − q)`. It is the cost law of a retry-until-success loop —
+`P(k) = qᵏ(1 − q)`. It is the cost law of a retry-until-success loop,
 the loop itself terminates only almost surely, so it is not a
 structurally terminating program, but its cost distribution is a
 perfectly well-defined `PMF` (total mass `1`). `CouponCollector` is
@@ -20,17 +20,17 @@ is future work.
 
 Everything is proved directly in `ℝ≥0∞` (Mathlib's geometric
 distribution is measure-theoretic and real-valued; the expectation
-computation below — the layer-cake exchange — needs no summability
+computation below (the layer-cake exchange) needs no summability
 side conditions at all).
 
 ## Main declarations
 
-* `geometric q hq` — the law of the failure count, `P(k) = qᵏ(1 − q)`
-* `mean_geometric` — `𝔼 = q/(1 − q)` failures
-* `geometricTrials p hp` — the law of the **trial** count of a
+* `geometric q hq`: the law of the failure count, `P(k) = qᵏ(1 − q)`
+* `mean_geometric`: `𝔼 = q/(1 − q)` failures
+* `geometricTrials p hp`: the law of the trial count of a
   Bernoulli process with success probability `p` (failures plus the
   successful trial)
-* `mean_geometricTrials` — `𝔼 = 1/p` trials, the form a
+* `mean_geometricTrials`: `𝔼 = 1/p` trials, the form a
   retry-until-success cost analysis actually consumes
 -/
 
@@ -59,7 +59,7 @@ noncomputable def geometric (q : ℝ≥0∞) (hq : q < 1) : PMF ℕ :=
 @[simp] lemma geometric_apply (q : ℝ≥0∞) (hq : q < 1) (k : ℕ) :
     geometric q hq k = q ^ k * (1 - q) := rfl
 
-/-- **Expectation of the geometric law**: `q/(1 − q)` expected
+/-- Expectation of the geometric law: `q/(1 − q)` expected
 failures before the first success. Proved by the layer-cake exchange
 `k = #{j | j < k}`; in `ℝ≥0∞` the double-sum swap is unconditional. -/
 theorem mean_geometric (q : ℝ≥0∞) (hq : q < 1) :
@@ -104,13 +104,13 @@ theorem mean_geometric (q : ℝ≥0∞) (hq : q < 1) :
 ## Trials until the first success
 -/
 
-/-- The law of the **number of trials** until the first success, for
+/-- The law of the number of trials until the first success, for
 success probability `p`: the failure count plus the successful trial.
 This is the cost law of one retry-until-success stage. -/
 noncomputable def geometricTrials (p : ℝ≥0∞) (hp0 : p ≠ 0) : PMF ℕ :=
   (geometric (1 - p) (one_sub_lt_one hp0)).map (· + 1)
 
-/-- **Expected number of trials until the first success**: `1/p`.
+/-- Expected number of trials until the first success: `1/p`.
 The form a retry-until-success cost analysis consumes directly (the
 coupon collector's stage `m` has `p = m/n`, hence `n/m` draws). -/
 theorem mean_geometricTrials {p : ℝ≥0∞} (hp0 : p ≠ 0) (hptop : p ≠ ⊤)

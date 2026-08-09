@@ -15,7 +15,7 @@ import Mathlib.Data.Nat.Log
 
 A treap assigns each key a random priority and keeps a BST on keys /
 heap on priorities; equivalently, the resulting tree is the BST
-obtained by inserting the keys in a **uniformly random order**. We
+obtained by inserting the keys in a uniformly random order. We
 model this directly via a random shuffle, keeping the randomness
 explicit and the output distribution exact.
 
@@ -24,9 +24,9 @@ explicit and the output distribution exact.
 Two classically equivalent models, both polymorphic in the random
 monad `M` (they run in `IO`, specify distributions in `PMF`, …):
 
-* `randomBST` — insert the keys in a uniformly random order
+* `randomBST`: insert the keys in a uniformly random order
   (`shuffle` + `foldl insert`);
-* `treap` — pick a uniformly random root and recurse on the two sides
+* `treap`: pick a uniformly random root and recurse on the two sides
   (the shape distribution of a treap).
 
 Neither draws `MonadCost` ticks: for a data structure the analogue of
@@ -36,15 +36,15 @@ handled by the `expVal` output-functional API from `ARA.Infrastructure.Complexit
 ## Main results
 
 * `randomBST_correct` (insertion model) and `treap_correct`
-  (recursive model) — **every** tree the sampler can output is a valid
+  (recursive model): every tree the sampler can output is a valid
   BST over the (distinct) keys: its in-order traversal is sorted and a
   permutation of the keys. So the traversal is deterministic even
   though the tree *shape* is random.
-* `randomBST_height_le` — deterministic bound: height ≤ number of keys.
-* `treap_expVal_exp_height` — the exponential-height bound
+* `randomBST_height_le`: deterministic bound: height ≤ number of keys.
+* `treap_expVal_exp_height`: the exponential-height bound
   `E[2^height] ≤ C(n+3, 3)` (CLRS-style; the hockey-stick identity
   makes the induction close with equality).
-* `treap_expected_height_le` — **the expected height is logarithmic**:
+* `treap_expected_height_le`: the expected height is logarithmic:
   `E[height] ≤ 3·log₂(n+3) + 4`, extracted from the exponential bound
   by the pointwise inequality `h ≤ k + 2^h/2^k` (no Jensen needed).
   The sharp constant is `≈ 3` in base 2 (Devroye 1986).
@@ -238,7 +238,7 @@ noncomputable example : List ℕ → PMF Tree := randomBST
 
 The shuffle only ever produces permutations of the input, and folding
 BST-insertion over a permutation of distinct keys always yields a tree
-whose in-order traversal is the sorted key list — so the traversal is
+whose in-order traversal is the sorted key list, so the traversal is
 deterministic even as the shape varies.
 -/
 
@@ -247,7 +247,7 @@ private lemma pairwise_lt_nodup {l : List ℕ} (h : l.Pairwise (· < ·)) :
     l.Nodup :=
   h.imp (fun hab => ne_of_lt hab)
 
-/-- **Correctness.** For any `LawfulRandMonad`, every tree the sampler
+/-- Correctness. For any `LawfulRandMonad`, every tree the sampler
 can produce from distinct `keys` is a valid BST over them: its in-order
 traversal is sorted and a permutation of `keys`. -/
 theorem randomBST_correct
@@ -289,7 +289,7 @@ below (`treap_expected_height_le`); for this insertion model it would
 follow from the (future-work) equivalence of the two models.
 -/
 
-/-- **Deterministic height bound.** Every tree the sampler can output
+/-- Deterministic height bound. Every tree the sampler can output
 has height at most `keys.length`. -/
 theorem randomBST_height_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -314,7 +314,7 @@ theorem randomBST_height_le
 
 `randomBST` above inserts in a random order. The classically
 equivalent *recursive* characterization picks a uniformly random root
-and recurses on the two sides — the exact shape distribution of a
+and recurses on the two sides, the exact shape distribution of a
 treap. The recursive form exposes the pivot structure that the
 framework's partition machinery consumes, which is what makes the
 expected-height analysis tractable. (The formal equivalence of the
@@ -405,7 +405,7 @@ private lemma two_pow_node_height_le (l r : Tree) (p : ℕ) :
   · exact le_add_self
 
 set_option maxHeartbeats 400000 in
-/-- **Exponential-height bound** (CLRS-style): on distinct keys,
+/-- Exponential-height bound (CLRS-style): on distinct keys,
 `E[2^height] ≤ C(n+3, 3)`. -/
 theorem treap_expVal_exp_height
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -482,7 +482,7 @@ private lemma height_le_add_div (h k : ℕ) :
       _ = k + 2 ^ (h - k) := by push_cast; ring
 
 set_option maxHeartbeats 400000 in
-/-- **Expected height of a treap is logarithmic.** On `n` distinct
+/-- Expected height of a treap is logarithmic. On `n` distinct
 keys, `E[height] ≤ 3·log₂(n+3) + 4` (illustrative constants; the
 sharp constant is `≈ 3` in base 2, Devroye 1986). -/
 theorem treap_expected_height_le
@@ -536,7 +536,7 @@ theorem treap_expected_height_le_pmf (keys : List ℕ) (hnd : keys.Nodup) :
 
 /-! ### Correctness of the recursive model -/
 
-/-- **Correctness (recursive model).** Every tree in the support of
+/-- Correctness (recursive model). Every tree in the support of
 `treap L` is a valid BST over the distinct keys `L`. -/
 theorem treap_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -589,8 +589,8 @@ theorem treap_correct
       rw [List.append_assoc, List.singleton_append] at hpart
       exact List.Perm.trans (hpl.append (hpr.cons _)) hpart
 
-/-- **Deterministic height bound (recursive model).** Every tree the
-recursive sampler can output has height at most the number of keys —
+/-- Deterministic height bound (recursive model). Every tree the
+recursive sampler can output has height at most the number of keys,
 the twin of `randomBST_height_le` for the other model. -/
 theorem treap_height_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]

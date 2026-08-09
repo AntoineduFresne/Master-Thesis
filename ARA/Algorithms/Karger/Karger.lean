@@ -19,11 +19,11 @@ and it is a global minimum cut with probability at least
 
 ## Graph model
 
-The algorithm runs on the **supervertex** graphs of
+The algorithm runs on the supervertex graphs of
 `ARA.Helpers.MultiGraph`: it first replaces every vertex by its
 singleton (`MultiGraph.super`), and from then on each vertex of the
 working graph is the `Finset` of original vertices merged into it.
-Contracting an edge `s(S, T)` merges its endpoints into `S ∪ T` — a
+Contracting an edge `s(S, T)` merges its endpoints into `S ∪ T`, a
 symmetric operation, so contraction is a genuine function of the
 *unordered* edge, with no order, no choice and no tie-break, and the
 vertex type is preserved so the loop is a plain recursion. The
@@ -44,21 +44,21 @@ specification (`M = PMF`), and as timed algorithm (`M = TimeMT ℕ M'`).
 
 ## Main results
 
-* `karger_finds_min` — a single run returns an actual **minimum cut**
-  — both surviving sides are genuine cuts of value exactly
-  `minCutValue` — with probability at least `2 / (n (n - 1))`, where
+* `karger_finds_min`: a single run returns an actual minimum cut
+  (both surviving sides are genuine cuts of value exactly
+  `minCutValue`) with probability at least `2 / (n (n - 1))`, where
   `n = g.verts.card`. Hence `O(n² log n)` independent repetitions find
   a minimum cut with high probability (`karger_amplified`).
-* `karger_isCut` — one-sided error: *every* output is a partition into
+* `karger_isCut`: one-sided error: *every* output is a partition into
   genuine cuts of the reported value, and the reported value never
   undershoots the minimum.
-* `success_contractAux` — **survival of the minimum cut through
-  partial contraction**, the kernel shared with Karger–Stein:
+* `success_contractAux`: survival of the minimum cut through
+  partial contraction, the kernel shared with Karger–Stein:
   contracting from `k + (s+2)` down to `s+2` supervertices preserves
   the minimum-cut value with probability at least
   `(s+2)(s+1) / ((k+s+2)(k+s+1))`. Karger is the case `s = 0`;
   Karger–Stein recurses on `s + 2 ≈ n/√2`, where the bound is `≥ 1/2`.
-* `karger_cost_le` — with one tick per edge scanned during a
+* `karger_cost_le`: with one tick per edge scanned during a
   contraction pass, the expected cost is at most `(n - 2) * m` where
   `m = g.edges.length`.
 
@@ -96,10 +96,10 @@ def contractAux {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
     else
       pure g
 
-/-- **Karger's algorithm.** Contract uniformly random edges until two
-supervertices remain, then return the **partition** they induce — each
+/-- Karger's algorithm. Contract uniformly random edges until two
+supervertices remain, then return the partition they induce, where each
 surviving supervertex is the set of original vertices merged into it,
-i.e. one side of the cut — together with the number of surviving
+i.e. one side of the cut, together with the number of surviving
 parallel edges (the cut's value). This is the textbook statement: the
 algorithm finds a cut `{S, S̄}`, and reports its value. -/
 def Karger {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
@@ -114,7 +114,7 @@ def Karger {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
 -- IO version (executable, untimed)
 def Karger_IO : MultiGraph ℕ → IO (Finset (Finset ℕ) × ℕ) := Karger
 
-/-- Demo graph: two triangles joined by a single bridge — the global
+/-- Demo graph: two triangles joined by a single bridge, the global
 minimum cut is `1` (the bridge). -/
 def kargerDemo : MultiGraph ℕ where
   verts := {0, 1, 2, 3, 4, 5}
@@ -218,7 +218,7 @@ at least two supervertices, a genuine end state (two supervertices or
 no edges), and the `Tracks` partition invariant against the original
 graph. -/
 
-/-- **The run invariant of the contraction loop**, for an arbitrary
+/-- The run invariant of the contraction loop, for an arbitrary
 stopping count `t` (Karger stops at `t = 2`; Karger–Stein at
 `t = ksTarget n`): well-formedness, the card window, a genuine end
 state, monotonicity of the edge count and of the minimum-cut value,
@@ -263,7 +263,7 @@ theorem support_contractAux
 
 /-! ## Survival of the minimum cut -/
 
-/-- **Survival of the minimum cut through partial contraction** — the
+/-- Survival of the minimum cut through partial contraction, the
 kernel of both Karger's and Karger–Stein's analyses. Contracting a
 well-formed supervertex graph with pairwise-disjoint supervertices
 from `k + (s+2)` down to `s+2` supervertices preserves the minimum-cut
@@ -396,7 +396,7 @@ theorem karger_isCut
   exact minCutValue_le (ht.isCut_mem h2' hS)
 
 /-- A single run *reports the minimum-cut value* with probability at
-least `2 / (n (n - 1))` — the value-level bound the induction proves;
+least `2 / (n (n - 1))`, the value-level bound the induction proves;
 `karger_finds_min` below is its cut-level (textbook) form. -/
 theorem karger_success_prob
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -426,9 +426,9 @@ theorem karger_success_prob
       Nat.le_zero.mp (le_trans (minCutValue_le_length h h2') (le_of_eq hlen))
     rw [hlen, ← hev, hmin0]
 
-/-- **Karger's theorem.** A single run returns an actual **minimum
-cut** — every reported side is a genuine cut of `g` of value exactly
-`minCutValue` — with probability at least `2 / (n (n − 1))`. Obtained
+/-- Karger's theorem. A single run returns an actual minimum
+cut (every reported side is a genuine cut of `g` of value exactly
+`minCutValue`) with probability at least `2 / (n (n − 1))`. Obtained
 from the value-level bound by strengthening the event along the run's
 support invariant (`karger_isCut`), not by re-induction. -/
 theorem karger_finds_min
@@ -443,11 +443,11 @@ theorem karger_finds_min
   obtain ⟨hall, -⟩ := karger_isCut g hwf h2 o ho
   exact fun S hS => ⟨(hall S hS).1, (hall S hS).2.trans hval⟩
 
-/-- **Amplified Karger.** Run the algorithm `k` times and keep the
+/-- Amplified Karger. Run the algorithm `k` times and keep the
 cut of smallest reported value: the result reports the minimum-cut
 value with probability at least `1 − (1 − 2/(n(n−1)))^k`, so
 `O(n² log n)` repetitions find a minimum cut with high probability.
-Selecting by the reported value (`argmin Prod.snd`) costs nothing —
+Selecting by the reported value (`argmin Prod.snd`) costs nothing:
 the run already computed it. -/
 theorem karger_amplified
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -466,7 +466,7 @@ Each contraction round ticks `m' = ` (current number of edges): the
 contraction pass relabels and filters the whole edge list. Since
 contraction never adds edges, every round costs at most `m` and there
 are at most `n - 2` rounds, giving expected cost at most `(n - 2) m`.
-The bound holds for **arbitrary** graphs — no well-formedness needed. -/
+The bound holds for arbitrary graphs, with no well-formedness needed. -/
 
 /-- Expected cost of the contraction loop: at most `fuel * m`
 (shared with Karger–Stein). -/
@@ -494,10 +494,10 @@ lemma expected_cost_contractAux
     rw [contractAux.eq_2, dif_neg hm, expected_cost_toPMF_pure]
     exact bot_le
 
-/-- **Expected complexity of Karger's algorithm.** With one tick per
+/-- Expected complexity of Karger's algorithm. With one tick per
 edge scanned during a contraction pass, running `Karger` on a graph
 with `n` vertices and `m` edges costs at most `(n - 2) * m` in
-expectation — for arbitrary inputs. -/
+expectation, for arbitrary inputs. -/
 theorem karger_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     (g : MultiGraph α) :
@@ -508,7 +508,7 @@ theorem karger_cost_le
   refine le_trans (expected_cost_contractAux _ g.super) ?_
   exact le_of_eq (by rw [length_edges_super])
 
-/-- Finiteness of the expected cost — a free corollary of the
+/-- Finiteness of the expected cost, a free corollary of the
 `(n - 2) m` bound. -/
 lemma expected_cost_karger_ne_top
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (g : MultiGraph α) :
@@ -531,7 +531,7 @@ theorem karger_cost_le_real
 /-! ## Amplification: repetition finds the minimum cut
 
 A single contraction run succeeds with probability only `Ω(1/n²)`, but
-Karger is one-sided — the reported value never undershoots — so keeping
+Karger is one-sided (the reported value never undershoots), so keeping
 the best cut over independent runs succeeds as soon as any single run
 does. The generic `amplify` combinator turns this into a theorem. -/
 

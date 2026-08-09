@@ -12,19 +12,19 @@ import Mathlib.Data.Fintype.BigOperators
 # Random vectors: `0/1` bits and uniform grid samples
 
 The generic entropy sources for Monte-Carlo algorithms, with one
-counting principle per tier — "any test accepts with probability
+counting principle per tier: "any test accepts with probability
 `#accepting / #choices`":
 
-* the **list** tier — a uniform index into a list (`randIdx`) and
+* the list tier, a uniform index into a list (`randIdx`) and
   `toPMF_randIdx_bind_countP`: a branch that decides a predicate at a
   uniform index accepts with probability `L.countP P / |L|`.
-* the `0/1` tier — a uniform random bit (`randBit`), a uniform random
+* the `0/1` tier, a uniform random bit (`randBit`), a uniform random
   bit vector (`randVec`), and `toPMF_randVec_true` /
-  `toPMF_randVec_true_card`: testing **any** predicate on a random
+  `toPMF_randVec_true_card`: testing any predicate on a random
   `0/1` vector accepts with probability
   `#{accepting bit choices} / 2^n`. Only `Zero R` and `One R` are
   assumed; `Freivalds` is the client.
-* the **grid** tier — a uniformly random element of an arbitrary
+* the grid tier, a uniformly random element of an arbitrary
   nonempty `Finset` (`randElem`, law `uniformOfFinset`), a vector of
   independent such draws (`randVecOn`, law: uniform on the grid
   `piFinset (fun _ => s)`), and the counting principle
@@ -73,9 +73,9 @@ The simplest Monte-Carlo shape there is: draw a uniform index into a
 list, accept iff the element satisfies a predicate.
 -/
 
-/-- **The list counting principle.** If every branch of a uniform-index
+/-- The list counting principle. If every branch of a uniform-index
 draw deterministically decides the predicate `P` at its own element,
-the algorithm accepts with probability `#{i | P L[i]} / |L|` — the
+the algorithm accepts with probability `#{i | P L[i]} / |L|`, the
 list sibling of `toPMF_randVec_true` and `toPMF_randVecOn_true`.
 
 Stated on the branch function `f`, so ticks and other lawful-invisible
@@ -94,7 +94,7 @@ theorem toPMF_randIdx_bind_countP
   simp only [hf, PMF.pure_apply, eq_comm (a := true)]
   rw [sum_ite_getElem_eq_countP, ENNReal.div_eq_inv_mul]
 
-/-- **Acceptance probability as a count.** Testing any predicate on a
+/-- Acceptance probability as a count. Testing any predicate on a
 random `0/1` vector accepts with probability
 `#{accepting bit choices} / 2^n`. -/
 lemma toPMF_randVec_true
@@ -144,7 +144,7 @@ lemma toPMF_randVec_true
     rw [← Finset.mul_sum, h2]
     ring_nf
 
-/-- `toPMF_randVec_true` with the count as a `Finset.card` — the form
+/-- `toPMF_randVec_true` with the count as a `Finset.card`, the form
 that lets a client count accepting bit choices in ℕ and descend once,
 as `toPMF_randVecOn_true` already does for grids. -/
 lemma toPMF_randVec_true_card
@@ -173,7 +173,7 @@ noncomputable def randElem {M} [Monad M] [RandMonad M] {α : Type} (s : Finset �
   let i ← randIdx s.toList (by simpa using hs.card_pos)
   pure s.toList[i]
 
-/-- `randElem` draws **uniformly**: its law is `uniformOfFinset`. -/
+/-- `randElem` draws uniformly: its law is `uniformOfFinset`. -/
 lemma toPMF_randElem {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] {α : Type} (s : Finset α) (hs : s.Nonempty) :
     𝒟_{M}[randElem s hs] = PMF.uniformOfFinset s hs := by
@@ -207,7 +207,7 @@ noncomputable def randVecOn {M} [Monad M] [RandMonad M] {α : Type} (s : Finset 
       return Fin.cons b rest
 
 /-- Evaluate a `Fin.cons`-postprocessed draw at a vector via its
-head/tail split — the Fin-tuple helper that hides the dependent-motive
+head/tail split, the Fin-tuple helper that hides the dependent-motive
 friction of `Fin.cons` (the head must match; the tail carries the
 recursion). -/
 lemma toPMF_bind_pure_finCons
@@ -268,7 +268,7 @@ lemma toPMF_randVecOn_apply {M} [Monad M] [LawfulMonad M]
         if_neg fun hmem : f ∈ Fintype.piFinset (fun _ : Fin (n + 1) => s) =>
           h0 (Fin.mem_piFinset_iff_zero_tail.mp hmem).1]
 
-/-- `randVecOn` samples **uniformly from the grid**: its law is the
+/-- `randVecOn` samples uniformly from the grid: its law is the
 uniform distribution on `piFinset (fun _ => s) = sⁿ`. -/
 lemma toPMF_randVecOn {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] {α : Type}
@@ -302,9 +302,9 @@ lemma pmf_uniformOfFinset_bind_pure_true {α : Type*} (t : Finset α)
   rw [Finset.sum_congr rfl hstep, ← Finset.mul_sum, Finset.sum_boole,
     ENNReal.div_eq_inv_mul]
 
-/-- **Acceptance probability as a grid count.** Testing any predicate
+/-- Acceptance probability as a grid count. Testing any predicate
 on a uniform sample from the grid `sⁿ` accepts with probability
-`#accepting / #s ^ n` — the `Finset` generalization of
+`#accepting / #s ^ n`, the `Finset` generalization of
 `toPMF_randVec_true`; `SchwartzZippel` is the client. -/
 lemma toPMF_randVecOn_true {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] {α : Type}
