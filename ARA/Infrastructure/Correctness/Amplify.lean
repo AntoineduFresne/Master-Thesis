@@ -195,7 +195,7 @@ theorem amplify_success
       ≤ 1 - prob (𝒟[amplify best k m]) Sᶜ := tsub_le_tsub_left hfail 1
     _ = prob (𝒟[amplify best k m]) S := (prob_eq_one_sub_compl _ _).symm
 
-/-- **`amplify_success` for a Boolean one-sided test.** If one run of
+/-- `amplify_success` for a Boolean one-sided test. If one run of
 `m` answers `true` with probability at least `p`, then `k` independent
 runs combined with `||` answer `true` with probability at least
 `1 − (1 − p) ^ k`.
