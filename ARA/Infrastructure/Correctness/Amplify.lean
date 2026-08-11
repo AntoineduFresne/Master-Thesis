@@ -195,6 +195,29 @@ theorem amplify_success
       ≤ 1 - prob (𝒟[amplify best k m]) Sᶜ := tsub_le_tsub_left hfail 1
     _ = prob (𝒟[amplify best k m]) S := (prob_eq_one_sub_compl _ _).symm
 
+/-- **`amplify_success` for a Boolean one-sided test.** If one run of
+`m` answers `true` with probability at least `p`, then `k` independent
+runs combined with `||` answer `true` with probability at least
+`1 − (1 − p) ^ k`.
+
+No support hypothesis is needed: `||` keeps a `true` wherever it finds
+one, so the invariant set is everything. This is the combiner of a
+test that never says `true` in error, which is the commonest
+Monte-Carlo shape there is. -/
+theorem amplify_or_success
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {m : M Bool} {p : ℝ≥0∞} (hp : p ≤ ℙ[m = true]) (k : ℕ) :
+    1 - (1 - p) ^ k ≤ ℙ[amplify (· || ·) k m = true] := by
+  have h := amplify_success (M := M) (best := (· || ·))
+    (m := m) (S := {true}) (V := Set.univ) (p := p)
+    (Set.subset_univ _)
+    (fun a _ b _ => Set.mem_univ _)
+    (fun a _ b _ hor => by
+      simp only [Set.mem_singleton_iff] at hor ⊢
+      rcases hor with h1 | h1 <;> subst h1 <;> simp)
+    (by rw [prob_singleton]; exact hp) k
+  rwa [prob_singleton] at h
+
 /-- Keep whichever answer has the smaller *measure* `f`. -/
 def argmin {β γ : Type} [LinearOrder γ] (f : β → γ) (a b : β) : β :=
   if f a ≤ f b then a else b

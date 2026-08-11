@@ -147,12 +147,24 @@ tier) the `@[spec_transport]` lemmas. Tier-agnostic: the same
 normalizer drives Dirac, distributional and support proofs.
 
 Accepts a location: `toPMF_step at h` normalizes a hypothesis, which
-is the form support proofs (`h : out ∈ (…).support`) live on. -/
+is the form support proofs (`h : out ∈ (…).support`) live on.
+
+Accepts an algorithm name as well: `toPMF_step myAlgo` first unfolds
+one layer of `myAlgo` via its equation lemmas, so no proof spells a
+compiler-generated `myAlgo.eq_1`. This is the twin of `cost_step`'s
+ident form. -/
 scoped syntax "toPMF_step" (Lean.Parser.Tactic.location)? : tactic
+
+scoped syntax "toPMF_step " colGt ident
+    (Lean.Parser.Tactic.location)? : tactic
 
 scoped macro_rules
   | `(tactic| toPMF_step $[$loc:location]?) =>
     `(tactic| simp only [toPMF_simp] $[$loc:location]?)
+  | `(tactic| toPMF_step $f:ident) =>
+    `(tactic| (simp only [$f:ident]; toPMF_step))
+  | `(tactic| toPMF_step $f:ident $loc:location) =>
+    `(tactic| (simp only [$f:ident] $loc:location; toPMF_step $loc:location))
 
 /-- `dirac_finish` attempts to close a branch goal outright: push
 `toPMF` through with `toPMF_step`, split the branch's `if`s (when

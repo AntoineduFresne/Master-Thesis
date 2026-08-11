@@ -677,11 +677,12 @@ private abbrev randMax_branch
   is a distribution, a support statement or a bound (see Step 5).
 
   One practical point, which is where the time goes when a proof does
-  not close: state the transport lemma so that its hypotheses match
-  the guards the branch leaves in context, in the form `simp`
-  normalises them to. Here in this context that means a ℕ index with
-  an explicit bound `i < L.length`, because that is what `L[i]` carries
-  with it. `dirac_finish` can then discharge the side conditions by itself.
+  not close: it is useful to state the transport lemma so that its
+  hypotheses match the hypothesis of the branch leaves in context,
+  especially in the form that `simp` normalises them to. Here,
+  that means a ℕ index with an explicit bound `i < L.length`,
+  because that is what `L[i]` carries with it. `dirac_finish` (which
+  behind is a simp) can then use the side conditions by itself.
 
   Real examples: `mergeSort_partition_cons` in `Quicksort`, and the
   three `orderStat_*_branch` lemmas in `Quickselect`, one per case of
@@ -711,80 +712,235 @@ private lemma listMax_branch (L : List α) (i : ℕ) (h : i < L.length) :
 /-!
 ## Step 5: correctness
 
-5. The fifth step states correctness. There is no single correctness
-  theorem, and this is the one place where the recipe splits.
+5. The fifth step is about correctness. There is no single correctness
+  theorem, and this is the one place where the recipe starts to split.
 
-  Here are the four shapes it has been taken account to take (of course
-  there can be more), with the binders left out so that only the statements
-  show:
+  We first introduce some notation.
 
-  ```
-  -- 5a, Dirac: the output is one value
-  𝒟_{M}[RandMax L] = PMF.pure (listMax L)
+  Several notations of this kind appear below, and they all share the
+  same pattern. In each of them:
 
-  -- 5b, exact distribution: the output is random, and this is its law
-  ℙ_{M}[RandMember x (a :: L) = true]
-    = ((a :: L).count x : ENNReal) / ((a :: L).length : ENNReal)
+  - `M` is the monad at which we read the algorithm, a lawful
+    source of randomness, typically `PMF`;
+  - `e` is the algorithm itself, that is a term of type `M α`, for
+    instance `RandMax L` or `RandMember x L`;
+  - `v` is one possible output of it, a term of type `α`, for
+    instance `true`;
+  - `S` is a set of outputs, in other words an event.
 
-  -- 5c, support: the error goes in one direction only
-  ∀ b ∈ 𝒟_{M}[RandMember x L].support, b = true → x ∈ L
+  They are all macros. To recall, a macro is a purely syntactic
+  abbreviation: Lean replaces it by the term it stands for before type
+  checking, so nothing new is defined by it and there is never
+  anything to unfold later. This is the difference with `unfold`,
+  which replaces a constant by its body during a proof. It also means
+  that `simp` and `rw` see the underlying term directly. When we write
+  "expands to" below, we name exactly that replacement.
 
-  -- 5d, success probability, and then amplification
-  1 / ((a :: L).length : ENNReal) ≤ ℙ_{M}[RandMember x (a :: L) = true]
-  1 - (1 - p) ^ k ≤ ℙ_{M}[amplify (· || ·) k (RandMember x L) = true]
-  ```
+  The first three notations read the output of the algorithm.
 
-  Read the left-hand sides. The first is an equality with a point
-  mass, the second an equality with a number, the third an
-  implication with no probability in it at all, the fourth an
-  inequality. Choosing between them is the content of this step.
+  - `𝒟_{M}[e]` is the output distribution of `e`. It expands to
+    `LawfulRandMonad.toPMF (e : M _)`, so it is a `PMF`. This is also
+    where the `LawfulRandMonad` of Step 1 is finally used: without
+    `toPMF` the notation would not exist. It is defined in
+    `ARA/Infrastructure/Randomness/LawfulRandMonad.lean`.
 
-  Which one you state depends on how far the randomness travels
-  before it reaches the output, and the four tiers below are ordered
-  by exactly that: from randomness that never reaches the output to
-  randomness that can make it wrong.
+  - `ℙ_{M}[e = v]` is the probability that `e` outputs `v`. It expands
+    to `LawfulRandMonad.toPMF (e : M _) v`, which is exactly
+    `𝒟_{M}[e]` applied to the point `v`. So the two notations are the
+    same object seen twice: `𝒟` is the whole distribution, `ℙ` is that
+    distribution read at one value, and is therefore a number in
+    `ℝ≥0∞`.
 
-  * **Dirac** (5a). The randomness changes the cost but not the
-    output, so the output distribution is a point mass and the
-    theorem is an equality with it. `RandMax` lives here, and so does
-    every Las Vegas algorithm.
-  * **Exact distribution** (5b). The output does depend on the
-    randomness, and the theorem *is* its distribution — the strongest
-    thing one can say once no single output is the right one.
-  * **Support** (5c). Weaker, and often the more useful statement:
-    the output can be wrong, but only in one direction. It holds on
-    every run, with no probability attached.
-  * **Success probability, then amplification** (5d). The
-    quantitative companion of 5c: bound the probability of a correct
-    output, then repeat to push the failure probability down.
+  - `ℙ_{M}[e ∈ S]` is the same thing for an event rather than a single
+    value. It expands to `prob 𝒟_{M}[e] S`, where
+    `prob p s = ∑' a, s.indicator p a` sums the probabilities over
+    `s`. Both `ℙ` forms live in
+    `ARA/Infrastructure/Randomness/Prob.lean`.
 
-  A Monte Carlo algorithm typically needs 5b, 5c and 5d together and
-  none of 5a, because it has no single correct output to point at.
-  `RandMember` therefore appears three times below.
+  The remaining three notations read the cost instead. They all go
+  through the timed reading `TimeMT ℕ M` of Step 2, and they rest
+  on a different distribution from the three above, which is worth
+  making explicit before we list them.
+
+  A timed program `m : TimeMT ℕ M α` returns a pair, a value and a
+  cost, so its law is a law of pairs:
+
+  - `TimedPMF m = toPMF m.run`, of type `PMF (TimeM ℕ α)`, is that
+    joint law of the output and the cost.
+
+  A law of pairs has two marginals, and both are used in this file.
+
+  - Forgetting the cost gives the law of the output, of type `PMF α`.
+    This is `𝒟` read at `TimeMT ℕ M`, whose instance is
+    `toPMF m = toPMF (TimeM.ret <$> m.run)`, that is `TimedPMF m`
+    mapped along the projection `TimeM.ret` of a pair onto its value.
+    It is what the three notations above mean once the monad carries
+    time, and it is why a correctness theorem proved once for an
+    abstract `M` covers the timed reading as well.
+
+  - Forgetting the value gives the law of the cost, of type `PMF ℕ`.
+    This is `costPMF m = (TimedPMF m).map TimeM.time`, and it is the
+    subject of Step 7.
+
+  The three notations below use the joint law itself, since averaging
+  or bounding the cost only needs the `time` component of each
+  outcome.
+
+  - `𝔼_{M}[cost e]` is the expected cost of `e`. It expands to
+    `expected_cost (TimedPMF (e : TimeMT ℕ M _))`, and
+
+    ```
+    expected_cost p = ∑' res, p res * (res.time : ENNReal)
+    ```
+
+    averages the `time` field of the pair and ignores the value. The
+    result is a number in `ℝ≥0∞`. It is defined in
+    `ARA/Infrastructure/Complexity/ExpectedCost.lean` and used from
+    Step 6 on.
+
+  - `𝔼ℝ[cost m]` is that same number as a real, through `toReal`.
+
+  - `ℙ[cost m > k]` is the probability that the cost of `m` exceeds
+    `k`. It expands to `prob (TimedPMF m) {tm | k < tm.time}`, so it
+    is the same `prob` as in the output notations above, applied this
+    time to the joint law and to an event that only looks at the
+    `time` component: the set of pairs whose cost is greater than `k`.
+    It is therefore again a number in `ℝ≥0∞`. Similarly
+    `ℙ[cost m ≥ k]` expands to `prob (TimedPMF m) {tm | k ≤ tm.time}`.
+    They are defined in `ARA/Infrastructure/Complexity/TailBounds.lean`,
+    and Step 8 bounds the strict one with `runtime_markov_gt` and the
+    other with `runtime_markov`. This will be explained later.
+
+  Now that we have introduced the notations, here are the four shapes
+  that a correctness theorem takes in this file (there can of course
+  be others):
+
+  * Dirac (5a). The output distribution is a point mass. `RandMax` is
+    such an algorithm, and so is every Las Vegas one.
+
+    ```
+    𝒟_{M}[RandMax L] = PMF.pure (listMax L)
+    ```
+
+  * Exact distribution (5b). The output follows a distribution that is
+    not a point mass. This is the strongest correctness theorem we can
+    get once no single output is the right one.
+
+    ```
+    ℙ_{M}[RandMember x (a :: L) = true]
+      = ((a :: L).count x : ENNReal) / ((a :: L).length : ENNReal)
+    ```
+
+  * Support (5c). A weaker theorem, but often the useful one: the
+    output can be wrong, but only in one direction. It holds on every
+    run, and no probability appears in it.
+
+    ```
+    ∀ b ∈ 𝒟_{M}[RandMember x L].support, b = true → x ∈ L
+    ```
+
+  * Success probability, then amplification (5d). Bound the
+    probability of a correct output, then repeat to push the
+    failure probability down (which is called amplification).
+
+    ```
+    1 / ((a :: L).length : ENNReal) ≤ ℙ_{M}[RandMember x (a :: L) = true]
+    1 - (1 - p) ^ k ≤ ℙ_{M}[amplify (· || ·) k (RandMember x L) = true]
+    ```
+
+    The `amplify (· || ·) k` of the second line is not a notation but
+    an ordinary definition, in
+    `ARA/Infrastructure/Correctness/Amplify.lean`:
+
+    ```
+    def amplify {M} [Monad M] {β : Type} (best : β → β → β) :
+        ℕ → M β → M β
+      | 0, m => m
+      | 1, m => m
+      | k + 2, m => do
+          let a ← m
+          let b ← amplify best (k + 1) m
+          return best a b
+    ```
+
+    `amplify best k m` runs `m` exactly `k` times, independently,
+    and folds the `k` answers together with `best`, two at a time.
+    Unfolding `k = 3` gives `best a₁ (best a₂ a₃)`, where `a₁`, `a₂`
+    and `a₃` are the three runs.
+
+    Notice the limitation: `best` is binary, so the combination is a
+    fold, while some ways of aggregating `k` answers are not folds at
+    all. Majority vote is the standard example, and a median is
+    another. Neither can be written as a `β → β → β` applied pairwise,
+    because both have to count or sort all `k` answers at once.
+
+    Notice also that the special case `k = 0` returns one run.
+    The reason is the type: the result has to be an `M β`, so it has
+    to produce a `β`, and there is no `β` to be had from zero runs.
+    Returning nothing would mean changing the type to something like
+    `M (Option β)` and carrying that `Option` through every later
+    theorem, for a case nobody calls. This costs nothing in the
+    theorems, because the bound is vacuous exactly there. At `k = 0`
+    it reads `1 - (1 - p)^0 ≤ ℙ[...]`, that is `0 ≤ ℙ[...]`, which is
+    true of any probability. At `k = 1` it reads `p ≤ ℙ[...]`, which
+    is the hypothesis on one run. The definition and the bound only
+    start saying something new at `k = 2`.
+
+    So this is a deliberate choice, and the alternative is worse.
+    Asking for `0 < k` would add a hypothesis to `amplify_success`,
+    and to every theorem built on it, in order to rule out a case that
+    lands correctly on its own.
+
+    There is one place where `k = 0` is not harmless, and it concerns
+    the cost rather than the correctness. The equation
+    `𝔼[cost amplify best k m] = k * 𝔼[cost m]` is false at `k = 0`,
+    where it would claim that one run is free. So
+    `expected_cost_amplify` is stated at `k + 1` instead:
+
+    ```
+    𝔼[cost amplify best (k + 1) m] = (k + 1 : ℝ≥0∞) * 𝔼[cost m]
+    ```
+
+    Lastly, `(· || ·)` is Lean's shorthand for
+    `fun a b => a || b`, the Boolean "or". It is the right choice for
+    `RandMember` precisely because of 5c: a `true` is always
+    trustworthy and a `false` may be a miss, so keeping any `true` that
+    appears can only improve the answer.
+
+    `best` is left abstract in `amplify` because the right combiner
+    depends on the algorithm. For example `Karger`, in
+    `ARA/Algorithms/Karger/Karger.lean`, returns a pair rather than a
+    boolean, the partition it found, and the value of the corresponding
+    cut. Its combiner is therefore not `min` but `argmin Prod.snd`, which
+    is `fun a b => if a.2 ≤ b.2 then a else b` (it keeps whichever of
+    the two runs reported the smaller value, and keeps that run's
+    partition along with it).
+
+  Small note: A Monte Carlo algorithm typically needs 5b, 5c and 5d
+  together.
 
 ### 5a: Dirac correctness (`RandMax`)
 
-The randomness never reaches the output, so the distribution of that
-output is a point mass sitting on the specification:
-`𝒟_{M}[RandMax L]`, the output distribution, equals
-`PMF.pure (listMax L)`.
-
 With the transport lemma of Step 4 in place, the proof is one tactic.
-`dirac_correct RandMax` runs functional induction on the algorithm, so
-the cases are the algorithm's own cases and the induction hypotheses
-come already quantified over the drawn index; it then collapses the
-draw — legitimate precisely because every branch returns the same
-output — and discharges each branch with the `@[spec_transport]`
-lemmas. Any goal it leaves open is not a failure of the tactic: it is
-a transport lemma you have not stated yet.
+`dirac_correct RandMax` runs functional induction on the algorithm.
+The cases are the algorithm's own cases, and the induction hypotheses
+come already quantified over the drawn index. The goal is an equation
+about `RandMax L`, which begins by drawing an index. Then, because
+every branch returns the same output, we can collapse the draw to the
+point mass at the maximum of the list. Collapsing replaces the goal by
+the same equation for the branch at a fixed `i`. The lemma that says
+so is `toPMF_randIdx_bind_dirac`. Finally it discharges each branch
+with the `@[spec_transport]` lemmas. If there is still a goal open
+after applying, it is most often due to a transport lemma you have
+not stated. It can also be a base case whose specification has to
+be unfolded by hand, as in `quickselect_correct`.
 
 Real examples: `quicksort_correct`, `quickselect_correct`.
 -/
 
 /-- Correctness. For any lawful random monad and any lawful cost model,
-`RandMax` returns exactly `listMax L`. Neither the randomness nor the
-ticks affect the output. The `LawfulMonadCost` binder is what makes
-this one statement cover the reading `TimeMT ℕ PMF` as well. -/
+`RandMax` returns exactly `listMax L`. The `LawfulMonadCost` hypothesis
+is what makes this one statement cover the reading `TimeMT ℕ PMF`. -/
 theorem randMax_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
@@ -799,20 +955,68 @@ theorem randMax_correct_pmf (L : List α) :
 
 /-! ### 5b: the exact output distribution (`RandMember`)
 
-Here the randomness does reach the output, so no point mass can
-describe it and the theorem becomes the distribution itself. For a
-`Bool`-valued algorithm that distribution is pinned down by a single
-number, the probability of `true`, so the one equation below says
-everything there is to say about the output.
+Here, no point mass can describe the output and the theorem is the
+distribution itself. For example, the distribution of a `Bool`-valued
+algorithm is a Bernoulli distribution, pinned down by one number, the
+probability of `true`.
 
-The counting principle behind it is `toPMF_randIdx_bind_countP`, in
-`ARA/Infrastructure/Randomness/RandVec.lean`: when one draw decides a
-predicate at its own element, the algorithm accepts with probability
-`#{i | P L[i]} / |L|` — "accepting choices over all choices", the
-usual first computation of a probability course. Here the predicate is
-`· == x`, so the count is `L.count x`. The side condition
-`fun i => by toPMF_step` is where the tick disappears: a lawful tick
-costs time but does not change the output distribution.
+Here is the counting principle the proof rests on, from
+`ARA/Infrastructure/Randomness/RandVec.lean`:
+
+```
+theorem toPMF_randIdx_bind_countP
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    {α : Type} {L : List α} {hL : 0 < L.length}
+    {f : Fin L.length → M Bool} (P : α → Bool)
+    (hf : ∀ i, 𝒟[f i] = PMF.pure (P L[i])) :
+    ℙ[(randIdx L hL >>= f : M Bool) = true]
+      = (L.countP P : ENNReal) / (L.length : ENNReal)
+```
+
+When one draw decides a predicate at its own element, the algorithm
+accepts with probability `#{i | P L[i]} / |L|`, that is "accepting
+choices over all choices", the Laplace probability definition. Here
+the predicate is `· == x`, so the count of accepting choices, the
+`L.countP P` above, is `L.count x`. The two are the same by
+definition: `List.count x` is `List.countP (· == x)`.
+
+That file is where the counting principles live, one per kind of draw
+the framework offers, all of the same shape. The kinds this tutorial
+does not use are listed in "Where to go from here" (at the end of this
+file).
+
+The proof applies it like this:
+
+```
+  simp only [RandMember]
+  refine (toPMF_randIdx_bind_countP (M := M) (P := fun y => y == x) ?_).trans ?_
+  · intro i; toPMF_step
+  · simp [List.count]
+```
+
+The first line unfolds one layer of the algorithm, which leaves the
+draw followed by the branch. That is the shape the principle is about.
+
+Only `P` is supplied. The list, its non-emptiness and the branch all
+occur in the statement's left-hand side, so Lean reads them off the
+goal. `P` occurs only on the right, so nothing determines it there,
+and there is a second reason worth seeing. The draw returns an index,
+so the predicate is applied to `L[i]` and not to the drawn value, and
+nothing can tell which part of `P L[i]` is `P`. In the two sibling
+principles the predicate does sit on the drawn value, which is why
+they are applied with no argument at all.
+
+Two goals are left. `intro i; toPMF_step` proves `hf`, that every
+branch has the law of its test, and it is where the tick disappears,
+by the `LawfulMonadCost` axiom of Step 1. `simp [List.count]` is the
+count.
+
+This also answers the question the statement raises: why a branch `f`
+and a hypothesis about it, rather than `P L[i]` directly? The answer
+is that a branch is free to do more than test, as this one does, and
+a direct statement would force the tick to be rewritten away in the
+goal first. Taking `f` moves that work into `hf`, where `toPMF_step`
+does it in one call.
 
 Real examples: `reservoir_correct` (each element kept with probability
 `count/n`) and `shuffle_uniform` (each permutation with probability
@@ -826,11 +1030,10 @@ theorem randMember_prob
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] (x : α) (a : α) (L : List α) :
     ℙ_{M}[RandMember x (a :: L) = true] =
       (((a :: L).count x : ℕ) : ENNReal) / (((a :: L).length : ℕ) : ENNReal) := by
-  rw [RandMember.eq_2]
-  rw [toPMF_randIdx_bind_countP (L := a :: L) (P := fun y => y == x)
-    (f := fun i => (MonadCost.tick 1 >>= fun _ => pure ((a :: L)[i] == x)))
-    (by simp) (fun i => by toPMF_step)]
-  simp [List.count]
+  simp only [RandMember]
+  refine (toPMF_randIdx_bind_countP (M := M) (P := fun y => y == x) ?_).trans ?_
+  · intro i; toPMF_step
+  · simp [List.count]
 
 /-! ### 5c: one-sided error, via the support (`RandMember`)
 
@@ -841,7 +1044,7 @@ attached and no arithmetic to state it.
 
 That is what makes it the natural home for one-sided error. Here it
 says that the error goes in one direction only: the output can be
-`false` while `x` is present — the draw simply missed it — but never
+`false` while `x` is present (the draw simply missed it), but never
 `true` while `x` is absent. The proof reads the support of "draw, then
 run a branch" as the union of the branch supports
 (`support_toPMF_randIdx_bind`), picks out the index that produced the
@@ -885,11 +1088,14 @@ it into an algorithm. One-sided error (5c) is exactly the hypothesis
 that licenses repetition: combining `k` independent runs with `||` can
 turn a `false` into a `true` but never the reverse, so a wrong answer
 requires all `k` runs to be wrong and the failure probability is a
-product, `(1 - p)^k` — as small as you like, for a cost linear in `k`.
+product, `(1 - p)^k`, as small as you like for a cost linear in `k`.
 `amplify_success` proves this once and for all, for any combiner that
 keeps a success when it sees one, so every Monte Carlo algorithm
 inherits it; the general statement lives in
-`ARA/Infrastructure/Correctness/Amplify.lean`.
+`ARA/Infrastructure/Correctness/Amplify.lean`. That file also names
+the combiner of each common shape, and `amplify_or_success` is the
+one for a Boolean test, which is why the theorem below is a term
+rather than a proof.
 
 Real examples: `karger_success_prob` and `karger_finds_min`, then
 `karger_amplified`, where the combiner keeps the smallest reported cut
@@ -917,16 +1123,8 @@ theorem randMember_amplified
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] (x : α) (L : List α)
     {p : ENNReal} (hp : p ≤ ℙ_{M}[RandMember x L = true]) (k : ℕ) :
-    1 - (1 - p) ^ k ≤ ℙ_{M}[amplify (· || ·) k (RandMember x L) = true] := by
-  have h := amplify_success (M := M) (best := (· || ·))
-    (m := (RandMember x L : M Bool)) (S := {true}) (V := Set.univ) (p := p)
-    (Set.subset_univ _)
-    (fun a _ b _ => Set.mem_univ _)
-    (fun a _ b _ hor => by
-      simp only [Set.mem_singleton_iff] at hor ⊢
-      rcases hor with h1 | h1 <;> subst h1 <;> simp)
-    (by rw [prob_singleton]; exact hp) k
-  rwa [prob_singleton] at h
+    1 - (1 - p) ^ k ≤ ℙ_{M}[amplify (· || ·) k (RandMember x L) = true] :=
+  amplify_or_success hp k
 
 /-!
 ## Step 6: expected cost
@@ -968,7 +1166,7 @@ theorem randMember_amplified
 
   The shape `expected_cost_uniform_step'` expects is convenient, not
   mandatory. `cost_step` reduces any branch, and a recursion whose
-  branches differ in size reindexes the sum instead — see "Where to
+  branches differ in size reindexes the sum instead. See "Where to
   go from here".
 
   Real examples: `quicksort_cost_exact` and `quickselect_cost_exact`
@@ -1060,7 +1258,7 @@ theorem randPick_cost_zero
   exactly `n` comparisons on *every* run, not merely on average. The
   theorem below says precisely that: the cost distribution is a point
   mass at `L.length`. Its proof follows the same skeleton as the
-  expected cost — induct along `RandMax.induct`, peel one draw — but
+  expected cost (induct along `RandMax.induct`, peel one draw), but
   with the `costPMF` lemmas in place of the averaging ones, and
   `costPMF_lift_bind_const` where the uniform average used to be:
   every branch has the same cost law, so the value drawn does not
@@ -1099,9 +1297,9 @@ theorem randMax_costPMF
   version both sharper than the textbook `𝔼/k` and free of its
   `k ≠ 0` side condition.
 
-  A tail bound is the weakest of the three cost statements — it is
+  A tail bound is the weakest of the three cost statements, since it is
   implied by the expectation, which is exactly why it costs one line
-  — but it is the one that reads as a running-time guarantee. When
+ , but it is the one that reads as a running-time guarantee. When
   the expectation alone gives too weak a tail, the second moment is
   available: `variance` and `runtime_chebyshev`, in
   `ARA/Infrastructure/Complexity/Variance.lean`.
@@ -1123,8 +1321,8 @@ theorem randMax_cost_tail
 ## Step 9: averaging something that is not a cost
 
 9. Not every expectation is a running time. When the quantity to
-  average is a function of the *output* — the height of a random
-  tree, the size of a random cut — the tool is `expVal`, with the
+  average is a function of the *output*, the height of a random
+  tree, the size of a random cut, the tool is `expVal`, with the
   same `pure`/`bind`/uniform decomposition API as expected cost
   applied to the output instead of the clock. It sits one layer below
   the cost machinery, in `ARA/Infrastructure/Randomness/Prob.lean`,
@@ -1137,7 +1335,7 @@ theorem randMax_cost_tail
 
   Real example: `treap_expected_height_le`, which bounds `𝔼[height]`
   by first bounding the exponential moment `𝔼[2^height]`
-  (`treap_expVal_exp_height`) — an argument entirely about the output,
+  (`treap_expVal_exp_height`), an argument entirely about the output,
   which never mentions cost.
 -/
 
@@ -1157,31 +1355,139 @@ theorem expVal_randPick
 /-!
 ## Where to go from here
 
-The three toys were chosen to be small, so each entry below is
-something a real algorithm meets and none of them do.
+The three toys were chosen to be small, and being small they leave a
+good part of the framework unused. This last section is a map of what
+they do not show, with a pointer for each.
 
-* **Case splits inside a branch.** `dirac_correct` performs the split
-  and reads the guards off the hypotheses; supply one
-  `@[spec_transport]` lemma per case, with hypotheses matching those
-  guards. Either orientation works, as long as the rewrite
-  terminates. See `quickselect_correct`.
-* **Branches of unequal size.** `RandMax` recurses on `n - 1` whatever
-  it draws, which is why its recurrence collapsed to an average of
-  equal terms. When the size of a branch depends on the element drawn,
-  reindex the recurrence sum by the *rank* of that element, with
+### Other sources of randomness
+
+`randIdx` is one sampler among several.
+`ARA/Infrastructure/Randomness/RandVec.lean` provides three tiers, each
+with its own counting principle of the shape "a test accepts with
+probability `#accepting / #choices`":
+
+* the list tier, the one used above: `randIdx`, with
+  `toPMF_randIdx_bind_countP`, giving `L.countP P / |L|`;
+* the bit tier: `randBit`, and `randVec n` for a uniform `0/1` vector,
+  with `toPMF_randVec_true` and `toPMF_randVec_true_card`, giving
+  `#accepting / 2^n`. `Freivalds` is the client;
+* the grid tier: `randElem`, a uniform element of an arbitrary
+  non-empty `Finset`, and `randVecOn`, a vector of independent such
+  draws, with `toPMF_randVecOn_true`, giving `#accepting / #s^n`.
+  `SchwartzZippel` is the client.
+
+None of these samplers ticks, and
+`ARA/Infrastructure/Complexity/SamplerCosts.lean` says so once and for
+all. Its four lemmas are tagged `@[expected_cost_simp]`, so `cost_step`
+alone closes the cost proof of any algorithm whose only randomness
+comes from them. This is why `freivalds_cost_exact` and
+`schwartzZippel_cost_exact` are a single tactic call each, where Step 6
+needed three lemmas and an induction.
+
+### Proving a success probability in general
+
+Step 5d read its bound off the exact distribution of 5b, which was
+possible only because `RandMember` is simple enough to have one. The
+general route is `le_toPMF_randIdx_bind`: it lower-bounds the success
+probability by exhibiting a single good draw, and this is how
+`karger_success_prob` is proved.
+
+Its exact counterpart is `toPMF_randIdx_bind_apply`, the probabilistic
+twin of `expected_cost_uniform_step`: the output probability is the
+uniform average of the branch probabilities. `FisherYates` uses it.
+
+### What amplification costs
+
+Step 5d repeats a run `k` times and never says what that costs.
+`expected_cost_amplify` says it: `k + 1` runs cost `k + 1` times one
+run. `Karger` and `KargerStein` use it to turn a success bound and a
+cost bound into the two bounds of the amplified algorithm.
+
+### Second moments
+
+Step 8 stops at the first moment.
+`ARA/Infrastructure/Complexity/Variance.lean` carries the second:
+`variance`, written with `absSub` (notation `⊖`) because `ℝ≥0∞` has no
+subtraction, the classical identity `variance_eq_sub`
+(`Var[g] = E[g²] − E[g]²`), and `chebyshev`
+(`ℙ(|g − E[g]| ≥ k) ≤ Var[g] / k²`). Its cost form is
+`runtime_chebyshev`, and it improves on Markov whenever the expectation
+alone gives too weak a tail.
+
+### Loops that retry until they succeed
+
+A `PMF` has total mass `1`, so a computation that terminates only
+almost surely does not fit in one.
+`ARA/Infrastructure/Randomness/SPMF.lean` opens that door with
+`SPMF := OptionT PMF`, whose `mass` is the termination probability.
+`RetryMonad` provides the loop, `retry_run_some_of_good` and
+`retry_run_some_of_not_good` give its output law, and
+`mass_retry_eq_one` is the Las Vegas theorem: retrying a total program
+with positive success probability terminates almost surely.
+
+The cost side of that tier is
+`ARA/Infrastructure/Randomness/Geometric.lean`: `geometric` is the law
+of the failure count, `geometricTrials` the law of the trial count, and
+`mean_geometricTrials` is the `1/p` that every retry analysis consumes.
+
+`CouponCollector` is the case study, and it is the one file of
+`ARA/Algorithms` that deliberately bypasses the program layer. "Draw
+until a new coupon appears" is not a structurally terminating Lean
+program, so that file states its cost law directly, composing
+`geometricTrials` stages with `bind`.
+
+### More of the recipe
+
+* Case splits inside a branch. `dirac_correct` performs the split and
+  reads the guards off the hypotheses; supply one `@[spec_transport]`
+  lemma per case, with hypotheses matching those guards. Either
+  orientation works, as long as the rewrite terminates. See
+  `quickselect_correct`.
+* Branches of unequal size. `RandMax` recurses on `n - 1` whatever it
+  draws, which is why its recurrence collapsed to an average of equal
+  terms. When the size of a branch depends on the element drawn,
+  reindex the recurrence sum by the rank of that element, with
   `nodup_partition_sum₂`. See the exact cost proofs of `Quicksort` and
   `Quickselect`.
-* **Upper bounds instead of exact formulas.** Stay in `ℝ≥0∞` and close
-  with `uniform_avg_le`; finiteness then follows from the bound
-  itself, and `toReal_uniform_avg` descends to `ℝ`. See
+* Upper bounds instead of exact formulas. Stay in `ℝ≥0∞` and close with
+  `uniform_avg_le`; finiteness then follows from the bound itself, and
+  `toReal_uniform_avg` descends to `ℝ`. See
   `quickselect_cost_le_quadratic`.
-* **A Monte Carlo algorithm at full scale.** `RandMember` is the
-  pattern in miniature; `Karger` carries the same four theorems on a
-  real algorithm.
-* **Loops that retry until they succeed.** A `PMF` must have total
-  mass `1`, so a computation that might not terminate does not fit
-  in one. These live in `ARA/Infrastructure/Randomness/SPMF.lean`
-  (`SPMF := OptionT PMF`, `RetryMonad`, `mass_retry_eq_one`).
+
+### More of the API
+
+* The event algebra of `prob`: `prob_compl_eq_one_sub`,
+  `prob_add_compl`, `prob_mono` and `prob_bind`, in
+  `ARA/Infrastructure/Randomness/Prob.lean`.
+* More of `expVal` than Step 9 uses: the tower rule `expVal_bind`,
+  together with `expVal_mono`, `expVal_add` and `expVal_const_mul`,
+  which is what `treap_expected_height_le` actually runs on.
+* `runtime_markov`, the `≥` form of the tail bound of Step 8.
+* `mem_support_timedPMF`, which carries a support invariant proved at
+  an abstract `M` into the timed reading. `KargerStein` uses it.
+
+### The ten case studies
+
+Each file of `ARA/Algorithms` is a worked example, and together they
+cover the tiers this tutorial only sketches:
+
+* `Quicksort`: Dirac correctness and an exact expected cost, with
+  branches of unequal size.
+* `Quickselect`: the same, with a three-way case split in the branch,
+  and an upper bound next to the exact formula.
+* `Karger`: the full Monte Carlo stack on a real algorithm: support,
+  success probability, amplification and cost.
+* `KargerStein`: recursion on top of amplification, with
+  `expected_cost_amplify` and `mem_support_timedPMF`.
+* `Freivalds`: the bit-vector sampler, one-sided error, and a cost
+  that is the same on every run.
+* `SchwartzZippel`: the grid sampler, with the same three statements.
+* `ReservoirSampling`: an exact output distribution, an exact cost,
+  and a cost law.
+* `FisherYates`: a uniform permutation as output law, and cost `0`.
+* `Treap`: `expVal` on a functional of the output, the expected height
+  of a random tree.
+* `CouponCollector`: the cost-law tier, with no program layer at all.
 -/
 
 end ARA
