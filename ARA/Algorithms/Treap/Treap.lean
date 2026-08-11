@@ -554,8 +554,8 @@ theorem treap_correct
   | case2 x xs ih1 ih2 =>
     intro hnd t ht
     -- Deconstruct the support of `randIdx >>= (bind ∘ bind ∘ pure)`.
-    rw [treap_eq_bind, support_toPMF_randIdx_bind, Set.mem_iUnion] at ht
-    obtain ⟨i, ht⟩ := ht
+    rw [treap_eq_bind] at ht
+    obtain ⟨i, ht⟩ := mem_support_toPMF_randIdx_bind.mp ht
     obtain ⟨l, hl, r, hr, rfl⟩ := mem_support_toPMF_seq₂.mp ht
     have hnd' : ((x :: xs).eraseIdx i).Nodup := hnd.eraseIdx _
     obtain ⟨hsl, hpl⟩ := ih1 i (hnd'.filter _) l hl

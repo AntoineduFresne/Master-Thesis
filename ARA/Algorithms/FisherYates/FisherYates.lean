@@ -92,8 +92,8 @@ theorem support_shuffle
     rw [hout]
   | case2 x xs ih =>
     intro out hout
-    rw [shuffle.eq_2, support_toPMF_randIdx_bind] at hout
-    obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hout
+    rw [shuffle.eq_2] at hout
+    obtain ⟨i, hi⟩ := mem_support_toPMF_randIdx_bind.mp hout
     obtain ⟨rest, hrest, rfl⟩ := mem_support_toPMF_bind_pure.mp hi
     exact ((ih i rest hrest).cons _).trans (perm_getElem_cons_eraseIdx _ i).symm
 

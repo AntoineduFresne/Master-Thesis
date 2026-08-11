@@ -957,7 +957,7 @@ theorem randMax_correct_pmf (L : List α) :
 
 Here, no point mass can describe the output and the theorem is the
 distribution itself. For example, the distribution of a `Bool`-valued
-algorithm is a Bernoulli distribution, pinned down by one number, the
+algorithm is a Bernoulli distribution: the
 probability of `true`.
 
 Here is the counting principle the proof rests on, from
@@ -981,9 +981,8 @@ the predicate is `· == x`, so the count of accepting choices, the
 definition: `List.count x` is `List.countP (· == x)`.
 
 That file is where the counting principles live, one per kind of draw
-the framework offers, all of the same shape. The kinds this tutorial
-does not use are listed in "Where to go from here" (at the end of this
-file).
+the framework offers. The non used one in this tutorial are listed in
+"Where to go from here" (at the end of this file).
 
 The proof applies it like this:
 
@@ -994,14 +993,12 @@ The proof applies it like this:
   · simp [List.count]
 ```
 
-The first line unfolds one layer of the algorithm, which leaves the
-draw followed by the branch. That is the shape the principle is about.
-
-Only `P` is supplied. The list, its non-emptiness and the branch all
-occur in the statement's left-hand side, so Lean reads them off the
-goal. `P` occurs only on the right, so nothing determines it there,
-and there is a second reason worth seeing. The draw returns an index,
-so the predicate is applied to `L[i]` and not to the drawn value, and
+The first line unfolds one layer of the algorithm, then only `P` is
+supplied. The list, its non-emptiness and the branch all occur in the
+statement's left-hand side, so Lean reads them off the goal. `P`
+occurs only on the right, so nothing determines it there, and there
+is a second reason worth seeing. The draw returns an index, so the
+predicate is applied to `L[i]` and not to the drawn value, and
 nothing can tell which part of `P L[i]` is `P`. In the two sibling
 principles the predicate does sit on the drawn value, which is why
 they are applied with no argument at all.
@@ -1070,8 +1067,8 @@ theorem randMember_sound
     toPMF_step at hb
     simp at hb
   | a :: L =>
-    rw [RandMember.eq_2, support_toPMF_randIdx_bind] at hb
-    obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hb
+    rw [RandMember.eq_2] at hb
+    obtain ⟨i, hi⟩ := mem_support_toPMF_randIdx_bind.mp hb
     toPMF_step at hi
     have hx : (a :: L)[(i : ℕ)] = x := by simpa using hi.symm
     exact List.mem_iff_getElem.mpr ⟨(i : ℕ), i.isLt, hx⟩
