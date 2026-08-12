@@ -956,12 +956,15 @@ theorem randMax_correct_pmf (L : List α) :
 /-! ### 5b: the exact output distribution (`RandMember`)
 
 Here, no point mass can describe the output and the theorem is the
-distribution itself. For example, the distribution of a `Bool`-valued
-algorithm is a Bernoulli distribution: the
-probability of `true`.
+distribution itself. For a `Bool`-valued algorithm that distribution
+is a Bernoulli distribution, fixed by the probability of `true`.
 
 Here is the counting principle the proof rests on, from
 `ARA/Infrastructure/Randomness/RandVec.lean`:
+
+Note: other counting principles (like `toPMF_randVec_true`) live in
+the same file, and the ones this tutorial does not use are listed in
+"Where to go from here".
 
 ```
 theorem toPMF_randIdx_bind_countP
@@ -973,16 +976,27 @@ theorem toPMF_randIdx_bind_countP
       = (L.countP P : ENNReal) / (L.length : ENNReal)
 ```
 
-When one draw decides a predicate at its own element, the algorithm
-accepts with probability `#{i | P L[i]} / |L|`, that is "accepting
-choices over all choices", the Laplace probability definition. Here
-the predicate is `· == x`, so the count of accepting choices, the
-`L.countP P` above, is `L.count x`. The two are the same by
-definition: `List.count x` is `List.countP (· == x)`.
+`L` is a non-empty list and `hL` proves it is non-empty.
+`randIdx L hL` draws one position of `L`, uniformly. `f` says what to
+do at the position drawn, and `>>=` chains the two: draw a position,
+then run `f` there. The left-hand side is the probability that this
+program answers `true`.
 
-That file is where the counting principles live, one per kind of draw
-the framework offers. The non used one in this tutorial are listed in
-"Where to go from here" (at the end of this file).
+`P` is a test on elements, and the hypothesis `hf` says that the
+branch at position `i` answers exactly `P L[i]`. So the program
+answers `true` exactly when it drew a position whose element passes
+the test, and its probability of doing so is the number of such
+positions over the number of positions, `#{i | P L[i]} / |L|`. That
+is "accepting choices over all choices", the Laplace probability
+definition.
+
+The theorem looks abstract, but read it twice and you will see that
+it is concrete.
+
+Read against `RandMember`: the list is `a :: L`, the predicate `P` is
+`· == x`, and the branch `f` is what runs at the drawn index, a tick
+and then the test. The count of accepting choices is then `L.count x`,
+since `List.count x` is `List.countP (· == x)` by definition.
 
 The proof applies it like this:
 
@@ -993,31 +1007,29 @@ The proof applies it like this:
   · simp [List.count]
 ```
 
-The first line unfolds one layer of the algorithm, then only `P` is
-supplied. The list, its non-emptiness and the branch all occur in the
-statement's left-hand side, so Lean reads them off the goal. `P`
-occurs only on the right, so nothing determines it there, and there
-is a second reason worth seeing. The draw returns an index, so the
-predicate is applied to `L[i]` and not to the drawn value, and
-nothing can tell which part of `P L[i]` is `P`. In the two sibling
-principles the predicate does sit on the drawn value, which is why
-they are applied with no argument at all.
+The first line unfolds one layer of the algorithm.
 
-Two goals are left. `intro i; toPMF_step` proves `hf`, that every
-branch has the law of its test, and it is where the tick disappears,
-by the `LawfulMonadCost` axiom of Step 1. `simp [List.count]` is the
-count.
+To apply the theorem, one thing has to be supplied: the predicate `P`.
+The list, its non-emptiness and the branch all occur in the goal, so
+Lean reads them from there.
 
-This also answers the question the statement raises: why a branch `f`
-and a hypothesis about it, rather than `P L[i]` directly? The answer
-is that a branch is free to do more than test, as this one does, and
-a direct statement would force the tick to be rewritten away in the
-goal first. Taking `f` moves that work into `hf`, where `toPMF_step`
-does it in one call.
+Here `P` is naturally `· == x`.
+
+Two goals remain, and both are short.
+
+- `intro i; toPMF_step` proves `hf`, that the branch returns the value
+  of the test. This is where the tick disappears, by the
+  `LawfulMonadCost` axiom of Step 1.
+- `simp [List.count]` does the count.
+
+The tick is also why the theorem speaks of a branch `f` at all, rather
+than of `P L[i]` directly: a branch is free to do more than test, and
+`hf` is where that extra work is discharged.
 
 Real examples: `reservoir_correct` (each element kept with probability
 `count/n`) and `shuffle_uniform` (each permutation with probability
-`1/n!`). -/
+`1/n!`).
+-/
 
 omit [Inhabited α] in
 /-- Exact output distribution. The test returns `true` with probability
@@ -1028,7 +1040,7 @@ theorem randMember_prob
     ℙ_{M}[RandMember x (a :: L) = true] =
       (((a :: L).count x : ℕ) : ENNReal) / (((a :: L).length : ℕ) : ENNReal) := by
   simp only [RandMember]
-  refine (toPMF_randIdx_bind_countP (M := M) (P := fun y => y == x) ?_).trans ?_
+  refine (toPMF_randIdx_bind_countP (P := fun y => y == x) ?_).trans ?_
   · intro i; toPMF_step
   · simp [List.count]
 
@@ -1036,16 +1048,23 @@ theorem randMember_prob
 
 The support of a distribution is the set of outputs that can occur at
 all. A statement about it is therefore of a different nature from a
-probability bound: it holds on *every* run, with no probability
+probability bound: it holds on every run, with no probability
 attached and no arithmetic to state it.
 
-That is what makes it the natural home for one-sided error. Here it
-says that the error goes in one direction only: the output can be
-`false` while `x` is present (the draw simply missed it), but never
-`true` while `x` is absent. The proof reads the support of "draw, then
-run a branch" as the union of the branch supports
-(`support_toPMF_randIdx_bind`), picks out the index that produced the
-`true`, and turns it into a membership witness.
+Here in `RandMember` the error goes in one direction only: the output
+can be `false` while `x` is present (the draw simply missed it), but
+never `true` while `x` is absent. The proof reads the support of "draw,
+then run a branch" one branch at a time: an output is reachable exactly
+when some branch reaches it, which is
+`mem_support_toPMF_randIdx_bind`. It then picks out the index that
+produced the `true` and turns it into a membership witness.
+
+That lemma is the uniform-pivot member of the `mem_support_toPMF_*`
+family in `ARA/Infrastructure/Randomness/LawfulRandMonad.lean`, whose
+other members read a `pure`, a `bind`, a trailing `return f x`, and
+two computations combined by a pure function. Between them a support
+proof never has to unfold a distribution by hand, which is what makes
+this tier one `obtain` per layer of the algorithm.
 
 Real examples: `karger_isCut` (every output is a genuine cut),
 `freivalds_complete` and `schwartzZippel_complete` (never a false
@@ -1096,7 +1115,7 @@ rather than a proof.
 
 Real examples: `karger_success_prob` and `karger_finds_min`, then
 `karger_amplified`, where the combiner keeps the smallest reported cut
-(`amplify_min_success`) instead of an `||`. `freivalds_sound` and
+(`amplify_argmin_success`) instead of an `||`. `freivalds_sound` and
 `schwartzZippel_sound` bound the error of one run. -/
 
 omit [Inhabited α] in

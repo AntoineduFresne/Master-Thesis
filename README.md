@@ -1,6 +1,6 @@
 # ARA — Analysis of Randomized Algorithms in Lean 4
 
-A framework where a randomized algorithm is written **once** and that single definition serves, depending on the instantiation of the abstract source of randomness, as:
+A framework where a randomized algorithm is written once and that single definition serves, depending on the instantiation of the abstract source of randomness, as:
 
 * an **executable program** (`IO`, real randomness — `#eval` it),
 * a **distribution** (`PMF`, the mathematical specification),
@@ -9,7 +9,7 @@ A framework where a randomized algorithm is written **once** and that single def
 
 Correctness and expected-complexity proofs then follow a fixed recipe in
 which the framework tries to automate everything except the
-*mathematics of the algorithm itself*.
+mathematical part of the algorithm itself.
 
 Author: Antoine du Fresne von Hohenesche.
 
