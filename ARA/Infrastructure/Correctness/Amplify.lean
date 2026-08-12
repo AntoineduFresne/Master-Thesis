@@ -202,8 +202,8 @@ runs combined with `||` answer `true` with probability at least
 
 No support hypothesis is needed: `||` keeps a `true` wherever it finds
 one, so the invariant set is everything. This is the combiner of a
-test that never says `true` in error, which is the commonest
-Monte-Carlo shape there is. -/
+test that never says `true` in error, which seems to be the commonest
+Monte-Carlo shape. -/
 theorem amplify_or_success
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {m : M Bool} {p : ℝ≥0∞} (hp : p ≤ ℙ[m = true]) (k : ℕ) :

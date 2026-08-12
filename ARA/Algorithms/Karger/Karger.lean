@@ -25,7 +25,7 @@ set:
 - our `MultiGraph` carries a `List (Sym2 α)` instead.
 
 Why? First because Karger needs multiplicity and a list carries it: a
-`List (Sym2 α)` is a simple way to record multiplicity. Second, even if
+`List (Sym2 α)` seems a simple way to record it. Second, even if
 you find a way to record multiplicity with a `Finset`, you must (because
 Karger is a randomized algorithm) draw a random edge, and drawing
 uniformly from a `Finset` is hard the moment the draw must execute
@@ -71,9 +71,11 @@ Here, we thought about three ways around this:
   reading the algorithm, this trust is invisible in the text: you would
   have to open the instance to know it is there.
 
-In conclusion we take none of them and stick to our primitive:
-`randFin n` with the derived `randIdx`, for which the list seems
-the right carrier: the ID of elements is declared once, in the input.
+We took none of them and stayed with our primitive, `randFin n` with
+the derived `randIdx`, for which a list seems a reasonable carrier: the
+ID of the elements is declared once, in the input, rather than conjured
+at every draw. Whether that is the best answer we do not know; it is
+the one that let all four readings survive.
 
 
 ## Main results
@@ -236,8 +238,9 @@ to satisfy the `Fresh` definition. One can still run the algorithm
 without that assumption, which is why it is the hypothesis of every
 theorem below and of none of the definitions above.
 
-A design discussion of the possible picks (order, labelling, fresh
-names, union) lives in `DesignDiscussion/KargerVariants.lean`. -/
+A discussion of the possible picks (order, labelling, fresh names,
+union), and of what each one seems to cost, lives in
+`DesignDiscussion/KargerVariants.lean`. -/
 
 /-- A demo pick on `ℕ`: merge into one past the largest live vertex.
 It is fresh, the new name exceeding every vertex present. -/
@@ -355,7 +358,7 @@ private lemma sum_map_ite_zero {β : Type} (p : β → Prop) [DecidablePred p]
           (l.length - (l.countP fun e => decide (p e))) + 1 := by omega
       rw [h1, Nat.cast_add, Nat.cast_one, add_mul, one_mul, add_comm]
 
-/-- The arithmetic heart of the induction step. The names come from
+/-- The arithmetic of the induction step. The names come from
 `success_contractPick`, its only caller: the loop stops at `s + 2`
 vertices, and `k` counts how far the current graph still is from that
 target, so it has `n = k + s + 3` vertices and one contraction takes
@@ -402,10 +405,11 @@ working graph flattens through `rep` to a cut of the original of the
 same value. `init` and `step` show it holds at the start and survives
 one fresh contraction; the bridges `isCut_rep` / `cutValue_rep` read
 a genuine cut of the original off any live fibre at an end state;
-`support_contractPick` packages everything a finished run guarantees,
-on the whole support. The invariant never mentions the loop: any
-algorithm contracting listed edges into fresh picks starts it with
-`init` and carries it with `step`. In the statements `𝒟_{M}[e]` is
+`support_contractPick` packages what a finished run guarantees, on the
+whole support. The invariant does not mention the loop, so we hope any
+algorithm contracting listed edges into fresh picks can start it with
+`init` and carry it with `step`; that was at least enough for
+Karger–Stein. In the statements `𝒟_{M}[e]` is
 the law of `e` at `M`, i.e. `LawfulRandMonad.toPMF (e : M _)`, and
 its `support` is the set of possible outputs. -/
 
@@ -620,10 +624,10 @@ theorem support_contractPick
 
 /-! ## Survival of the minimum cut
 
-The proof is Karger's: fix a minimum cut, count its crossing edges,
-contract a non-crossing one. Only the per-step transport lemma
-(`minCutValue_contractEdgeTo_of_notCrossing`) touches the contraction
-model, and freshness feeds it. The loop being fuel-free, no fuel/card
+The proof follows Karger's: fix a minimum cut, count its crossing
+edges, contract a non-crossing one. As far as we can tell only the
+per-step transport lemma (`minCutValue_contractEdgeTo_of_notCrossing`)
+touches the contraction model, and freshness feeds it. The loop being fuel-free, no fuel/card
 equation is threaded: inside the guard the card is `k + s + 3` for
 some `k`, and the guard-false leaves succeed with certainty — there
 `s + 2 ≤ card` turns probability one into the stated bound.

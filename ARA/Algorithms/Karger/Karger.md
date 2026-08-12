@@ -26,9 +26,9 @@ identity reads $\sum_v \deg(v) = 2m$ and not $m$.
 
 `Sym2 α` is the endpoint type used by GraphLib (`Edge.endpoints` in
 `GraphLib/Graph/Basic.lean`, and `abbrev Edge := Sym2` in Weixuan
-Yuan's `UndirectedGraphs/SimpleGraphs.lean`), so this is the graph
-notion we intend to import once toolchains align. We diverge on two
-points, both forced by executability: multiplicity is carried by
+Yuan's `UndirectedGraphs/SimpleGraphs.lean`), so we hope to import that graph
+notion once the toolchains align. We diverge on two
+points, both of which executability seems to force on us: multiplicity is carried by
 repetition in a `List` rather than by GraphLib's `Edge.edgeLabel` over
 a noncomputable `Set` (our `List (Sym2 α)` is their
 `Set (Edge α (Fin m))` with the list position as the label), and
@@ -36,8 +36,8 @@ contraction replaces the two endpoints by a single vertex chosen by a
 *pick* function — handed over as a symmetric function of the unordered
 edge, so there is no orientation and no tie-break — while a fibre map
 *rep* records, for each live vertex, the set of original vertices
-merged into it: the executable form of quotienting the vertex type by
-a `Setoid`. The vertex type is preserved across the $n-2$ rounds.
+merged into it, which seems to be an executable form of quotienting
+the vertex type by a `Setoid`. The vertex type is preserved across the $n-2$ rounds.
 
 ## 2. The algorithm
 

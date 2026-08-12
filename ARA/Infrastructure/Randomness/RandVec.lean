@@ -83,12 +83,12 @@ work inside the branch are discharged by `toPMF_step` in the
 hypothesis (`by intro i; toPMF_step`).
 
 `L`, `hL` and `f` all occur in the conclusion, so all three are
-implicit: unification recovers them from the goal and a call site
-never respells the branch. Only `P` is explicit, because `P L[i]`
-applies `P` to `L[i]` rather than to the bound `i` — not a Miller
-pattern, so no unifier can invent it. Its two siblings below need no
-argument at all for the dual reason: their predicate does sit on the
-bound variable. -/
+implicit: unification should recover them from the goal, and a call
+site then need not respell the branch. Only `P` is explicit, because
+`P L[i]` applies `P` to `L[i]` rather than to the bound `i`. That is
+not a Miller pattern, so no unifier can solve for it. The two
+siblings below seem to need no argument at all for the dual reason:
+their predicate sits on the bound variable. -/
 theorem toPMF_randIdx_bind_countP
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {α : Type} {L : List α} {hL : 0 < L.length}

@@ -124,11 +124,12 @@ theorem support_toPMF_randIdx_bind
   rw [inst.toPMF_bind, inst.toPMF_randIdx, pmf_bind_eq, PMF.support_bind]
   simp [PMF.support_uniformOfFintype]
 
-/-- The same fact as a membership, which is the form a one-sided-error
-proof actually meets: an output is reachable exactly when some branch
-reaches it. Completes the `mem_support_toPMF_*` family of
-`LawfulRandMonad` with its uniform-pivot member, so no proof unfolds
-the union by hand. Use with an `⟨i, hi⟩` pattern. -/
+/-- The same fact as a membership, which seems to be the form a
+one-sided-error proof actually meets: an output is reachable exactly
+when some branch reaches it. Completes the `mem_support_toPMF_*`
+family of `LawfulRandMonad` with its uniform-draw member, so that a
+proof need not unfold the union by hand. Use with an `⟨i, hi⟩`
+pattern. -/
 lemma mem_support_toPMF_randIdx_bind
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {α : Type*} {β : Type} {L : List α} {hL : 0 < L.length}
