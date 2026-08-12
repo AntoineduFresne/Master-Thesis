@@ -23,6 +23,9 @@ specification (`M = PMF`), and as timed algorithm (`M = TimeMT ℕ M'`).
 
 ## Main results
 
+For `L` the input list, `n` its length and `k` the selected rank
+(0-indexed), we have:
+
 * `quickselect_correct`: over any `LawfulRandMonad`, the output
   distribution is the Dirac mass at the true order statistic
   `orderStat L k`; the answer never depends on the random pivots.

@@ -29,6 +29,8 @@ serves as:
 
 ## Main results
 
+For `L` the input list and `n` its length, we have:
+
 * `quicksort_correct`: generic correctness over any
   `LawfulRandMonad`: the output distribution is the Dirac mass at
   `L.mergeSort (· ≤ ·)`, the algorithm deterministically returns

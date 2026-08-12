@@ -32,6 +32,8 @@ program tier, and the theorem is an exact expectation over that law.
 
 ## Main results
 
+For `n` the number of coupon types, we have:
+
 * `couponCollector_cost_exact`: `𝔼[draws] = Σ_{r<n} n/(r+1)`, exactly,
   in `ℝ≥0∞`.
 * `couponCollector_cost_exact_real`: the classical form

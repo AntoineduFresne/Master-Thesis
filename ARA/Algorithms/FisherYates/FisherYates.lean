@@ -25,6 +25,8 @@ their own work.
 
 ## Main results
 
+For `L` the input list and `n` its length, we have:
+
 * `shuffle_uniform`: on a duplicate-free list, the output
   distribution is exactly uniform over `L.permutations`.
 * `shuffle_perm_apply`: pointwise form: each permutation of `L`

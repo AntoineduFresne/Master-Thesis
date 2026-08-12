@@ -23,6 +23,8 @@ as specification (`M = PMF`), and as timed algorithm
 
 ## Main results
 
+For `L` the input stream and `n` its length, we have:
+
 * `reservoir_correct`: exact uniformity: each element is
   returned with probability `count a / |L|`. Unlike
   `Quicksort`/`Quickselect`, the output distribution is not a point

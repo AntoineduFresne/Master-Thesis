@@ -26,6 +26,8 @@ specification, and as timed algorithm.
 
 ## Main results
 
+For `A`, `B`, `C` the `n × n` input matrices, we have:
+
 * `freivalds_complete`: no false negatives: if `A * B = C` the
   test accepts with probability `1`.
 * `freivalds_sound`: one-sided error: if `A * B ≠ C` the test

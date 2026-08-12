@@ -32,6 +32,9 @@ cross-multiplication (`ennreal_div_le_div_nat`).
 
 ## Main results
 
+For `P` the tested polynomial and `S` the evaluation set (the random
+point is uniform on the grid `Sⁿ`), we have:
+
 * `schwartzZippel_complete`: the zero polynomial is always accepted.
 * `schwartzZippel_sound`: a nonzero `P` is accepted with probability
   at most `P.totalDegree / #S`, over any integral domain.

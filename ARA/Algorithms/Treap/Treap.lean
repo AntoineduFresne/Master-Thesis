@@ -35,6 +35,8 @@ handled by the `expVal` output-functional API from `ARA.Infrastructure.Complexit
 
 ## Main results
 
+For `n` the number of (distinct) keys, we have:
+
 * `randomBST_correct` (insertion model) and `treap_correct`
   (recursive model): every tree the sampler can output is a valid
   BST over the (distinct) keys: its in-order traversal is sorted and a
