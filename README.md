@@ -1,6 +1,6 @@
 # ARA — Analysis of Randomized Algorithms in Lean 4
 
-A framework where a randomized algorithm is written **once** and that single definition serves for example (depending on the abstract source of randomness):
+A framework where a randomized algorithm is written **once** and that single definition serves, depending on the instantiation of the abstract source of randomness, as:
 
 * an **executable program** (`IO`, real randomness — `#eval` it),
 * a **distribution** (`PMF`, the mathematical specification),
@@ -8,8 +8,8 @@ A framework where a randomized algorithm is written **once** and that single def
 * a **benchmark** (`TimeMT ℕ IO`, executable with a clock).
 
 Correctness and expected-complexity proofs then follow a fixed recipe in
-which everything except the *mathematics of the algorithm itself* is
-tried to be automated by the framework.
+which the framework tries to automate everything except the
+*mathematics of the algorithm itself*.
 
 Author: Antoine du Fresne von Hohenesche.
 
@@ -19,7 +19,7 @@ Helped by Claude code: Opus and Fable models were used.
 
 **[`ARA/Algorithms/Tutorial.lean`](ARA/Algorithms/Tutorial.lean)** is a
 tutorial to formalize a toy algorithm (`RandMax`) which is verified 
-end-to-end in six numbered steps.
+end-to-end in nine numbered steps.
 
 For the choice and consequences of our design (why shallow embedding, `PMF`/Giry monad, correctness tiers, known limitations): see [`DESIGN.md`](DESIGN.md).
 
@@ -71,8 +71,9 @@ ARA/
 └── Algorithms/
     ├── Tutorial.lean          ← start here
     ├── Quicksort/             Quickselect/       KargerStein/
-    ├── Karger/                (Karger + the 3 rename-model variants:
-    │                           KargerOrder / KargerEnum / KargerFresh)
+    ├── Karger/                (Karger: abstract-pick Karger returning the
+    │                           cut and its value; DesignDiscussion/:
+    │                           KargerVariants, MergeRule + the three rules)
     ├── ReservoirSampling/     Freivalds/         Treap/
     ├── FisherYates/           SchwartzZippel/    CouponCollector/
     │
@@ -92,7 +93,7 @@ analysis; together they are the proof that the framework is usable.
 | **Quickselect** | Dirac: always the k-th order statistic | exact Knuth 1971 bivariate-harmonic formula; `≤ 4n`; $\leq$  `C(n,2)` for duplicates |
 | **Karger** | returns an actual **minimum cut** with prob. `≥ 2/(n(n−1))` (`karger_finds_min`); one-sided error (support) | amplified: `k` runs fail with prob. `≤ (1−2/(n(n−1)))^k`; cost `≤ (n−2)·m` |
 | **Karger–Stein** | returns an actual **minimum cut** with prob. `≥ 1/(d+3)`, `d = ksDepth n ≈ 2·log₂ n` (`kargerStein_finds_min`); one-sided error | recursive contraction to `t(n) ≈ n/√2` (integer `t(n)`, no `√2` anywhere); cost `≤ (2^(d+2)−2)·n·m` |
-| **Karger variants** | the same theorems under a **pluggable contraction rule** (`MergeRule`): order / upfront-labeling / fresh-vertex merges, one shared analysis (`kargerVia_*`) | exhibit: what each contraction model assumes, and why the supervertex merge is the canonical one |
+| **Karger variants** | the same theorems under a **pluggable contraction rule** (`MergeRule`): order / upfront-labeling / fresh-vertex merges, one shared analysis (`kargerVia_*`) | exhibit: what each contraction model assumes, and where each merge rule pays its freshness obligation |
 | **Reservoir sampling** | exact output distribution: `P[a] = count a / n` | exactly `n − 1` coins on every run (cost law), single pass |
 | **Fisher–Yates** | exact output distribution: uniform over all `n!` permutations | free — a sampler, no ticks |
 | **Schwartz–Zippel** | complete + sound (`≤ deg/\|S\|`, any integral domain) | one wholesale evaluation |
@@ -103,14 +104,14 @@ analysis; together they are the proof that the framework is usable.
 All proofs rely (after "#print axioms") only on `propext`,
 `Classical.choice`, `Quot.sound`.
 
-## Notation used throughout some algorithm
+## Notation used throughout the algorithms
 
 ```lean
 𝒟_{M}[Quicksort L]              -- output distribution at random monad M
 𝔼_{M}[cost Quicksort L]      -- expected runtime (ℝ≥0∞) at random monad M
 𝔼ℝ_{M}[cost Quicksort L]     -- the same, as a real number
 ℙ_{M}[cost Quicksort L > k]  -- tail probability; ≤ 𝔼_{M}[cost …]/(k+1) by Markov
-ℙ_{M}[Karger g = g.minCutValue] -- output probability (correctness twin of 𝔼_{M}[cost ·])
+ℙ_{M}[Karger R.pick g ∈ {o | o.2 = g.minCutValue}] -- output probability (correctness twin of 𝔼_{M}[cost ·])
 ℙ_{M}[reservoir L ∈ S]          -- probability of an event
 expVal (toPMF (treap L)) g      -- E[g(output)]
 𝔼[couponCollector n]            -- mean of a ℕ-valued law (e.g. a cost law)

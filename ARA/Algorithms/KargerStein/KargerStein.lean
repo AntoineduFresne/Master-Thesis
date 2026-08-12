@@ -11,17 +11,17 @@ import ARA.Algorithms.Karger.Karger
 
 A single contraction run succeeds with probability only `Θ(1/n²)`, but
 the *early* contractions are nearly safe and only the late ones are
-risky. Karger–Stein contracts down to `ksTarget n ≈ n/√2` supervertices
-which preserves the minimum cut with probability `≥ 1/2`, by the
+risky. Karger–Stein contracts down to `ksTarget n ≈ n/√2` vertices, which
+preserves the minimum cut with probability `≥ 1/2` by the
 *definition* of `ksTarget`, and spends the repetition budget on the
-risky small graphs by recursing twice and keeping the better answer.
+risky small graphs by recursing twice and keeping the better output.
 
 ## Main results
 
 * `kargerStein_finds_min`: a run returns an actual minimum cut
   with probability at least `1 / (ksDepth n + 3)`, where `ksDepth n`
-  is the recursion depth (`≈ 2·log₂ n`; the `⌈log⌉` form of the bound
-  is stated in `KargerStein.md` §6).
+  is the recursion depth (`≈ 2·log₂ n`; the `⌈log⌉` depth bound is
+  `KargerStein.md` §6, the resulting success bound its §4 corollary).
 * `kargerStein_isCut`: one-sided error: every output is a partition
   into genuine cuts of the reported value, never undershooting.
 * `kargerStein_cost_le`: expected cost at most `(2^(d+2) − 2)·n·m` in
@@ -30,15 +30,16 @@ risky small graphs by recursing twice and keeping the better answer.
 
 ## Architecture
 
-The recursion operates directly on the supervertex graphs of
-`ARA.Helpers.MultiGraph`, since contraction preserves the vertex type, so
-no re-lifting is ever needed, and consumes Karger's shared kernel:
-`contractAux` (the loop), `success_contractAux` (survival of the
-minimum cut through partial contraction) and `support_contractAux`
-(the run invariant), together with the `amplify` layer for the
-best-of-two composition. The recursion is fueled by `ksDepth`, so
-termination is structural; the analysis shows the fuel is exactly
-sufficient.
+The recursion operates directly on the working pairs of `Karger.lean`,
+a graph and its fibre map: contraction preserves the vertex type, so
+no lifting is ever needed. It consumes Karger's shared
+kernel: `contractPick` (the loop, at target `ksTarget n`),
+`success_contractPick` (survival of the minimum cut through partial
+contraction) and `support_contractPick` (the run invariant), together
+with the `amplify` layer for the best-of-two composition. The
+recursion is fueled by `ksDepth`, so termination is structural; the
+analysis shows the fuel is exactly sufficient. The merge rule is
+abstract: as in `Karger.lean`, `pick` defines and `fresh` proves.
 -/
 
 namespace ARA
@@ -67,7 +68,7 @@ def ksTarget (n : ℕ) : ℕ := Nat.find (ksTarget_exists n)
 lemma ksTarget_two_le (n : ℕ) : 2 ≤ ksTarget n :=
   (Nat.find_spec (ksTarget_exists n)).1
 
-/-- The defining inequality: contracting to `ksTarget n` supervertices
+/-- The defining inequality: contracting to `ksTarget n` vertices
 keeps the survival probability at least `1/2`. -/
 lemma ksTarget_bound (n : ℕ) :
     n * (n - 1) ≤ 2 * (ksTarget n * (ksTarget n - 1)) :=
@@ -104,131 +105,113 @@ lemma ksDepth_of_lt {n : ℕ} (h4 : ¬ 4 ≤ n) : ksDepth n = 0 := by
 
 /-! ## Algorithm -/
 
-/-- One fueled round of Karger–Stein: on `≤ 3` supervertices (or on
-exhausted fuel) contract fully and report; otherwise, twice and
-independently, contract down to `ksTarget n` supervertices and
-recurse, keeping the output with the smaller reported value. -/
-def kargerSteinAux {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
-    ℕ → MultiGraph (Finset α) → M (Finset (Finset α) × ℕ)
-  | 0, g => do
-      let h ← contractAux (g.verts.card - 2) g
-      pure (h.verts, h.edges.length)
-  | fuel + 1, g =>
-      if 4 ≤ g.verts.card then
+/-- One fueled round of Karger–Stein: on `≤ 3` vertices (or on
+exhausted fuel) contract fully and report the fibres of the two
+survivors with the surviving edge count; otherwise, twice and
+independently, contract down to `ksTarget n` vertices and recurse,
+keeping the output with the smaller reported value. -/
+def kargerSteinAux {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
+    (pick : MultiGraph α → Sym2 α → α) :
+    ℕ → MultiGraph α × (α → Finset α) → M (Finset (Finset α) × ℕ)
+  | 0, p => do
+      let q ← contractPick pick 2 p.1 p.2
+      pure (q.1.verts.image q.2, q.1.edges.length)
+  | fuel + 1, p =>
+      if 4 ≤ p.1.verts.card then
         amplify (argmin Prod.snd) 2
-          (contractAux (g.verts.card - ksTarget g.verts.card) g >>=
-            fun h => kargerSteinAux fuel h)
+          (contractPick pick (ksTarget p.1.verts.card) p.1 p.2 >>=
+            fun q => kargerSteinAux pick fuel q)
       else do
-        let h ← contractAux (g.verts.card - 2) g
-        pure (h.verts, h.edges.length)
+        let q ← contractPick pick 2 p.1 p.2
+        pure (q.1.verts.image q.2, q.1.edges.length)
 
 /-- The Karger–Stein algorithm: recursive contraction with fuel
-`ksDepth n` (exactly the recursion depth), on the supervertex lift. -/
+`ksDepth n` (exactly the recursion depth), on singleton fibres. -/
 def KargerStein {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
-    (g : MultiGraph α) : M (Finset (Finset α) × ℕ) :=
-  kargerSteinAux (ksDepth g.verts.card) g.super
+    (pick : MultiGraph α → Sym2 α → α) (g : MultiGraph α) :
+    M (Finset (Finset α) × ℕ) :=
+  kargerSteinAux pick (ksDepth g.verts.card) (g, fun a => {a})
 
 -- IO version (executable)
-def KargerStein_IO : MultiGraph ℕ → IO (Finset (Finset ℕ) × ℕ) := KargerStein
+def KargerStein_IO : MultiGraph ℕ → IO (Finset (Finset ℕ) × ℕ) :=
+  KargerStein freshRule.pick
 
 #eval KargerStein_IO kargerDemo
 
 -- PMF version (noncomputable specification)
-noncomputable example : MultiGraph ℕ → PMF (Finset (Finset ℕ) × ℕ) := KargerStein
+noncomputable example : MultiGraph ℕ → PMF (Finset (Finset ℕ) × ℕ) :=
+  KargerStein freshRule.pick
 
 /-! ## The leaf: a full contraction run
 
-Both the base case and the small-graph case run Karger's body; its
-guarantees restate Karger's, one supervertex level down. -/
+Both the base case and the small-graph case run Karger's body on the
+working pair; `support_kargerBody` and `success_kargerBody` state its
+guarantees. -/
 
-private lemma support_ksLeaf
+/-- The leaf bound on at most three vertices, in the `1/(0 + 3)` form
+both base cases of the success induction need. -/
+private lemma success_ksLeaf_small
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
-    {g : MultiGraph (Finset α)} (hwf : g.WF) (h2 : 2 ≤ g.verts.card)
-    (ht : Tracks g₀ g) :
-    ∀ o ∈ 𝒟_{M}[(contractAux (g.verts.card - 2) g >>= fun h =>
-        pure (h.verts, h.edges.length) : M (Finset (Finset α) × ℕ))].support,
-      (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
-        g₀.minCutValue ≤ o.2 ∧ g.minCutValue ≤ o.2 := by
-  intro o ho
-  obtain ⟨h, hh, rfl⟩ := mem_support_toPMF_bind_pure.mp ho
-  obtain ⟨hwf', h2', -, hend, -, hmin, ht'⟩ :=
-    support_contractAux (M := M) 2 le_rfl (g.verts.card - 2) g hwf
-      (by omega) ht h hh
-  refine ⟨fun S hS => ⟨ht'.isCut_mem h2' hS, ht'.cutValue_mem hwf' hend hS⟩,
-    ?_, ?_⟩
-  · obtain ⟨S, hS⟩ := Finset.card_pos.mp (by omega : 0 < h.verts.card)
-    rw [← ht'.cutValue_mem hwf' hend hS]
-    exact minCutValue_le (ht'.isCut_mem h2' hS)
-  · exact le_trans hmin (minCutValue_le_length h h2')
+    (R : MergeRule α) {g : MultiGraph α} {rep : α → Finset α}
+    (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (h3 : g.verts.card ≤ 3)
+    (ht : PickTracks g₀ g rep) :
+    ((1 : ℕ) : ℝ≥0∞) / ((0 + 3 : ℕ) : ℝ≥0∞) ≤
+      ℙ_{M}[(contractPick R.pick 2 g rep >>= fun q =>
+          pure (q.1.verts.image q.2, q.1.edges.length) :
+            M (Finset (Finset α) × ℕ)) ∈ {o | o.2 = g.minCutValue}] := by
+  refine le_trans ?_ (success_kargerBody R hwf h2 ht)
+  have h6 : g.verts.card * (g.verts.card - 1) ≤ 6 := by
+    rcases (by omega : g.verts.card = 2 ∨ g.verts.card = 3) with h | h <;>
+      simp [h]
+  exact_mod_cast ennreal_div_le_div_nat (a := 1) (b := 0 + 3) (c := 2)
+    (d := g.verts.card * (g.verts.card - 1)) (by norm_num)
+    (Nat.mul_pos (by omega) (by omega)) (by simpa using h6)
 
-private lemma success_ksLeaf
-    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
-    {g : MultiGraph (Finset α)} (hwf : g.WF) (h2 : 2 ≤ g.verts.card)
-    (ht : Tracks g₀ g) :
-    (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      ℙ_{M}[(contractAux (g.verts.card - 2) g >>= fun h =>
-          pure (h.verts, h.edges.length) : M (Finset (Finset α) × ℕ))
-        ∈ {o | o.2 = g.minCutValue}] := by
-  have hmain := success_contractAux (M := M) (s := 0) (g.verts.card - 2) g
-    hwf ht.disj (by omega)
-  rw [show ((0 + 2) * (0 + 1) : ℕ) = 2 by norm_num,
-    show g.verts.card - 2 + 0 + 2 = g.verts.card by omega,
-    show g.verts.card - 2 + 0 + 1 = g.verts.card - 1 by omega] at hmain
-  rw [show (contractAux (g.verts.card - 2) g >>= fun h =>
-        pure (h.verts, h.edges.length) : M (Finset (Finset α) × ℕ)) =
-      (fun h => (h.verts, h.edges.length)) <$>
-        contractAux (g.verts.card - 2) g from by
-    rw [map_eq_bind_pure_comp]; rfl]
-  rw [LawfulRandMonad.toPMF_map, pmf_map_eq, prob_map]
-  refine le_trans (by exact_mod_cast hmain)
-    (prob_mono_of_support fun h hh hev => ?_)
-  obtain ⟨hwf', h2', -, hend, -, -, -⟩ :=
-    support_contractAux (M := M) 2 le_rfl (g.verts.card - 2) g hwf
-      (by omega) ht h hh
-  show h.edges.length = g.minCutValue
-  rcases hend with hcard2 | hnil
-  · exact (length_eq_minCutValue_of_card_two hwf' hcard2).trans hev
-  · have hlen : h.edges.length = 0 := by rw [hnil]; rfl
-    have hmin0 : h.minCutValue = 0 :=
-      Nat.le_zero.mp (le_trans (minCutValue_le_length h h2') (le_of_eq hlen))
-    rw [hlen, ← hev, hmin0]
+/-- `argmin` keeps one of its two arguments, so it never leaves an
+invariant set: the closure obligation of every `amplify` call here. -/
+private lemma argmin_mem {β γ : Type} [LinearOrder γ] (f : β → γ)
+    {V : Set β} : ∀ a ∈ V, ∀ b ∈ V, argmin f a b ∈ V := by
+  intro a ha b hb
+  unfold argmin
+  split_ifs
+  exacts [ha, hb]
 
 /-! ## Degenerate graphs: no edges left -/
 
-private lemma contractAux_edgeless {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
-    {g : MultiGraph (Finset α)} (hnil : g.edges = []) :
-    ∀ k, (contractAux k g : M (MultiGraph (Finset α))) = pure g
-  | 0 => rfl
-  | k + 1 => by
-      rw [contractAux.eq_2, dif_neg (by simp [hnil])]
+private lemma contractPick_edgeless {M} [Monad M] [RandMonad M]
+    [MonadCost ℕ M] (pick : MultiGraph α → Sym2 α → α) (t : ℕ)
+    {g : MultiGraph α} (hnil : g.edges = []) (rep : α → Finset α) :
+    (contractPick pick t g rep : M (MultiGraph α × (α → Finset α))) =
+      pure (g, rep) := by
+  rw [contractPick, dif_neg (by simp [hnil])]
 
 private lemma support_kargerSteinAux_edgeless
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    [MonadCost ℕ M] [LawfulMonadCost ℕ M] :
-    ∀ fuel (g : MultiGraph (Finset α)), g.edges = [] →
-      ∀ o ∈ 𝒟_{M}[kargerSteinAux fuel g].support, o = (g.verts, 0) := by
-  intro fuel g
-  induction fuel, g using kargerSteinAux.induct with
-  | case1 g =>
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
+    (pick : MultiGraph α → Sym2 α → α) :
+    ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.edges = [] →
+      ∀ o ∈ 𝒟_{M}[kargerSteinAux pick fuel p].support,
+        o = (p.1.verts.image p.2, 0) := by
+  intro fuel p
+  induction fuel, p using kargerSteinAux.induct with
+  | case1 p =>
     intro hnil o ho
-    rw [kargerSteinAux.eq_1, contractAux_edgeless hnil, pure_bind] at ho
+    rw [kargerSteinAux.eq_1, contractPick_edgeless pick 2 hnil p.2,
+      pure_bind] at ho
     toPMF_step at ho
     rw [ho, hnil]
     rfl
-  | case2 fuel g h4 ih =>
+  | case2 fuel p h4 ih =>
     intro hnil o ho
-    rw [kargerSteinAux.eq_2, if_pos h4, contractAux_edgeless hnil,
+    rw [kargerSteinAux.eq_2, if_pos h4,
+      contractPick_edgeless pick (ksTarget p.1.verts.card) hnil p.2,
       pure_bind] at ho
-    exact support_amplify_subset (V := {o | o = (g.verts, 0)}) (ih g hnil)
-      (fun a ha b hb => by
-        unfold argmin
-        split_ifs
-        exacts [ha, hb]) 2 ho
-  | case3 fuel g h4 =>
+    exact support_amplify_subset (V := {o | o = (p.1.verts.image p.2, 0)})
+      (ih p hnil) (argmin_mem Prod.snd) 2 ho
+  | case3 fuel p h4 =>
     intro hnil o ho
-    rw [kargerSteinAux.eq_2, if_neg h4, contractAux_edgeless hnil,
+    rw [kargerSteinAux.eq_2, if_neg h4, contractPick_edgeless pick 2 hnil p.2,
       pure_bind] at ho
     toPMF_step at ho
     rw [ho, hnil]
@@ -241,49 +224,44 @@ of the tracked graph into genuine cuts of the reported value, and the
 reported value never undershoots either minimum. -/
 private lemma support_kargerSteinAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α} :
-    ∀ fuel (g : MultiGraph (Finset α)), g.WF → 2 ≤ g.verts.card →
-      Tracks g₀ g →
-      ∀ o ∈ 𝒟_{M}[kargerSteinAux fuel g].support,
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
+    (R : MergeRule α) :
+    ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
+      2 ≤ p.1.verts.card → PickTracks g₀ p.1 p.2 →
+      ∀ o ∈ 𝒟_{M}[kargerSteinAux R.pick fuel p].support,
         (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
-          g₀.minCutValue ≤ o.2 ∧ g.minCutValue ≤ o.2 := by
-  intro fuel g
-  induction fuel, g using kargerSteinAux.induct with
-  | case1 g =>
+          g₀.minCutValue ≤ o.2 ∧ p.1.minCutValue ≤ o.2 := by
+  intro fuel p
+  induction fuel, p using kargerSteinAux.induct with
+  | case1 p =>
     intro hwf h2 ht o ho
     rw [kargerSteinAux.eq_1] at ho
-    exact support_ksLeaf hwf h2 ht o ho
-  | case2 fuel g h4 ih =>
+    exact support_kargerBody R hwf h2 ht o ho
+  | case2 fuel p h4 ih =>
     intro hwf h2 ht o ho
-    rw [kargerSteinAux.eq_2] at ho
-    · rw [if_pos h4] at ho
-      refine support_amplify_subset
-        (V := {o | (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
-          g₀.minCutValue ≤ o.2 ∧ g.minCutValue ≤ o.2}) ?_ ?_ 2 ho
-      · intro o' ho'
-        obtain ⟨g', hg', ho''⟩ := mem_support_toPMF_bind.mp ho'
-        obtain ⟨hwf'', hcard'', -, -, -, hmin'', ht''⟩ :=
-          support_contractAux (M := M) (ksTarget g.verts.card)
-            (ksTarget_two_le _) (g.verts.card - ksTarget g.verts.card) g hwf
-            (by have := ksTarget_lt h4; omega) ht g' hg'
-        obtain ⟨hcut, hle₀, hle'⟩ := ih g' hwf''
-          (le_trans (ksTarget_two_le _) hcard'') ht'' o' ho''
-        exact ⟨hcut, hle₀, le_trans hmin'' hle'⟩
-      · intro a ha b hb
-        unfold argmin
-        split_ifs
-        exacts [ha, hb]
-  | case3 fuel g h4 =>
+    rw [kargerSteinAux.eq_2, if_pos h4] at ho
+    refine support_amplify_subset
+      (V := {o | (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
+        g₀.minCutValue ≤ o.2 ∧ p.1.minCutValue ≤ o.2}) ?_ ?_ 2 ho
+    · intro o' ho'
+      obtain ⟨q, hq, ho''⟩ := mem_support_toPMF_bind.mp ho'
+      obtain ⟨hwf'', hcard'', -, -, -, hmin'', ht''⟩ :=
+        support_contractPick (M := M) R g₀ (ksTarget p.1.verts.card)
+          (ksTarget_two_le _) p.1 p.2 hwf (ksTarget_lt h4).le ht q hq
+      obtain ⟨hcut, hle₀, hle'⟩ := ih q hwf''
+        (le_trans (ksTarget_two_le _) hcard'') ht'' o' ho''
+      exact ⟨hcut, hle₀, le_trans hmin'' hle'⟩
+    · exact argmin_mem Prod.snd
+  | case3 fuel p h4 =>
     intro hwf h2 ht o ho
     rw [kargerSteinAux.eq_2, if_neg h4] at ho
-    exact support_ksLeaf hwf h2 ht o ho
+    exact support_kargerBody R hwf h2 ht o ho
 
 /-! ## Success probability -/
 
-/-- The two ℕ-fraction facts of the recurrence, packaged: a product of
-two casts of ℕ-fractions is the cast of the product fraction. -/
-private lemma ennreal_natCast_div_mul_div (a b c d : ℕ)
-    (hb : b ≠ 0) (_hd : d ≠ 0) :
+/-- First ℕ-fraction fact of the recurrence: a product of two casts
+of ℕ-fractions is the cast of the product fraction. -/
+private lemma ennreal_natCast_div_mul_div (a b c d : ℕ) (hb : b ≠ 0) :
     ((a : ℝ≥0∞) / b) * ((c : ℝ≥0∞) / d) =
       ((a * c : ℕ) : ℝ≥0∞) / ((b * d : ℕ) : ℝ≥0∞) := by
   rw [div_eq_mul_inv, div_eq_mul_inv, div_eq_mul_inv, Nat.cast_mul,
@@ -296,173 +274,154 @@ private lemma ennreal_natCast_div_mul_div (a b c d : ℕ)
 private lemma ennreal_one_sub_inv_natCast {c : ℕ} (hc : 0 < c) :
     1 - ((1 : ℕ) : ℝ≥0∞) / ((c : ℕ) : ℝ≥0∞) =
       ((c - 1 : ℕ) : ℝ≥0∞) / ((c : ℕ) : ℝ≥0∞) := by
-  have hsum : ((c - 1 : ℕ) : ℝ≥0∞) / ((c : ℕ) : ℝ≥0∞) +
-      ((1 : ℕ) : ℝ≥0∞) / ((c : ℕ) : ℝ≥0∞) = 1 := by
-    rw [ENNReal.div_add_div_same,
-      show ((c - 1 : ℕ) : ℝ≥0∞) + ((1 : ℕ) : ℝ≥0∞) = ((c : ℕ) : ℝ≥0∞) by
-        rw [← Nat.cast_add]; congr 1; omega]
-    exact ENNReal.div_self (by exact_mod_cast hc.ne') (ENNReal.natCast_ne_top _)
-  exact (ENNReal.eq_sub_of_add_eq
-    ((ENNReal.div_lt_top (by simp) (by exact_mod_cast hc.ne')).ne) hsum).symm
+  rw [ENNReal.natCast_sub, Nat.cast_one,
+    ENNReal.sub_div (fun _ _ => by exact_mod_cast hc.ne'),
+    ENNReal.div_self (by exact_mod_cast hc.ne') (ENNReal.natCast_ne_top _)]
 
 /-- Success of a fueled run: with fuel at least the recursion
 depth, a run reports the current minimum-cut value with probability at
 least `1/(ksDepth n + 3)`. -/
 private theorem success_kargerSteinAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α} :
-    ∀ fuel (g : MultiGraph (Finset α)), g.WF → Tracks g₀ g →
-      2 ≤ g.verts.card → ksDepth g.verts.card ≤ fuel →
-      ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-        ℙ_{M}[kargerSteinAux fuel g ∈ {o | o.2 = g.minCutValue}] := by
-  intro fuel g
-  induction fuel, g using kargerSteinAux.induct with
-  | case1 g =>
-    intro hwf ht h2 hdepth
-    have hd0 : ksDepth g.verts.card = 0 := Nat.le_zero.mp hdepth
-    have h3 : g.verts.card ≤ 3 := by
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
+    (R : MergeRule α) :
+    ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
+      2 ≤ p.1.verts.card → PickTracks g₀ p.1 p.2 →
+      ksDepth p.1.verts.card ≤ fuel →
+      ((1 : ℕ) : ℝ≥0∞) / ((ksDepth p.1.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
+        ℙ_{M}[kargerSteinAux R.pick fuel p ∈
+          {o | o.2 = p.1.minCutValue}] := by
+  intro fuel p
+  induction fuel, p using kargerSteinAux.induct with
+  | case1 p =>
+    intro hwf h2 ht hdepth
+    have hd0 : ksDepth p.1.verts.card = 0 := Nat.le_zero.mp hdepth
+    have h3 : p.1.verts.card ≤ 3 := by
       by_contra hc
       rw [ksDepth_of_ge (by omega)] at hd0
       omega
     rw [kargerSteinAux.eq_1, hd0]
-    refine le_trans ?_ (success_ksLeaf hwf h2 ht)
-    have h6 : g.verts.card * (g.verts.card - 1) ≤ 6 := by
-      rcases (by omega : g.verts.card = 2 ∨ g.verts.card = 3) with h | h <;> simp [h]
-    exact_mod_cast ennreal_div_le_div_nat (a := 1) (b := 0 + 3) (c := 2)
-      (d := g.verts.card * (g.verts.card - 1)) (by norm_num)
-      (Nat.mul_pos (by omega) (by omega)) (by simpa using h6)
-  | case2 fuel g h4 ih =>
-    intro hwf ht h2 hdepth
-    rw [kargerSteinAux.eq_2]
-    · rw [if_pos h4]
-      have ht2 := ksTarget_two_le g.verts.card
-      have htlt := ksTarget_lt h4
-      have hdd : ksDepth g.verts.card = 1 + ksDepth (ksTarget g.verts.card) :=
-        ksDepth_of_ge h4
-      have hdt : ksDepth (ksTarget g.verts.card) ≤ fuel := by omega
-      -- Survival to `t = ksTarget n` supervertices happens with
-      -- probability at least `1/2`, by the definition of the target.
-      have hsurv := success_contractAux (M := M) (s := ksTarget g.verts.card - 2)
-        (g.verts.card - ksTarget g.verts.card) g hwf ht.disj (by omega)
-      rw [show ksTarget g.verts.card - 2 + 2 = ksTarget g.verts.card by omega,
-        show ksTarget g.verts.card - 2 + 1 = ksTarget g.verts.card - 1 by omega,
-        show g.verts.card - ksTarget g.verts.card +
-            (ksTarget g.verts.card - 2) + 2 = g.verts.card by omega,
-        show g.verts.card - ksTarget g.verts.card +
-            (ksTarget g.verts.card - 2) + 1 = g.verts.card - 1 by omega] at hsurv
-      have h1 : (1 : ℝ≥0∞) / 2 ≤
-          prob (inst.toPMF (contractAux
-              (g.verts.card - ksTarget g.verts.card) g : M _))
-            {h | h.minCutValue = g.minCutValue} := by
-        refine le_trans ?_ hsurv
-        exact_mod_cast ennreal_div_le_div_nat (a := 1) (b := 2)
-          (c := ksTarget g.verts.card * (ksTarget g.verts.card - 1))
-          (d := g.verts.card * (g.verts.card - 1)) (by norm_num)
-          (Nat.mul_pos (by omega) (by omega))
-          (by have := ksTarget_bound g.verts.card; nlinarith)
-      -- Each branch: survive, then recurse.
-      have hp : (1 : ℝ≥0∞) / 2 *
-          (((1 : ℕ) : ℝ≥0∞) /
-            ((ksDepth (ksTarget g.verts.card) + 3 : ℕ) : ℝ≥0∞)) ≤
-          ℙ_{M}[(contractAux (g.verts.card - ksTarget g.verts.card) g >>=
-              kargerSteinAux fuel : M _) ∈ {o | o.2 = g.minCutValue}] := by
-        refine le_prob_toPMF_bind h1 ?_
-        intro g' hg'good hg'supp
-        obtain ⟨hwf'', hcard2'', -, hcase, -, -, ht''⟩ :=
-          support_contractAux (M := M) (ksTarget g.verts.card) ht2
-            (g.verts.card - ksTarget g.verts.card) g hwf (by omega) ht g' hg'supp
-        have hg'min : g'.minCutValue = g.minCutValue := hg'good
-        rcases hcase with hct | hnil
-        · have hrec := ih g' hwf'' ht'' (by omega)
-            (by rw [hct]; exact hdt)
-          rw [hg'min, hct] at hrec
-          exact hrec
-        · -- Stalled on an edgeless graph: deterministic success.
-          have h2' : 2 ≤ g'.verts.card := le_trans ht2 hcard2''
-          have hmin0 : g'.minCutValue = 0 :=
-            Nat.le_zero.mp (le_trans (minCutValue_le_length g' h2')
-              (by simp [hnil]))
-          have hsub := support_kargerSteinAux_edgeless (M := M) fuel g' hnil
-          refine le_trans ?_
-            (prob_mono_of_support
-              (p := inst.toPMF (kargerSteinAux fuel g' : M _))
-              (s := Set.univ) fun o ho _ => ?_)
-          · rw [prob_univ]
-            rw [ENNReal.div_le_iff
-              (by exact_mod_cast (by omega :
-                (ksDepth (ksTarget g.verts.card) + 3 : ℕ) ≠ 0))
-              (ENNReal.natCast_ne_top _), one_mul]
-            exact_mod_cast (by omega :
-              (1 : ℕ) ≤ ksDepth (ksTarget g.verts.card) + 3)
-          · rw [hsub o ho]
-            show (0 : ℕ) = g.minCutValue
-            rw [← hg'min, hmin0]
-      -- One-sidedness of the branch, for the amplify composition.
-      have hsupp : ∀ o ∈ 𝒟_{M}[(contractAux
-            (g.verts.card - ksTarget g.verts.card) g >>=
-            kargerSteinAux fuel : M _)].support,
-          g.minCutValue ≤ o.2 := by
-        intro o ho
-        obtain ⟨g', hg', ho'⟩ := mem_support_toPMF_bind.mp ho
-        obtain ⟨hwf'', hcard'', -, -, -, hmin'', ht''⟩ :=
-          support_contractAux (M := M) (ksTarget g.verts.card) ht2
-            (g.verts.card - ksTarget g.verts.card) g hwf (by omega) ht g' hg'
-        obtain ⟨-, -, hle'⟩ := support_kargerSteinAux fuel g' hwf''
-          (le_trans ht2 hcard'') ht'' o ho'
-        exact le_trans hmin'' hle'
-      have hamp := amplify_argmin_success (f := Prod.snd)
-        (c := g.minCutValue) hsupp hp 2
-      refine le_trans ?_ hamp
-      -- The recurrence arithmetic: `1/(c+1) ≤ 1 − (1 − 1/(2c))²`
-      -- with `c := ksDepth t + 3`.
-      rw [hdd]
-      obtain ⟨c', hc'⟩ : ∃ c', ksDepth (ksTarget g.verts.card) + 3 = c' + 3 :=
-        ⟨ksDepth (ksTarget g.verts.card), rfl⟩
-      rw [hc',
-        show (1 + ksDepth (ksTarget g.verts.card) + 3 : ℕ) = c' + 3 + 1 by
-          omega]
-      have hp₀ : (1 : ℝ≥0∞) / 2 *
-          (((1 : ℕ) : ℝ≥0∞) / ((c' + 3 : ℕ) : ℝ≥0∞)) =
-          ((1 : ℕ) : ℝ≥0∞) / ((2 * (c' + 3) : ℕ) : ℝ≥0∞) := by
-        have h := ennreal_natCast_div_mul_div 1 2 1 (c' + 3)
-          (by norm_num) (by omega)
-        rw [show (1 * 1 : ℕ) = 1 by norm_num] at h
-        exact_mod_cast h
-      rw [hp₀,
-        ennreal_one_sub_inv_natCast (by omega : 0 < 2 * (c' + 3)), sq,
-        ennreal_natCast_div_mul_div _ _ _ _ (by omega) (by omega)]
-      refine ENNReal.le_sub_of_add_le_right
-        ((ENNReal.div_lt_top (ENNReal.natCast_ne_top _)
-          (by exact_mod_cast (by positivity :
-            (2 * (c' + 3) * (2 * (c' + 3)) : ℕ) ≠ 0))).ne) ?_
-      calc ((1 : ℕ) : ℝ≥0∞) / ((c' + 3 + 1 : ℕ) : ℝ≥0∞) +
-            (((2 * (c' + 3) - 1) * (2 * (c' + 3) - 1) : ℕ) : ℝ≥0∞) /
-              ((2 * (c' + 3) * (2 * (c' + 3)) : ℕ) : ℝ≥0∞)
-          ≤ ((1 : ℕ) : ℝ≥0∞) / ((c' + 3 + 1 : ℕ) : ℝ≥0∞) +
-            ((c' + 3 : ℕ) : ℝ≥0∞) / ((c' + 3 + 1 : ℕ) : ℝ≥0∞) := by
-            refine add_le_add le_rfl (ennreal_div_le_div_nat
-              (Nat.mul_pos (by omega) (by omega)) (by omega) ?_)
-            rw [show 2 * (c' + 3) - 1 = 2 * c' + 5 by omega]
-            nlinarith
-        _ = 1 := by
-            rw [ENNReal.div_add_div_same,
-              show ((1 : ℕ) : ℝ≥0∞) + ((c' + 3 : ℕ) : ℝ≥0∞) =
-                ((c' + 3 + 1 : ℕ) : ℝ≥0∞) by push_cast; ring]
-            exact ENNReal.div_self (by exact_mod_cast (by omega :
-              (c' + 3 + 1 : ℕ) ≠ 0)) (ENNReal.natCast_ne_top _)
-  | case3 fuel g h4 =>
-    intro hwf ht h2 _
-    rw [kargerSteinAux.eq_2]
-    · rw [if_neg h4]
-      have hd0 : ksDepth g.verts.card = 0 := ksDepth_of_lt h4
-      rw [hd0]
-      have h3 : g.verts.card ≤ 3 := by omega
-      refine le_trans ?_ (success_ksLeaf hwf h2 ht)
-      have h6 : g.verts.card * (g.verts.card - 1) ≤ 6 := by
-        rcases (by omega : g.verts.card = 2 ∨ g.verts.card = 3) with h | h <;> simp [h]
-      exact_mod_cast ennreal_div_le_div_nat (a := 1) (b := 0 + 3) (c := 2)
-        (d := g.verts.card * (g.verts.card - 1)) (by norm_num)
-        (Nat.mul_pos (by omega) (by omega)) (by simpa using h6)
+    exact success_ksLeaf_small R hwf h2 h3 ht
+  | case2 fuel p h4 ih =>
+    intro hwf h2 ht hdepth
+    rw [kargerSteinAux.eq_2, if_pos h4]
+    have ht2 := ksTarget_two_le p.1.verts.card
+    have htlt := ksTarget_lt h4
+    have hdd : ksDepth p.1.verts.card =
+        1 + ksDepth (ksTarget p.1.verts.card) :=
+      ksDepth_of_ge h4
+    have hdt : ksDepth (ksTarget p.1.verts.card) ≤ fuel := by omega
+    -- Survival to `t = ksTarget n` vertices happens with probability
+    -- at least `1/2`, by the definition of the target.
+    have hsurv := success_contractPick (M := M) R
+      (s := ksTarget p.1.verts.card - 2) p.1 p.2 hwf (by omega)
+    rw [show ksTarget p.1.verts.card - 2 + 2 = ksTarget p.1.verts.card by omega,
+      show ksTarget p.1.verts.card - 2 + 1 = ksTarget p.1.verts.card - 1 by
+        omega] at hsurv
+    have h1 : (1 : ℝ≥0∞) / 2 ≤
+        prob (inst.toPMF (contractPick R.pick
+            (ksTarget p.1.verts.card) p.1 p.2 : M _))
+          {q | q.1.minCutValue = p.1.minCutValue} := by
+      refine le_trans ?_ hsurv
+      exact_mod_cast ennreal_div_le_div_nat (a := 1) (b := 2)
+        (c := ksTarget p.1.verts.card * (ksTarget p.1.verts.card - 1))
+        (d := p.1.verts.card * (p.1.verts.card - 1)) (by norm_num)
+        (Nat.mul_pos (by omega) (by omega))
+        (by have := ksTarget_bound p.1.verts.card; nlinarith)
+    -- Each branch: survive, then recurse.
+    have hp : (1 : ℝ≥0∞) / 2 *
+        (((1 : ℕ) : ℝ≥0∞) /
+          ((ksDepth (ksTarget p.1.verts.card) + 3 : ℕ) : ℝ≥0∞)) ≤
+        ℙ_{M}[(contractPick R.pick (ksTarget p.1.verts.card) p.1 p.2 >>=
+            fun q => kargerSteinAux R.pick fuel q : M _) ∈
+          {o | o.2 = p.1.minCutValue}] := by
+      refine le_prob_toPMF_bind h1 ?_
+      intro q hqgood hqsupp
+      obtain ⟨hwf'', hcard2'', -, hcase, -, -, ht''⟩ :=
+        support_contractPick (M := M) R g₀ (ksTarget p.1.verts.card)
+          (ksTarget_two_le _) p.1 p.2 hwf (ksTarget_lt h4).le ht q hqsupp
+      have hqmin : q.1.minCutValue = p.1.minCutValue := hqgood
+      rcases hcase with hct | hnil
+      · have hrec := ih q hwf'' (by omega) ht''
+          (by rw [hct]; exact hdt)
+        rw [hqmin, hct] at hrec
+        exact hrec
+      · -- Stalled on an edgeless graph: deterministic success.
+        have h2' : 2 ≤ q.1.verts.card := le_trans ht2 hcard2''
+        have hmin0 : q.1.minCutValue = 0 :=
+          Nat.le_zero.mp (le_trans (minCutValue_le_length q.1 h2')
+            (by simp [hnil]))
+        have hsub := support_kargerSteinAux_edgeless (M := M) R.pick fuel q hnil
+        refine le_trans ?_
+          (prob_mono_of_support
+            (p := inst.toPMF (kargerSteinAux R.pick fuel q : M _))
+            (s := Set.univ) fun o ho _ => ?_)
+        · rw [prob_univ]
+          rw [ENNReal.div_le_iff
+            (by exact_mod_cast (by omega :
+              (ksDepth (ksTarget p.1.verts.card) + 3 : ℕ) ≠ 0))
+            (ENNReal.natCast_ne_top _), one_mul]
+          exact_mod_cast (by omega :
+            (1 : ℕ) ≤ ksDepth (ksTarget p.1.verts.card) + 3)
+        · rw [hsub o ho]
+          show (0 : ℕ) = p.1.minCutValue
+          rw [← hqmin, hmin0]
+    -- One-sidedness of the branch, for the amplify composition.
+    have hsupp : ∀ o ∈ 𝒟_{M}[(contractPick R.pick
+          (ksTarget p.1.verts.card) p.1 p.2 >>=
+          fun q => kargerSteinAux R.pick fuel q : M _)].support,
+        p.1.minCutValue ≤ o.2 := by
+      intro o ho
+      obtain ⟨q, hq, ho'⟩ := mem_support_toPMF_bind.mp ho
+      obtain ⟨hwf'', hcard'', -, -, -, hmin'', ht''⟩ :=
+        support_contractPick (M := M) R g₀ (ksTarget p.1.verts.card)
+          (ksTarget_two_le _) p.1 p.2 hwf (ksTarget_lt h4).le ht q hq
+      obtain ⟨-, -, hle'⟩ := support_kargerSteinAux R fuel q hwf''
+        (le_trans ht2 hcard'') ht'' o ho'
+      exact le_trans hmin'' hle'
+    have hamp := amplify_argmin_success (f := Prod.snd)
+      (c := p.1.minCutValue) hsupp hp 2
+    refine le_trans ?_ hamp
+    -- The recurrence arithmetic: `1/(c+1) ≤ 1 − (1 − 1/(2c))²`
+    -- with `c := ksDepth t + 3`.
+    rw [hdd]
+    obtain ⟨c', hc'⟩ : ∃ c', ksDepth (ksTarget p.1.verts.card) + 3 = c' + 3 :=
+      ⟨ksDepth (ksTarget p.1.verts.card), rfl⟩
+    rw [hc',
+      show (1 + ksDepth (ksTarget p.1.verts.card) + 3 : ℕ) = c' + 3 + 1 by
+        omega]
+    have hp₀ : (1 : ℝ≥0∞) / 2 *
+        (((1 : ℕ) : ℝ≥0∞) / ((c' + 3 : ℕ) : ℝ≥0∞)) =
+        ((1 : ℕ) : ℝ≥0∞) / ((2 * (c' + 3) : ℕ) : ℝ≥0∞) := by
+      have h := ennreal_natCast_div_mul_div 1 2 1 (c' + 3) (by norm_num)
+      rw [show (1 * 1 : ℕ) = 1 by norm_num] at h
+      exact_mod_cast h
+    rw [hp₀,
+      ennreal_one_sub_inv_natCast (by omega : 0 < 2 * (c' + 3)), sq,
+      ennreal_natCast_div_mul_div _ _ _ _ (by omega)]
+    refine ENNReal.le_sub_of_add_le_right
+      ((ENNReal.div_lt_top (ENNReal.natCast_ne_top _)
+        (by exact_mod_cast (by positivity :
+          (2 * (c' + 3) * (2 * (c' + 3)) : ℕ) ≠ 0))).ne) ?_
+    calc ((1 : ℕ) : ℝ≥0∞) / ((c' + 3 + 1 : ℕ) : ℝ≥0∞) +
+          (((2 * (c' + 3) - 1) * (2 * (c' + 3) - 1) : ℕ) : ℝ≥0∞) /
+            ((2 * (c' + 3) * (2 * (c' + 3)) : ℕ) : ℝ≥0∞)
+        ≤ ((1 : ℕ) : ℝ≥0∞) / ((c' + 3 + 1 : ℕ) : ℝ≥0∞) +
+          ((c' + 3 : ℕ) : ℝ≥0∞) / ((c' + 3 + 1 : ℕ) : ℝ≥0∞) := by
+          refine add_le_add le_rfl (ennreal_div_le_div_nat
+            (Nat.mul_pos (by omega) (by omega)) (by omega) ?_)
+          rw [show 2 * (c' + 3) - 1 = 2 * c' + 5 by omega]
+          nlinarith
+      _ = 1 := by
+          rw [ENNReal.div_add_div_same,
+            show ((1 : ℕ) : ℝ≥0∞) + ((c' + 3 : ℕ) : ℝ≥0∞) =
+              ((c' + 3 + 1 : ℕ) : ℝ≥0∞) by push_cast; ring]
+          exact ENNReal.div_self (by exact_mod_cast (by omega :
+            (c' + 3 + 1 : ℕ) ≠ 0)) (ENNReal.natCast_ne_top _)
+  | case3 fuel p h4 =>
+    intro hwf h2 ht _
+    rw [kargerSteinAux.eq_2, if_neg h4, ksDepth_of_lt h4]
+    exact success_ksLeaf_small R hwf h2 (by omega) ht
 
 /-! ## Main theorems -/
 
@@ -472,13 +431,13 @@ never undershoots the minimum. -/
 theorem kargerStein_isCut
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
-    (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    ∀ o ∈ 𝒟_{M}[KargerStein g].support,
+    (R : MergeRule α) (g : MultiGraph α) (hwf : g.WF)
+    (h2 : 2 ≤ g.verts.card) :
+    ∀ o ∈ 𝒟_{M}[KargerStein R.pick g].support,
       (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
   intro o ho
-  obtain ⟨hcut, hle, -⟩ := support_kargerSteinAux (M := M)
-    (ksDepth g.verts.card) g.super hwf.super
-    (by rw [card_verts_super]; omega) (Tracks.super g) o ho
+  obtain ⟨hcut, hle, -⟩ := support_kargerSteinAux (M := M) R
+    (ksDepth g.verts.card) (g, fun a => {a}) hwf h2 (PickTracks.init g) o ho
   exact ⟨hcut, hle⟩
 
 /-- Karger–Stein reports the minimum-cut value with probability at
@@ -487,14 +446,12 @@ exponential improvement over a single run's `2/(n(n−1))`. -/
 theorem kargerStein_success_prob
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
-    (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
+    (R : MergeRule α) (g : MultiGraph α) (hwf : g.WF)
+    (h2 : 2 ≤ g.verts.card) :
     ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-      ℙ_{M}[KargerStein g ∈ {o | o.2 = g.minCutValue}] := by
-  have hmain := success_kargerSteinAux (M := M) (ksDepth g.verts.card) g.super
-    hwf.super (Tracks.super g) (by rw [card_verts_super]; omega)
-    (le_of_eq (congrArg ksDepth (card_verts_super g)))
-  rw [minCutValue_super h2, card_verts_super] at hmain
-  exact hmain
+      ℙ_{M}[KargerStein R.pick g ∈ {o | o.2 = g.minCutValue}] := by
+  exact success_kargerSteinAux (M := M) R (ksDepth g.verts.card)
+    (g, fun a => {a}) hwf h2 (PickTracks.init g) le_rfl
 
 /-- The Karger–Stein theorem. A single run returns an actual
 minimum cut (every reported side is a genuine cut of value
@@ -503,13 +460,14 @@ exactly `minCutValue`) with probability at least
 theorem kargerStein_finds_min
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
-    (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
+    (R : MergeRule α) (g : MultiGraph α) (hwf : g.WF)
+    (h2 : 2 ≤ g.verts.card) :
     ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-      ℙ_{M}[KargerStein g ∈ {o | ∀ S ∈ o.1,
+      ℙ_{M}[KargerStein R.pick g ∈ {o | ∀ S ∈ o.1,
           g.IsCut S ∧ g.cutValue S = g.minCutValue}] := by
-  refine le_trans (kargerStein_success_prob g hwf h2)
+  refine le_trans (kargerStein_success_prob R g hwf h2)
     (prob_mono_of_support fun o ho hval => ?_)
-  obtain ⟨hall, -⟩ := kargerStein_isCut g hwf h2 o ho
+  obtain ⟨hall, -⟩ := kargerStein_isCut R g hwf h2 o ho
   exact fun S hS => ⟨(hall S hS).1, (hall S hS).2.trans hval⟩
 
 /-! ## Complexity
@@ -517,119 +475,118 @@ theorem kargerStein_finds_min
 The interim bound of `KargerStein.md` §5: each of the `≤ 2^(fuel+1)`
 tree nodes runs a contraction pass of at most `n` rounds costing at
 most `m` each (edge counts and vertex counts never increase down a
-path, which is where well-formedness enters, unlike Karger's bound).
-The level-sum refinement to `7 n² m` is future work. -/
+path, which is where well-formedness and freshness enter, as in the
+fuel-free Karger bound). The level-sum refinement to `7 n² m` is
+future work. -/
 
 private lemma cost_kargerSteinAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {g₀ : MultiGraph α} :
-    ∀ fuel (g : MultiGraph (Finset α)), g.WF → Tracks g₀ g →
-      𝔼_{M}[cost (kargerSteinAux fuel g : TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
+    {g₀ : MultiGraph α} (R : MergeRule α) :
+    ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
+      PickTracks g₀ p.1 p.2 →
+      𝔼_{M}[cost (kargerSteinAux R.pick fuel p :
+          TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
         ((2 ^ (fuel + 2) - 2 : ℕ) : ℝ≥0∞) *
-          ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞) := by
-  intro fuel g
-  induction fuel, g using kargerSteinAux.induct with
-  | case1 g =>
-    intro hwf ht
+          ((p.1.verts.card * p.1.edges.length : ℕ) : ℝ≥0∞) := by
+  intro fuel p
+  induction fuel, p using kargerSteinAux.induct with
+  | case1 p =>
+    intro hwf _
     rw [kargerSteinAux.eq_1, expected_cost_toPMF_bind_pure]
-    refine le_trans (expected_cost_contractAux _ g) ?_
-    have hnat : (g.verts.card - 2) * g.edges.length ≤
-        (2 ^ (0 + 2) - 2) * (g.verts.card * g.edges.length) := by
-      calc (g.verts.card - 2) * g.edges.length
-          ≤ g.verts.card * g.edges.length :=
+    refine le_trans (expected_cost_contractPick R 2 p.1 p.2 hwf) ?_
+    have hnat : (p.1.verts.card - 2) * p.1.edges.length ≤
+        (2 ^ (0 + 2) - 2) * (p.1.verts.card * p.1.edges.length) := by
+      calc (p.1.verts.card - 2) * p.1.edges.length
+          ≤ p.1.verts.card * p.1.edges.length :=
             Nat.mul_le_mul_right _ (by omega)
-        _ ≤ (2 ^ (0 + 2) - 2) * (g.verts.card * g.edges.length) :=
+        _ ≤ (2 ^ (0 + 2) - 2) * (p.1.verts.card * p.1.edges.length) :=
             Nat.le_mul_of_pos_left _ (by norm_num)
     exact_mod_cast hnat
-  | case2 fuel g h4 ih =>
+  | case2 fuel p h4 ih =>
     intro hwf ht
-    rw [kargerSteinAux.eq_2]
-    · rw [if_pos h4, show (2 : ℕ) = 1 + 1 from by norm_num,
-        expected_cost_amplify]
-      have hbr : 𝔼[cost (contractAux
-            (g.verts.card - ksTarget g.verts.card) g >>=
-            kargerSteinAux fuel : TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
-          ((2 ^ (fuel + 2) - 1 : ℕ) : ℝ≥0∞) *
-            ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞) := by
-        refine le_trans (expected_cost_toPMF_bind_le
-          (c := ((2 ^ (fuel + 2) - 2 : ℕ) : ℝ≥0∞) *
-            ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞)) ?_) ?_
-        · intro tm htm
-          have hret := mem_support_timedPMF (inst := inst) htm
-          obtain ⟨hwf'', -, hcardle'', -, hlen'', -, ht''⟩ :=
-            support_contractAux (M := TimeMT ℕ M) (ksTarget g.verts.card)
-              (ksTarget_two_le _) (g.verts.card - ksTarget g.verts.card) g hwf
-              (by have := ksTarget_lt h4; omega) ht tm.ret hret
-          refine le_trans (ih tm.ret hwf'' ht'') ?_
-          exact mul_le_mul' le_rfl
-            (by exact_mod_cast Nat.mul_le_mul hcardle'' hlen'')
-        · refine le_trans (add_le_add (expected_cost_contractAux _ g) le_rfl) ?_
-          have hnat : (g.verts.card - ksTarget g.verts.card) * g.edges.length +
-              (2 ^ (fuel + 2) - 2) * (g.verts.card * g.edges.length) ≤
-              (2 ^ (fuel + 2) - 1) * (g.verts.card * g.edges.length) := by
-            have h1 : (g.verts.card - ksTarget g.verts.card) * g.edges.length ≤
-                g.verts.card * g.edges.length :=
-              Nat.mul_le_mul_right _ (by omega)
-            have h2 : (2 : ℕ) ≤ 2 ^ (fuel + 2) := by
-              calc (2 : ℕ) = 2 ^ 1 := by norm_num
-                _ ≤ 2 ^ (fuel + 2) := Nat.pow_le_pow_right (by norm_num) (by omega)
-            rw [show (2 ^ (fuel + 2) - 1) = (2 ^ (fuel + 2) - 2) + 1 by omega,
-              Nat.add_mul, one_mul, Nat.add_comm
-                ((g.verts.card - ksTarget g.verts.card) * g.edges.length)]
-            exact Nat.add_le_add_left h1 _
+    have h2 : (2 : ℕ) ≤ 2 ^ (fuel + 2) := Nat.le_self_pow (by omega) 2
+    rw [kargerSteinAux.eq_2, if_pos h4, show (2 : ℕ) = 1 + 1 from by norm_num,
+      expected_cost_amplify]
+    have hbr : 𝔼[cost (contractPick R.pick
+          (ksTarget p.1.verts.card) p.1 p.2 >>=
+          fun q => kargerSteinAux R.pick fuel q :
+            TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
+        ((2 ^ (fuel + 2) - 1 : ℕ) : ℝ≥0∞) *
+          ((p.1.verts.card * p.1.edges.length : ℕ) : ℝ≥0∞) := by
+      refine le_trans (expected_cost_toPMF_bind_le
+        (c := ((2 ^ (fuel + 2) - 2 : ℕ) : ℝ≥0∞) *
+          ((p.1.verts.card * p.1.edges.length : ℕ) : ℝ≥0∞)) ?_) ?_
+      · intro tm htm
+        have hret := mem_support_timedPMF (inst := inst) htm
+        obtain ⟨hwf'', -, hcardle'', -, hlen'', -, ht''⟩ :=
+          support_contractPick (M := TimeMT ℕ M) R g₀
+            (ksTarget p.1.verts.card) (ksTarget_two_le _) p.1 p.2 hwf
+            (ksTarget_lt h4).le ht tm.ret hret
+        refine le_trans (ih tm.ret hwf'' ht'') ?_
+        exact mul_le_mul' le_rfl
+          (by exact_mod_cast Nat.mul_le_mul hcardle'' hlen'')
+      · refine le_trans (add_le_add
+          (expected_cost_contractPick R (ksTarget p.1.verts.card) p.1 p.2 hwf)
+          le_rfl) ?_
+        have hnat : (p.1.verts.card - ksTarget p.1.verts.card) *
+            p.1.edges.length +
+            (2 ^ (fuel + 2) - 2) * (p.1.verts.card * p.1.edges.length) ≤
+            (2 ^ (fuel + 2) - 1) * (p.1.verts.card * p.1.edges.length) := by
+          have h1 : (p.1.verts.card - ksTarget p.1.verts.card) *
+              p.1.edges.length ≤ p.1.verts.card * p.1.edges.length :=
+            Nat.mul_le_mul_right _ (by omega)
+          rw [show (2 ^ (fuel + 2) - 1) = (2 ^ (fuel + 2) - 2) + 1 by omega,
+            Nat.add_mul, one_mul, Nat.add_comm
+              ((p.1.verts.card - ksTarget p.1.verts.card) * p.1.edges.length)]
+          exact Nat.add_le_add_left h1 _
+        exact_mod_cast hnat
+    refine le_trans (mul_le_mul' le_rfl hbr) ?_
+    have hpow : (2 : ℕ) ^ (fuel + 1 + 2) = 2 ^ (fuel + 2) * 2 := by
+      rw [pow_succ]
+    have hnat : 2 * ((2 ^ (fuel + 2) - 1) *
+        (p.1.verts.card * p.1.edges.length)) ≤
+        (2 ^ (fuel + 1 + 2) - 2) * (p.1.verts.card * p.1.edges.length) := by
+      rw [← Nat.mul_assoc]
+      exact Nat.mul_le_mul_right _ (by omega)
+    calc (((1 : ℕ) : ℝ≥0∞) + 1) * (((2 ^ (fuel + 2) - 1 : ℕ) : ℝ≥0∞) *
+          ((p.1.verts.card * p.1.edges.length : ℕ) : ℝ≥0∞))
+        = ((2 * ((2 ^ (fuel + 2) - 1) *
+            (p.1.verts.card * p.1.edges.length)) : ℕ) : ℝ≥0∞) := by
+          push_cast
+          ring
+      _ ≤ ((2 ^ (fuel + 1 + 2) - 2 : ℕ) : ℝ≥0∞) *
+            ((p.1.verts.card * p.1.edges.length : ℕ) : ℝ≥0∞) := by
           exact_mod_cast hnat
-      refine le_trans (mul_le_mul' le_rfl hbr) ?_
-      have hpow : (2 : ℕ) ^ (fuel + 1 + 2) = 2 ^ (fuel + 2) * 2 := by
-        rw [pow_succ]
-      have h2 : (2 : ℕ) ≤ 2 ^ (fuel + 2) := by
-        calc (2 : ℕ) = 2 ^ 1 := by norm_num
-          _ ≤ 2 ^ (fuel + 2) := Nat.pow_le_pow_right (by norm_num) (by omega)
-      have hnat : 2 * ((2 ^ (fuel + 2) - 1) *
-          (g.verts.card * g.edges.length)) ≤
-          (2 ^ (fuel + 1 + 2) - 2) * (g.verts.card * g.edges.length) := by
-        rw [← Nat.mul_assoc]
-        exact Nat.mul_le_mul_right _ (by omega)
-      calc (((1 : ℕ) : ℝ≥0∞) + 1) * (((2 ^ (fuel + 2) - 1 : ℕ) : ℝ≥0∞) *
-            ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞))
-          = ((2 * ((2 ^ (fuel + 2) - 1) *
-              (g.verts.card * g.edges.length)) : ℕ) : ℝ≥0∞) := by
-            push_cast
-            ring
-        _ ≤ ((2 ^ (fuel + 1 + 2) - 2 : ℕ) : ℝ≥0∞) *
-              ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞) := by
-            exact_mod_cast hnat
-  | case3 fuel g h4 =>
-    intro _ _
-    rw [kargerSteinAux.eq_2]
-    · rw [if_neg h4, expected_cost_toPMF_bind_pure]
-      refine le_trans (expected_cost_contractAux _ g) ?_
-      have hpos : 0 < 2 ^ (fuel + 1 + 2) - 2 := by
-        have : (4 : ℕ) ≤ 2 ^ (fuel + 1 + 2) := by
-          calc (4 : ℕ) = 2 ^ 2 := by norm_num
-            _ ≤ 2 ^ (fuel + 1 + 2) := Nat.pow_le_pow_right (by norm_num) (by omega)
-        omega
-      have hnat : (g.verts.card - 2) * g.edges.length ≤
-          (2 ^ (fuel + 1 + 2) - 2) * (g.verts.card * g.edges.length) := by
-        calc (g.verts.card - 2) * g.edges.length
-            ≤ g.verts.card * g.edges.length :=
-              Nat.mul_le_mul_right _ (by omega)
-          _ ≤ (2 ^ (fuel + 1 + 2) - 2) * (g.verts.card * g.edges.length) :=
-              Nat.le_mul_of_pos_left _ hpos
-      exact_mod_cast hnat
+  | case3 fuel p h4 =>
+    intro hwf _
+    rw [kargerSteinAux.eq_2, if_neg h4, expected_cost_toPMF_bind_pure]
+    refine le_trans (expected_cost_contractPick R 2 p.1 p.2 hwf) ?_
+    have hpos : 0 < 2 ^ (fuel + 1 + 2) - 2 := by
+      have : (4 : ℕ) ≤ 2 ^ (fuel + 1 + 2) := by
+        calc (4 : ℕ) = 2 ^ 2 := by norm_num
+          _ ≤ 2 ^ (fuel + 1 + 2) := Nat.pow_le_pow_right (by norm_num) (by omega)
+      omega
+    have hnat : (p.1.verts.card - 2) * p.1.edges.length ≤
+        (2 ^ (fuel + 1 + 2) - 2) * (p.1.verts.card * p.1.edges.length) := by
+      calc (p.1.verts.card - 2) * p.1.edges.length
+          ≤ p.1.verts.card * p.1.edges.length :=
+            Nat.mul_le_mul_right _ (by omega)
+        _ ≤ (2 ^ (fuel + 1 + 2) - 2) * (p.1.verts.card * p.1.edges.length) :=
+            Nat.le_mul_of_pos_left _ hpos
+    exact_mod_cast hnat
 
 /-- Expected cost of Karger–Stein (interim bound, edge-list model):
-at most `(2^(d+2) − 2)·n·m` where `d = ksDepth n`. Needs `g.WF`,
-unlike Karger's bound, because the recursion's cost is controlled by
-the run invariant. -/
+at most `(2^(d+2) − 2)·n·m` where `d = ksDepth n`. Needs `WF` and
+freshness, like the fuel-free Karger cost bound: the recursion's cost
+is controlled by the run invariant. -/
 theorem kargerStein_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    (g : MultiGraph α) (hwf : g.WF) :
-    𝔼_{M}[cost KargerStein g] ≤
+    (R : MergeRule α) (g : MultiGraph α) (hwf : g.WF) :
+    𝔼_{M}[cost KargerStein R.pick g] ≤
       ((2 ^ (ksDepth g.verts.card + 2) - 2 : ℕ) : ℝ≥0∞) *
         ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞) := by
   unfold KargerStein
-  refine le_trans (cost_kargerSteinAux (g₀ := g) _ g.super hwf.super
-    (Tracks.super g)) ?_
-  rw [card_verts_super, length_edges_super]
+  exact cost_kargerSteinAux (g₀ := g) R (ksDepth g.verts.card)
+    (g, fun a => {a}) hwf (PickTracks.init g)
 
 end ARA

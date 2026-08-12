@@ -14,13 +14,13 @@ probability only $\le 2/n$), and only the *late* ones are risky. So:
 contract slowly down to $\approx n/\sqrt2$ vertices — this preserves
 the minimum cut with probability $\ge 1/2$ — and spend the repetition
 budget on the risky small graphs, by recursing **twice** and keeping
-the better answer.
+the better output.
 
 ## 2. The algorithm
 
 **The contraction target.** For $n \ge 2$ let
 $$t(n) \;:=\; \min\,\{\, t \ge 2 \;:\; 2\,t(t-1) \,\ge\, n(n-1) \,\},$$
-the number of supervertices at which the survival probability of a
+the number of vertices at which the survival probability of a
 fixed minimum cut first reaches $1/2$ (Theorem 1). Classically one
 writes $t(n) = \lceil 1 + n/\sqrt2\,\rceil$; the integer
 characterization above is equivalent for the analysis, avoids
@@ -30,16 +30,16 @@ $2(n-1)(n-2) \ge n(n-1) \iff n \ge 4$), which delimits the base case.
 
 **Algorithm** $\mathrm{KS}(G)$:
 
-1. If $n \le 3$: contract down to $2$ supervertices (Karger's single
+1. If $n \le 3$: contract down to $2$ vertices (Karger's single
    run) and return the resulting partition with its value.
 2. Otherwise, **twice and independently**: contract the current graph
-   down to $t(n)$ supervertices, and recurse on the result.
+   down to $t(n)$ vertices, and recurse on the result.
 3. Of the two returned outputs, keep the one with the smaller
    reported value.
 
-Contraction, the supervertex model, the partition output and the cost
-model (each contraction round costs the current number of edges) are
-exactly as in `Karger.md` §2.
+Contraction, the pick-and-fibre-map model, the partition output and
+the cost model (each contraction round costs the current number of
+edges) are exactly as in `Karger.md` §2.
 
 **Recursion depth.** Define $d(2) = d(3) = 0$ and
 $d(n) = 1 + d(t(n))$ for $n \ge 4$ (well-founded since $t(n) < n$).
@@ -47,14 +47,14 @@ $d(n) = 1 + d(t(n))$ for $n \ge 4$ (well-founded since $t(n) < n$).
 ## 3. Survival of the minimum cut (proved for Karger)
 
 **Theorem 1 (partial contraction).** For a working graph on
-$n = k + t$ supervertices with $t \ge 2$, the $k$ contraction rounds
+$n = k + t$ vertices with $t \ge 2$, the $k$ contraction rounds
 preserve the minimum-cut value with probability at least
 $$\frac{t(t-1)}{n(n-1)}
   \;=\; \prod_{i=0}^{k-1}\Bigl(1 - \frac{2}{n-i}\Bigr).$$
 
 This is Karger's Theorem 2′ (`Karger.md`), the shared kernel of both
 analyses; in the formal development it is one statement
-(`success_contractAux`), with Karger's $2/(n(n-1))$ the case $t = 2$.
+(`success_contractPick`), with Karger's $2/(n(n-1))$ the case $t = 2$.
 
 **Corollary (half survival).** By the definition of $t(n)$,
 contracting from $n$ to $t(n)$ vertices preserves the minimum-cut

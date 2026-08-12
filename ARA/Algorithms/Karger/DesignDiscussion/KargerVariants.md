@@ -22,9 +22,10 @@ Let $e = \{u, v\}$ be the contracted edge of the current graph $G$.
 3. **Fresh vertex.** Delete both endpoints and glue their edges to a
    brand-new vertex $w \notin V(G)$. Trivially symmetric — $w$
    mentions neither endpoint.
-4. **Supervertex** (the main Karger file). Vertices are *sets* of
-   original vertices; merge into the union $u \cup v$. Symmetric
-   because $\cup$ is commutative.
+4. **Supervertex** (the design narrative of `Variants.lean`; the main
+   Karger file runs models 1–3 through an abstract pick). Vertices are
+   *sets* of original vertices; merge into the union $u \cup v$.
+   Symmetric because $\cup$ is commutative.
 
 All four are instances of one **rename contraction**: the endpoints
 leave the vertex set, a single vertex $w$ enters, every edge is
@@ -112,7 +113,7 @@ The theorems above are identical across models. The differences are
   min-cut problem does not care that vertices are comparable.
 * The **enumeration** model moves the order out of the type and into
   the input: better hygiene, same ceremony — every statement now
-  mentions a labeling the answer does not depend on. (A labeling also
+  mentions a labeling the output does not depend on. (A labeling also
   orients every edge, low label → high label; cut values are
   orientation-invariant, which is why the unordered-edge treatment is
   sound.)
@@ -133,9 +134,11 @@ The theorems above are identical across models. The differences are
   vertex *is* the set of original vertices merged into it — so the
   final two vertices literally *are* the two sides of the cut, and the
   freshness condition is discharged by the disjointness of the
-  supervertices. This is why the main Karger file can state the
-  textbook theorem ("the algorithm finds a minimum **cut**") while the
-  rename models state its value-level shadow.
+  supervertices. This is why the supervertex model needs no separate
+  representative map — and why `Karger.lean` instead threads `rep`
+  explicitly, which lets every rename model state the textbook theorem
+  ("the algorithm finds a minimum **cut**"); `KargerVariants.lean`
+  keeps the value-level shadow.
 
 ## Statements proved (constants as in the Lean files)
 

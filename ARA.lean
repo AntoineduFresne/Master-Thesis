@@ -28,10 +28,7 @@ import ARA.Algorithms.Tutorial
 import ARA.Algorithms.Quicksort.Quicksort
 import ARA.Algorithms.Quickselect.Quickselect
 import ARA.Algorithms.Karger.Karger
-import ARA.Algorithms.Karger.KargerVariants
-import ARA.Algorithms.Karger.KargerOrder
-import ARA.Algorithms.Karger.KargerEnum
-import ARA.Algorithms.Karger.KargerFresh
+import ARA.Algorithms.Karger.DesignDiscussion.KargerVariants
 import ARA.Algorithms.KargerStein.KargerStein
 import ARA.Algorithms.ReservoirSampling.ReservoirSampling
 import ARA.Algorithms.Freivalds.Freivalds

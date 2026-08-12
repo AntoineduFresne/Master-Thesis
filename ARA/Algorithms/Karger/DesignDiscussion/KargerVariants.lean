@@ -4,15 +4,18 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Antoine du Fresne von Hohenesche
 -/
 
-import ARA.Algorithms.Karger.Karger
+import ARA.Infrastructure.Complexity.ExpectedCost
+import ARA.Infrastructure.Correctness.Amplify
+import ARA.Helpers.MultiGraph
+import Mathlib.Data.Sym.Sym2.Order
 
 /-!
 # Karger with a pluggable contraction rule
 
-The main `Karger` file contracts by taking unions of supervertices.
-This exhibit runs the same algorithm under every *representative-style*
-contraction, the two endpoints of the drawn edge are replaced by a
-single vertex `w` of the same type, and shows that the entire
+The main `Karger` file runs the contraction loop against an abstract
+pick and reports the cut itself. This exhibit runs the same algorithm under every *representative-style*
+contraction (the two endpoints of the drawn edge are replaced by a
+single vertex `w` of the same type) and shows that the entire
 analysis is a function of one choice: how `w` is picked.
 
 A `MergeRule` packages that choice (`pick`) together with the single
@@ -28,18 +31,22 @@ Everything else is proved here once, for every rule:
   succeeds with probability at least `1 − (1 − 2/(n(n−1)))^k`;
 * `kargerVia_cost_le`: expected cost at most `(n - 2) * m`.
 
-The three instantiations (`KargerOrder`, `KargerEnum`, `KargerFresh`)
-each discharge `fresh` in their own way, which is precisely where
-each model pays its price (a `LinearOrder`, an injective labeling, a
-name supply).
+The three rules (`orderRule`, `enumRule`, `freshRule`, at the end of
+this file) each discharge `fresh` in their own way, which is precisely
+where each model pays its price (a `LinearOrder`, an injective
+labelling, a name supply). `Karger.lean` runs the same rules with
+cut-level output.
 
 ## What a rename model *cannot* give
 
 The merged vertex carries no history, so the algorithm here returns
 only the cut value (`M ℕ`), not the cut: recovering the partition
-would need a representative map threaded through the recursion, and the
-bookkeeping the supervertex model gets for free, where a vertex *is*
-the set of original vertices merged into it. See
+would need a representative map threaded through the recursion — which
+is exactly what `Karger.lean` does (`rep`). The supervertex
+alternative, where a vertex *is* the set of original vertices merged
+into it, is a design narrative now: `Variants.lean` records the
+discussion, and the supervertex section of
+`ARA/Helpers/MultiGraph.lean` keeps the exhibit. See
 `KargerVariants.md` for the full comparison.
 -/
 
@@ -54,7 +61,7 @@ variable {α : Type} [DecidableEq α]
 
 /-- A representative-style contraction rule: how to pick the merged
 vertex for a drawn edge, together with the one obligation the generic
-cut theory needs, the pick collides with no *untouched* vertex (it
+cut theory needs: the pick collides with no *untouched* vertex (it
 may well be one of the two endpoints). -/
 structure MergeRule (α : Type) [DecidableEq α] where
   /-- The merged vertex for the edge `e` of the current graph `g`. -/
@@ -96,7 +103,7 @@ lemma minCutValue_le_contractVia {g : MultiGraph α} (hwf : g.WF)
 
 /-- Perform `fuel` uniformly-random edge contractions under the rule
 (stopping early if no edge remains). Each pass ticks once per edge,
-exactly like `contractAux`. -/
+exactly like the pick loop in `Karger.lean`. -/
 def contractAuxVia {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
     ℕ → MultiGraph α → M (MultiGraph α)
   | 0, g => pure g
@@ -118,12 +125,87 @@ def KargerVia {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
   let h ← contractAuxVia R (g.verts.card - 2) g
   pure h.edges.length
 
+/-! ## Helper lemmas for the analysis
+
+The `>>=`/`pure`-vs-`PMF.bind`/`PMF.pure` bridges (`pmf_bind_eq`,
+`pmf_pure_eq`) come from `ARA.Infrastructure.Tactics`. -/
+
+/-- A `Fin`-indexed sum of a function of the list entries is the sum
+over the mapped list. -/
+lemma sum_univ_getElem {β : Type} (l : List β) (f : β → ℝ≥0∞) :
+    (∑ i : Fin l.length, f l[(i : ℕ)]) = (l.map f).sum := by
+  rw [← List.ofFn_getElem_eq_map l f, List.sum_ofFn]
+
+/-- Summing `q` over the entries *not* satisfying `p` counts them. -/
+lemma sum_map_ite_zero {β : Type} (p : β → Prop) [DecidablePred p]
+    (q : ℝ≥0∞) :
+    ∀ l : List β,
+      (l.map fun e => if p e then 0 else q).sum =
+        ((l.length - l.countP fun e => decide (p e) : ℕ) : ℝ≥0∞) * q
+  | [] => by simp
+  | e :: l => by
+    rw [List.map_cons, List.sum_cons, sum_map_ite_zero p q l]
+    have hle : (l.countP fun e => decide (p e)) ≤ l.length :=
+      List.countP_le_length
+    by_cases hp : p e
+    · have hc : ((e :: l).countP fun e => decide (p e)) =
+          (l.countP fun e => decide (p e)) + 1 := by
+        simp [hp]
+      rw [if_pos hp, hc, zero_add, List.length_cons]
+      congr 2
+      omega
+    · have hc : ((e :: l).countP fun e => decide (p e)) =
+          (l.countP fun e => decide (p e)) := by
+        simp [hp]
+      rw [if_neg hp, hc, List.length_cons]
+      have h1 : l.length + 1 - (l.countP fun e => decide (p e)) =
+          (l.length - (l.countP fun e => decide (p e))) + 1 := by omega
+      rw [h1, Nat.cast_add, Nat.cast_one, add_mul, one_mul, add_comm]
+
+/-- The arithmetic core of the survival induction: if the current graph
+has `m > 0` edges and `k + s + 3` vertices, and the fixed minimum
+cut has `c ≤ m` crossing edges with `c * (k + s + 3) ≤ 2 * m` (the
+counting bound), then picking a non-crossing edge and surviving
+afterwards with probability `N / ((k+s+2)(k+s+1))` beats
+`N / ((k+s+3)(k+s+2))`. -/
+lemma step_bound {m c k s N : ℕ} (hm : 0 < m) (hc : c ≤ m)
+    (hbound : c * (k + s + 3) ≤ 2 * m) :
+    ((N : ℕ) : ℝ≥0∞) / (((k + s + 3) * (k + s + 2) : ℕ) : ℝ≥0∞) ≤
+      ((m : ℕ) : ℝ≥0∞)⁻¹ *
+        (((m - c : ℕ) : ℝ≥0∞) *
+          (((N : ℕ) : ℝ≥0∞) / (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞))) := by
+  obtain ⟨d, rfl⟩ : ∃ d, m = d + c := ⟨m - c, by omega⟩
+  have hdc : d + c - c = d := by omega
+  rw [hdc]
+  -- `(d + c)(k + s + 1) ≤ d(k + s + 3)` from the counting bound.
+  have hkey : (d + c) * (k + s + 1) ≤ d * (k + s + 3) := by nlinarith
+  -- Rewrite the right-hand side as a single natural fraction.
+  have hrw : (((d + c : ℕ) : ℝ≥0∞))⁻¹ *
+      (((d : ℕ) : ℝ≥0∞) *
+        (((N : ℕ) : ℝ≥0∞) / (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞))) =
+      ((d * N : ℕ) : ℝ≥0∞) /
+        (((d + c) * ((k + s + 2) * (k + s + 1)) : ℕ) : ℝ≥0∞) := by
+    rw [div_eq_mul_inv, div_eq_mul_inv, Nat.cast_mul (d + c), Nat.cast_mul d,
+      ENNReal.mul_inv (Or.inl (by exact_mod_cast hm.ne'))
+        (Or.inl (ENNReal.natCast_ne_top _))]
+    push_cast
+    ring
+  rw [hrw]
+  -- Cross-multiply and conclude in `ℕ`.
+  refine ennreal_div_le_div_nat (by positivity) (by positivity) ?_
+  have h2 := Nat.mul_le_mul_left (N * (k + s + 2)) hkey
+  calc N * ((d + c) * ((k + s + 2) * (k + s + 1)))
+      = N * (k + s + 2) * ((d + c) * (k + s + 1)) := by ring
+    _ ≤ N * (k + s + 2) * (d * (k + s + 3)) := h2
+    _ = d * N * ((k + s + 3) * (k + s + 2)) := by ring
+
 /-! ## The run invariant -/
 
-/-- The run invariant of the rule-driven contraction loop:
-well-formedness, the card window, a genuine end state, monotonicity of
-the edge count and of the minimum-cut value. (No `Tracks`: a rename
-model has no partition to track.) -/
+/-- The run invariant of the rule-driven contraction loop, for an
+arbitrary stopping target `t` with fuel `k = card − t` (`KargerVia`
+reads it at `t = 2`): well-formedness, the card window, a genuine end
+state, monotonicity of the edge count and of the minimum-cut value.
+(No `Tracks`: a rename model has no partition to track.) -/
 theorem support_contractAuxVia
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
@@ -357,7 +439,7 @@ lemma expected_cost_contractAuxVia
     exact bot_le
 
 /-- Expected complexity: with one tick per edge scanned during a
-contraction pass, any rule runs in expected cost at most `(n - 2) * m`
+contraction pass, any rule runs in expected cost at most `(n - 2) * m`.
 This holds for arbitrary inputs. -/
 theorem kargerVia_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -367,5 +449,105 @@ theorem kargerVia_cost_le
   unfold KargerVia
   rw [expected_cost_toPMF_bind_pure]
   exact expected_cost_contractAuxVia R _ g
+
+/-! ## The three merge rules
+
+Each rule discharges `fresh` in its own way, which is where each model
+pays: a `LinearOrder` on the vertex type, an injective labelling as
+data, a name supply pinning the type to `ℕ`. `KargerVia` runs them at
+value-level output here; `Karger.lean` runs them at cut level. -/
+
+section OrderRule
+
+variable [LinearOrder α]
+
+omit [DecidableEq α] in
+/-- The `inf` of an unordered pair is one of its elements. -/
+lemma sym2_inf_mem (e : Sym2 α) : e.inf ∈ e := by
+  induction e with
+  | _ a b =>
+    rw [Sym2.inf_mk]
+    rcases le_total a b with h | h
+    · rw [inf_eq_left.mpr h]
+      exact Sym2.mem_mk_left a b
+    · rw [inf_eq_right.mpr h]
+      exact Sym2.mem_mk_right a b
+
+/-- The order rule: merge into the smaller endpoint. Freshness is
+trivial, the pick is an endpoint, hence not an untouched vertex. -/
+def orderRule : MergeRule α where
+  pick _ e := e.inf
+  fresh _ _ h := (Finset.mem_filter.mp h).2 (sym2_inf_mem _)
+
+end OrderRule
+
+/-- The endpoint of smaller label, well-defined on the unordered edge
+*because* the labelling is injective: a tie forces the endpoints to be
+equal. -/
+def enumPick (ℓ : α ↪ ℕ) : Sym2 α → α :=
+  Sym2.lift ⟨fun u v => if ℓ u ≤ ℓ v then u else v, fun u v => by
+    show (if ℓ u ≤ ℓ v then u else v) = if ℓ v ≤ ℓ u then v else u
+    rcases lt_trichotomy (ℓ u) (ℓ v) with h | h | h
+    · rw [if_pos h.le, if_neg (not_le.mpr h)]
+    · cases ℓ.injective h
+      simp
+    · rw [if_neg (not_le.mpr h), if_pos h.le]⟩
+
+omit [DecidableEq α] in
+/-- The pick is always one of the two endpoints. -/
+lemma enumPick_mem (ℓ : α ↪ ℕ) (e : Sym2 α) : enumPick ℓ e ∈ e := by
+  induction e with
+  | _ u v =>
+    show (if ℓ u ≤ ℓ v then u else v) ∈ s(u, v)
+    split_ifs
+    · exact Sym2.mem_mk_left u v
+    · exact Sym2.mem_mk_right u v
+
+/-- The enumeration rule: merge into the endpoint of smaller label.
+Freshness is trivial, the pick is an endpoint. -/
+def enumRule (ℓ : α ↪ ℕ) : MergeRule α where
+  pick _ e := enumPick ℓ e
+  fresh _ _ h := (Finset.mem_filter.mp h).2 (enumPick_mem _ _)
+
+/-- The fresh-name rule on `ℕ`: the merged vertex is one past the
+largest vertex ever seen, never previously used. The freshness
+obligation is genuine (compare `orderRule`/`enumRule`), and the supply
+is `ℕ`'s order in disguise. -/
+def freshRule : MergeRule ℕ where
+  pick g _ := g.verts.sup id + 1
+  fresh := by
+    intro g e _ _ h
+    obtain ⟨hv, -⟩ := Finset.mem_filter.mp h
+    have := Finset.le_sup (f := id) hv
+    simp only [id_eq] at this
+    omega
+
+/-- Demo graph: two triangles joined by a single bridge, the global
+minimum cut is `1` (the bridge). -/
+def kargerDemo : MultiGraph ℕ where
+  verts := {0, 1, 2, 3, 4, 5}
+  edges := [s(0, 1), s(1, 2), s(2, 0), s(3, 4), s(4, 5), s(5, 3), s(2, 3)]
+
+/-! ### A demo vertex type without order
+
+Six cities, no `LinearOrder` anywhere: the labelling is data. Same
+shape as `kargerDemo`, two triangles joined by one bridge, minimum
+cut `1`. -/
+
+inductive City | zrh | gva | bsl | ber | lug | lau
+  deriving DecidableEq
+
+open City in
+/-- An explicit injective labelling, data handed to the algorithm. -/
+def cityLabel : City ↪ ℕ :=
+  ⟨fun c => match c with
+    | zrh => 0 | gva => 1 | bsl => 2 | ber => 3 | lug => 4 | lau => 5,
+   fun a b h => by cases a <;> cases b <;> simp_all⟩
+
+open City in
+def cityDemo : MultiGraph City where
+  verts := {zrh, gva, bsl, ber, lug, lau}
+  edges := [s(zrh, gva), s(gva, bsl), s(bsl, zrh),
+            s(ber, lug), s(lug, lau), s(lau, ber), s(bsl, ber)]
 
 end ARA

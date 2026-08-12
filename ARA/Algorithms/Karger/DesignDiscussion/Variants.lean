@@ -1,11 +1,10 @@
-import ARA.Algorithms.Karger.Karger
-import ARA.Algorithms.Karger.KargerEnum
+import ARA.Algorithms.Karger.DesignDiscussion.KargerVariants
 import Mathlib.Data.Sym.Sym2.Order
 
 /-
-# The contraction problem for Karger's algorithm:
+# The contraction problem for Karger's algorithm
 
-in a contraction, two endpoints leave, one vertex w enters, every edge
+In a contraction, two endpoints leave, one vertex w enters, every edge
 is redirected through the merge, the loops die and parallel edges stay.
 
 We have one problem (or multiple ones?): we need to produce the new vertex w.
@@ -37,7 +36,7 @@ An edge is an unordered pair. In Mathlib that is `Sym2 α`, the quotient of
 
     notation3 "s(" x ", " y ")" => Sym2.mk x y
 
-So `s(u, v)` and `s(v, u)` are the same term: orientation is not irrelevant here,
+So `s(u, v)` and `s(v, u)` are the same term: orientation is not merely irrelevant here,
 it is inexpressible. The price of that is the universal property that a function
 out of `Sym2 α` has to be handed over as a symmetric function of two arguments.
 
@@ -81,7 +80,7 @@ contraction: endpoints are vertices, and no edge is a loop.
 
 a-b then a and b go to w and the rest is untouched
 
-    def contractEdgeTo (g : MultiGraph β) (e : Sym2 β) (w : β) (h : w ∉ g.verts \ e) : MultiGraph β where
+    def contractEdgeTo (g : MultiGraph β) (e : Sym2 β) (w : β) : MultiGraph β where
       verts := insert w (g.verts.filter (· ∉ e))
       edges := (g.edges.map (Sym2.map (redirectTo e w))).filter fun e' => !e'.IsDiag
 
@@ -119,7 +118,7 @@ the edge endpoints.
         let i ← randIdx g.edges h.2
         Karger pick (contractAt pick g i)
 
-      else:
+      else
         pure (g.verts, g.edges.length)
 
     termination_by g.edges.length
@@ -161,8 +160,8 @@ to the set of original vertices merged into it, and update it at each step.
 
 if I take rep to be the simple function as above then
 
-initially rep is simply a ↦ {a} and by doig a contraciton on g along the edge e = {u, v} with picked vertices w
-then we update rep to send all vertices `a` that is not w one are going to stay mapped to {a}
+initially rep is simply a ↦ {a} and by doing a contraction on g along the edge e = {u, v} with picked vertex w
+then we update rep: every vertex `a` that is not w stays mapped to {a}
 and w is going to be mapped to the union of the two endpoints of e. w ↦ {u, v}
 
 -- Here KargerCut returns the two surviving vertices and the number of edges between them,
@@ -193,7 +192,7 @@ and w is going to be mapped to the union of the two endpoints of e. w ↦ {u, v}
   Problems:
 
   -the labelling goes in every statement: the theorems are
-  about `KargerEnum ℓ g` although neither the answer nor the bounds
+  about `KargerEnum ℓ g` although neither the output nor the bounds
   depend on `ℓ`;
 
   -the merged vertex is one of the two endpoints, so it forgets what it
@@ -264,7 +263,7 @@ and w is going to be mapped to the union of the two endpoints of e. w ↦ {u, v}
 * We take the union `w = u ∪ v`. Vertices are sets of original vertices, each one starts
   as its own singleton, and merging is union. `∪` is commutative so symmetric, computable,
   and `w` remembers exactly which original vertices are inside it, so the two
-  survivors are the two sides of the cut, and we get also a the cut!
+  survivors are the two sides of the cut, and we also get the cut!
 
   the pick function is
 
@@ -277,12 +276,12 @@ and w is going to be mapped to the union of the two endpoints of e. w ↦ {u, v}
   Problems:
 
   -the working vertex type is `Finset α` and not α (so can be strange for the brain),
-  paid once on entry with
+  paid once on entry with `g.super`;
 
   -one invariant travels with the run: the supervertices stay pairwise disjoint.
   It is what makes the union automatically a new vertex, and it is also exactly
   the statement that the surviving sets form a partition of V, so it is the
-  reason the answer is a cut, not overhead.
+  reason the output is a cut, not overhead.
 
   Note: we can bypass KargerCut this way.
 
@@ -354,9 +353,6 @@ def unionPick : MultiGraph (Finset α) → Sym2 (Finset α) → Finset α :=
   fun _ e => unionOf e
 
 def orderPick [LinearOrder β] : MultiGraph β → Sym2 β → β := fun _ e => e.inf
-
-def picklist
-
 
 def freshPick : MultiGraph ℕ → Sym2 ℕ → ℕ := fun g _ => g.verts.sup id + 1
 
