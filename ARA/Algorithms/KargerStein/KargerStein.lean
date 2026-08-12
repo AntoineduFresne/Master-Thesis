@@ -160,7 +160,7 @@ private lemma success_ksLeaf_small
     {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) {g : MultiGraph α} {rep : α → Finset α}
     (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (h3 : g.verts.card ≤ 3)
-    (ht : PickTracks g₀ g rep) :
+    (ht : RepTracks g₀ g rep) :
     ((1 : ℕ) : ℝ≥0∞) / ((0 + 3 : ℕ) : ℝ≥0∞) ≤
       ℙ_{M}[(contractPick pick 2 g rep >>= fun q =>
           pure (q.1.verts.image q.2, q.1.edges.length) :
@@ -233,7 +233,7 @@ private lemma support_kargerSteinAux
     {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) :
     ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
-      2 ≤ p.1.verts.card → PickTracks g₀ p.1 p.2 →
+      2 ≤ p.1.verts.card → RepTracks g₀ p.1 p.2 →
       ∀ o ∈ 𝒟_{M}[kargerSteinAux pick fuel p].support,
         (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
           g₀.minCutValue ≤ o.2 ∧ p.1.minCutValue ≤ o.2 := by
@@ -293,7 +293,7 @@ private theorem success_kargerSteinAux
     {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) :
     ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
-      2 ≤ p.1.verts.card → PickTracks g₀ p.1 p.2 →
+      2 ≤ p.1.verts.card → RepTracks g₀ p.1 p.2 →
       ksDepth p.1.verts.card ≤ fuel →
       ((1 : ℕ) : ℝ≥0∞) / ((ksDepth p.1.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
         ℙ_{M}[kargerSteinAux pick fuel p ∈
@@ -445,7 +445,7 @@ theorem kargerStein_isCut
       (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
   intro o ho
   obtain ⟨hcut, hle, -⟩ := support_kargerSteinAux (M := M) hfresh
-    (ksDepth g.verts.card) (g, fun a => {a}) hwf h2 (PickTracks.init g) o ho
+    (ksDepth g.verts.card) (g, fun a => {a}) hwf h2 (RepTracks.init g) o ho
   exact ⟨hcut, hle⟩
 
 /-- Karger–Stein reports the minimum-cut value with probability at
@@ -460,7 +460,7 @@ theorem kargerStein_success_prob
     ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
       ℙ_{M}[KargerStein pick g ∈ {o | o.2 = g.minCutValue}] := by
   exact success_kargerSteinAux (M := M) hfresh (ksDepth g.verts.card)
-    (g, fun a => {a}) hwf h2 (PickTracks.init g) le_rfl
+    (g, fun a => {a}) hwf h2 (RepTracks.init g) le_rfl
 
 /-- The Karger–Stein theorem. A single run returns an actual
 minimum cut (every reported side is a genuine cut of value
@@ -494,7 +494,7 @@ private lemma cost_kargerSteinAux
     {g₀ : MultiGraph α} {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) :
     ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
-      PickTracks g₀ p.1 p.2 →
+      RepTracks g₀ p.1 p.2 →
       𝔼_{M}[cost (kargerSteinAux pick fuel p :
           TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
         ((2 ^ (fuel + 2) - 2 : ℕ) : ℝ≥0∞) *
@@ -599,6 +599,6 @@ theorem kargerStein_cost_le
         ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞) := by
   unfold KargerStein
   exact cost_kargerSteinAux (g₀ := g) hfresh (ksDepth g.verts.card)
-    (g, fun a => {a}) hwf (PickTracks.init g)
+    (g, fun a => {a}) hwf (RepTracks.init g)
 
 end ARA

@@ -14,10 +14,10 @@ import ARA.Helpers.Partition
 /-!
 # Tutorial: verify your first randomized algorithm
 
-This file is meant to be a guide through the framework
-and explain in full detail the framework.
+This file is meant to be a guide through the framework, and to
+explain it in full detail.
 
-Technically, you can copy it, remove all explanation comment and
+Technically, you can copy it, remove all explanation comments and
 replace the toy algorithms with yours (which need not be toy),
 and follow the numbered steps.
 
@@ -37,17 +37,17 @@ The reader is encouraged to read those after this tutorial.
 
 /-!
 ## Step 1: the algorithm
-1. The first step is to define the randomized algorithm. The goal is to write
-  it once, and to get at the same time code that can run on concrete inputs
-  and be formally analysed. Here by analysing we mean proving its correctness
-  or describing its complexity.
+1. The first step is to define the randomized algorithm. The goal is
+  to write it once, and to get at the same time code that can run on
+  concrete inputs and be formally analysed. Here by analysing we mean
+  proving its correctness or describing its complexity.
 
-  In order to achieve this goal, we abstract over the source of randomness
-  (which is dropped when the algorithm is deterministic), and over the cost
-  model (for the cost of the computation).
+  In order to achieve this goal, we abstract over the source of
+  randomness (which is dropped when the algorithm is deterministic),
+  and over the cost model (for the cost of the computation).
 
-  Here is the kind of code we are going to write, so that the rest of this step
-  means something:
+  Here is the kind of code we are going to write, so that the rest of
+  this step means something:
 
   ```
   def RandMax {M} [Monad M] [RandMonad M] [MonadCost ℕ M] :
@@ -74,16 +74,16 @@ The reader is encouraged to read those after this tutorial.
   Note: the framework can technically apply to deterministic algorithms.
 
 
-  It may be surprising, but both "sources of randomness" and "cost models"
-  are abstracted through a monadic structure:
+  It may be surprising, but both "sources of randomness" and "cost
+  models" are abstracted through a monadic structure:
 
-  Recall that a monad is a type constructor `M` (i.e. a function from types
-  to types) with operations for any type `α` and `β`: `pure : α → M α`
-  and `bind : M α → (α → M β) → M β`, written `>>=`.
+  Recall that a monad is a type constructor `M` (i.e. a function from
+  types to types) with operations for any type `α` and `β`:
+  `pure : α → M α` and `bind : M α → (α → M β) → M β`, written `>>=`.
 
-  A monad is called lawful when these two operations satisfy three laws
-  (for all types `α`, `β`, `γ` and all `a : α`, `m : M α`, `f : α → M β`,
-  `g : β → M γ`):
+  A monad is called lawful when these two operations satisfy three
+  laws (for all types `α`, `β`, `γ` and all `a : α`, `m : M α`,
+  `f : α → M β`, `g : β → M γ`):
 
   - `(pure a >>= f) = f a`;
   - `(m >>= pure) = m`;
@@ -136,7 +136,7 @@ The reader is encouraged to read those after this tutorial.
   why we can write `randIdx L` (as long as we have a proof that `L` is
   non-empty) and nothing else.
 
-  Note: We could call this a non-empty finite source of randomness.
+  Note: we could call this a non-empty finite source of randomness.
   The framework does not support continuous distributions, and the
   reason is that the mathematics of continuous distributions (in Lean)
   is much more complex than the discrete case.
@@ -156,7 +156,8 @@ The reader is encouraged to read those after this tutorial.
   - `toPMF` commutes with the two `pure`: `toPMF (pure a) = PMF.pure a`
   (for all `a : α`);
 
-  - it commutes with `bind`: `toPMF (m >>= f) = (toPMF m >>= (toPMF ∘ f))`
+  - it commutes with `bind`:
+  `toPMF (m >>= f) = (toPMF m >>= (toPMF ∘ f))`
   (for any type `β` and all `m : M α` and `f : α → M β`);
 
   - and it sends `randFin n` to the uniform distribution on `Fin n`:
@@ -181,19 +182,19 @@ The reader is encouraged to read those after this tutorial.
 
 * `IO` is a lawful monad (Batteries proves it) and is a `RandMonad`.
   Its `randFin` calls the generator of the operating system, so the
-  algorithm executes. But it is not a `LawfulRandMonad` because `toPMF` is
-  missing. Giving `IO` an instance would mean writing a function
-  `IO α → PMF α`, which assigns a distribution to every `IO` program,
-  and then proving the three axioms for it. An `IO α` is not a distribution
-  over `α` in the first place, since it may read a file, fail, or depend
-  on the state of the machine. Its draw is not random inside the logic
-  either. `IO.rand` reads a mutable reference `IO.stdGenRef`, computes a
-  deterministic function of the generator it holds, and writes the new
-  generator back. The only genuine randomness is the seed taken at start-up
-  from `IO.getRandomBytes`, an opaque constant that the logic says nothing
-  about. Even granting an ideal generator, the third axiom would be false
-  because Lean's `randNat` is only approximately uniform and not truly
-  uniform.
+  algorithm executes. But it is not a `LawfulRandMonad` because
+  `toPMF` is missing. Giving `IO` an instance would mean writing a
+  function `IO α → PMF α`, which assigns a distribution to every `IO`
+  program, and then proving the three axioms for it. An `IO α` is not
+  a distribution over `α` in the first place, since it may read a
+  file, fail, or depend on the state of the machine. Its draw is not
+  random inside the logic either. `IO.rand` reads a mutable reference
+  `IO.stdGenRef`, computes a deterministic function of the generator
+  it holds, and writes the new generator back. The only genuine
+  randomness is the seed taken at start-up from `IO.getRandomBytes`,
+  an opaque constant that the logic says nothing about. Even granting
+  an ideal generator, the third axiom would be false because Lean's
+  `randNat` is only approximately uniform and not truly uniform.
 
 * `PMF` is a `LawfulRandMonad`, in fact the canonical one, where
   `toPMF` is the identity: such a program simply is its own
@@ -294,8 +295,8 @@ The reader is encouraged to read those after this tutorial.
 
 /-!
 Let us now define the three algorithms of this tutorial. They are
-written once, and every term defined above appears in them. We explain just
-after why we do 3 algorithms.
+written once, and every term defined above appears in them. We explain
+just after why we do three algorithms.
 -/
 
 namespace ARA
@@ -337,33 +338,34 @@ def RandPick {M} [Monad M] [RandMonad M] [MonadCost ℕ M] : List α → M α
       return L[i]
 
 /-!
-Why do we do 3 algorithms at once? Simply because they illustrate
+Why do we do three algorithms at once? Simply because they illustrate
 different aspects of the framework so the tutorial carries these
-three through the recipe together (these are simple algorithm so
+three through the recipe together (these are simple algorithms so
 they are easy to handle in the brain). We link them to the real
 algorithms we defined in `ARA/Algorithms` that have roughly the
 same shape.
 
 * `RandMax` returns the maximum, removing a random element each round.
   So its output is always correct and only its cost varies: this is a
-  so called Las Vegas algorithm (a type of randomized computer algorithm
-  that always gives the correct result, but its running time varies and
-  depends on random choices). It illustrates Dirac correctness (Step 5a),
-  an exact expected cost (Step 6), the cost distribution (Step 7) and
-  a tail bound (Step 8).
+  so-called Las Vegas algorithm (a type of randomized computer
+  algorithm that always gives the correct result, but its running time
+  varies and depends on random choices). It illustrates Dirac
+  correctness (Step 5a), an exact expected cost (Step 6), the cost
+  distribution (Step 7) and a tail bound (Step 8).
 
   The algorithms of this shape are `Quicksort` and `Quickselect`.
 
 * `RandMember` answers "is `x` in `L`?" by testing one random
   position. Its cost is fixed and its output can be wrong: this is a
   Monte Carlo algorithm (a type of randomized computer algorithm that
-  uses repeated random sampling to solve deterministic or probabilistic
-  problems. Its output may be incorrect with a small, controllable
-  probability). It illustrates the exact output
+  uses repeated random sampling to solve deterministic or
+  probabilistic problems; its output may be incorrect with a small,
+  controllable probability). It illustrates the exact output
   distribution (Step 5b), one-sided error (5c), a success probability
   and its amplification (5d).
 
-  The algorithms of this shape are `Freivalds`, `SchwartzZippel` and `Karger`.
+  The algorithms of this shape are `Freivalds`, `SchwartzZippel` and
+  `Karger`.
 
 * `RandPick` returns a uniformly random element and does nothing else.
   It never ticks, so it shows that code without `tick` has cost `0`
@@ -416,7 +418,7 @@ same shape.
 
   The second stage is `TimeMT`, defined in
   `ARA/Infrastructure/Complexity/TimeMT.lean`. It is a structure with
-  a single place holder, called `run`:
+  a single placeholder, called `run`:
 
   ```
   structure TimeMT (T : Type) (M : Type → Type) (α : Type) where
@@ -449,14 +451,15 @@ same shape.
 
   The `pure` puts the value in the box and starts the clock at `0`.
   The `bind` opens the box of `m`, opens the box of `f a`, and returns
-  the pair `⟨b, t1 + t2⟩`. That single `+` is the whole of the cost accounting of
-  this framework, and it is the reason `TimeMT` exists.
+  the pair `⟨b, t1 + t2⟩`. That single `+` is the whole of the cost
+  accounting of this framework, and it is the reason `TimeMT` exists.
 
   This also answers the question the box raises: why not work with the
-  bare type `M (TimeM T α)`? The answer is that on that type the
-  `>>=` available is the one of `M`, which carries the pair along without
-  ever reading its `time` field, so the costs would have to be added by hand at
-  every step. The box is what lets us attach the `bind` above instead.
+  bare type `M (TimeM T α)`? The answer is that on that type the `>>=`
+  available is the one of `M`, which carries the pair along without
+  ever reading its `time` field, so the costs would have to be added
+  by hand at every step. The box is what lets us attach the `bind`
+  above instead.
 
   `TimeMT T M` is therefore a monad as soon as `T` has a `0` and a
   `+`, which is exactly what `pure` and `bind` ask for. It is a lawful
@@ -502,9 +505,9 @@ same shape.
 
   Note: the costs are trusted, not verified. `tick 1` costs one unit
   because we wrote `tick 1`, and nothing checks it against a machine.
-  This is inherited from the design principle of `TimeM` (also stated plainly
-  in `cslib`). So the `8` above is the number of `tick 1` that were
-  executed, and nothing more.
+  This is inherited from the design principle of `TimeM` (also stated
+  plainly in `cslib`). So the `8` above is the number of `tick 1` that
+  were executed, and nothing more.
 
   So the framework proves what follows from the cost model, and the
   cost model is ours to choose. `cslib` asks that the choice be
@@ -911,10 +914,10 @@ private lemma listMax_branch (L : List α) (i : ℕ) (h : i < L.length) :
     depends on the algorithm. For example `Karger`, in
     `ARA/Algorithms/Karger/Karger.lean`, returns a pair rather than a
     boolean, the partition it found, and the value of the corresponding
-    cut. Its combiner is therefore not `min` but `argmin Prod.snd`, which
-    is `fun a b => if a.2 ≤ b.2 then a else b` (it keeps whichever of
-    the two runs reported the smaller value, and keeps that run's
-    partition along with it).
+    cut. Its combiner is therefore not `min` but `argmin Prod.snd`,
+    which is `fun a b => if a.2 ≤ b.2 then a else b` (it keeps
+    whichever of the two runs reported the smaller value, and keeps
+    that run's partition along with it).
 
   Small note: A Monte Carlo algorithm typically needs 5b, 5c and 5d
   together.
@@ -959,7 +962,25 @@ Here, no point mass can describe the output and the theorem is the
 distribution itself. For a `Bool`-valued algorithm that distribution
 is a Bernoulli distribution, fixed by the probability of `true`.
 
-Here is the counting principle the proof rests on, from
+Here is the code of this step:
+
+```
+theorem randMember_prob
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (x : α) (a : α) (L : List α) :
+    ℙ_{M}[RandMember x (a :: L) = true] =
+      (((a :: L).count x : ℕ) : ENNReal) / (((a :: L).length : ℕ) : ENNReal) := by
+  simp only [RandMember]
+  refine (toPMF_randIdx_bind_countP (M := M) (P := fun y => y == x) ?_).trans ?_
+  · intro i; toPMF_step
+  · simp [List.count]
+```
+
+`randMember_prob` is the theorem of this step. It says that
+`RandMember x (a :: L)`, the algorithm of Step 1, answers `true` with
+probability exactly `count x / n`.
+
+Its proof rests on one counting principle, from
 `ARA/Infrastructure/Randomness/RandVec.lean`:
 
 Note: other counting principles (like `toPMF_randVec_true`) live in
@@ -998,16 +1019,7 @@ Read against `RandMember`: the list is `a :: L`, the predicate `P` is
 and then the test. The count of accepting choices is then `L.count x`,
 since `List.count x` is `List.countP (· == x)` by definition.
 
-The proof applies it like this:
-
-```
-  simp only [RandMember]
-  refine (toPMF_randIdx_bind_countP (M := M) (P := fun y => y == x) ?_).trans ?_
-  · intro i; toPMF_step
-  · simp [List.count]
-```
-
-The first line unfolds one layer of the algorithm.
+Back to the proof. Its first line unfolds one layer of the algorithm.
 
 To apply the theorem, one thing has to be supplied: the predicate `P`.
 The list, its non-emptiness and the branch all occur in the goal, so
@@ -1040,7 +1052,7 @@ theorem randMember_prob
     ℙ_{M}[RandMember x (a :: L) = true] =
       (((a :: L).count x : ℕ) : ENNReal) / (((a :: L).length : ℕ) : ENNReal) := by
   simp only [RandMember]
-  refine (toPMF_randIdx_bind_countP (P := fun y => y == x) ?_).trans ?_
+  refine (toPMF_randIdx_bind_countP (M := M) (P := fun y => y == x) ?_).trans ?_
   · intro i; toPMF_step
   · simp [List.count]
 
@@ -1081,9 +1093,9 @@ The statement quantifies over the support: for every output the
 program can produce, if that output is `true` then `x` really is in
 the list.
 
-The proof follows that sentence. `hb` says `true` is reachable. On the
-empty list nothing is drawn and the answer is `false`, so `hb` is
-absurd and `simp` closes the case. On `a :: L` the program draws
+In the proof, `hb` is the assumption that `true` is reachable with input
+`b`. On the empty list nothing is drawn and the answer is `false`, so
+`hb` is absurd and `simp` closes the case. On `a :: L` the program draws
 first, so `mem_support_toPMF_randIdx_bind` replaces "reachable by the
 whole program" with "reachable by the branch at some position `i`",
 and `i` is the position that answered `true`. `toPMF_step` reads that
@@ -1143,29 +1155,68 @@ theorem randMember_sound
 
 /-! ### 5d: success probability, then amplification (`RandMember`)
 
-The quantitative half of the Monte Carlo tier, and the payoff of the
-two steps before it. The lower bound is immediate from the exact
-distribution of 5b: if `x` occurs in the list then the count is at
-least one, so the probability is at least `1/n`.
+Two statements here: how often one run answers `true`, and how much
+better `k` runs are.
 
-That bound alone is a poor guarantee, and amplification is what turns
-it into an algorithm. One-sided error (5c) is exactly the hypothesis
-that licenses repetition: combining `k` independent runs with `||` can
-turn a `false` into a `true` but never the reverse, so a wrong answer
-requires all `k` runs to be wrong and the failure probability is a
-product, `(1 - p)^k`, as small as you like for a cost linear in `k`.
-`amplify_success` proves this once and for all, for any combiner that
-keeps a success when it sees one, so every Monte Carlo algorithm
-inherits it; the general statement lives in
-`ARA/Infrastructure/Correctness/Amplify.lean`. That file also names
-the combiner of each common shape, and `amplify_or_success` is the
-one for a Boolean test, which is why the theorem below is a term
-rather than a proof.
+Here is the code of this step:
+
+```
+theorem randMember_success
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (x a : α) (L : List α)
+    (hx : x ∈ a :: L) :
+    (1 : ENNReal) / (((a :: L).length : ℕ) : ENNReal) ≤
+      ℙ_{M}[RandMember x (a :: L) = true] := by
+  rw [randMember_prob]
+  refine ENNReal.div_le_div_right ?_ _
+  have hpos : 0 < (a :: L).count x := List.count_pos_iff.mpr hx
+  exact_mod_cast hpos
+
+theorem randMember_amplified
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (x : α) (L : List α)
+    {p : ENNReal} (hp : p ≤ ℙ_{M}[RandMember x L = true]) (k : ℕ) :
+    1 - (1 - p) ^ k ≤ ℙ_{M}[amplify (· || ·) k (RandMember x L) = true] :=
+  amplify_or_success hp k
+```
+
+The first one is 5b read as an inequality. If `x` occurs in the list
+then its count is at least one, so the probability of `true` is at
+least `1/n`. The proof rewrites with `randMember_prob`, which is 5b's
+equation `ℙ_{M}[RandMember x (a :: L) = true] = count x / n`. That
+leaves two fractions with the same denominator, so it is enough to
+compare the numerators.
+
+The second one repeats. `amplify (· || ·) k m` runs `m` `k` times
+independently and folds the answers with `||`, so the amplified run
+answers `false` only when all `k` runs did. If one run answers `true`
+with probability at least `p`, the failure probability is at most
+`(1 - p)^k`, which is as small as you like for a cost linear in `k`.
+
+This is where 5c is useful, and why repeating is a good strategy: the
+error goes one way. An `||` can turn a `false` into a `true` but never
+the reverse. Without a one-sided error, keeping any `true` would risk
+keeping a wrong one.
+
+The proof is a term, `amplify_or_success hp k`, because
+`ARA/Infrastructure/Correctness/Amplify.lean` proves the argument once
+for a general combiner and then names the common cases.
+
+- `amplify_success`, the general one: a combiner `best` that keeps a
+  success when it sees one, and an invariant set the runs stay in.
+- `amplify_or_success`, for a Boolean test: the combiner is `||` and
+  no invariant is needed. This is the one used here.
+- `amplify_min_success` and `amplify_max_success`, when the answers
+  are ordered and one keeps the smallest or the largest.
+- `amplify_argmin_success`, when a run reports a witness together
+  with its value, and one keeps the witness of smallest value.
+
+`Karger` uses the last one: a run reports a cut and the value of that
+cut, so its combiner is `argmin Prod.snd` rather than `min`.
 
 Real examples: `karger_success_prob` and `karger_finds_min`, then
-`karger_amplified`, where the combiner keeps the smallest reported cut
-(`amplify_argmin_success`) instead of an `||`. `freivalds_sound` and
-`schwartzZippel_sound` bound the error of one run. -/
+`karger_amplified`. `freivalds_sound` and `schwartzZippel_sound` bound
+the error of one run. -/
 
 omit [Inhabited α] in
 /-- Success probability. If `x` occurs in the list, one test finds it
