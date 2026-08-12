@@ -5,9 +5,9 @@ remain". But *what is contraction, concretely?* Contracting an edge
 must replace its two endpoints by a single merged vertex, and since
 the edge is unordered, the merged vertex must be chosen **symmetrically
 in the two endpoints**. This folder runs Karger under every such
-choice and proves that the entire analysis — correctness, success
-probability, expected cost — is a function of one datum: the merge
-rule.
+choice and proves, for the three representative-style rules, that the
+entire analysis — correctness, success probability, expected cost —
+is a function of one datum: the merge rule.
 
 ## The four models
 
@@ -50,7 +50,8 @@ in $V$, no self-loops):
   $S = \{x \in V(G) : x\text{'s image lies in } S'\}$. Crossing edges
   correspond bijectively — a dropped loop never crosses, a kept edge
   crosses $S'$ iff its preimage crosses $S$. Hence
-  $\mu(G/e) \ge \mu(G)$, where $\mu$ is the minimum-cut value.
+  $\mu(G/e) \ge \mu(G)$ when $|V(G)| \ge 3$ ($G/e$ must still have a
+  cut), where $\mu$ is the minimum-cut value.
 * **Cut survival.** If a cut $S$ of $G$ is not crossed by $e$, its
   merge-image is a cut of $G/e$ of the same value ($w$ joins the image
   iff both endpoints lay in $S$; freshness keeps the image proper).
@@ -64,11 +65,13 @@ untouched supervertex.
 
 ## The shared algorithm and its theorems
 
-Draw a uniformly random edge (parallel edges counted with
-multiplicity), contract it by the rule, repeat until two vertices
-remain or no edge is left, and report the number of surviving parallel
-edges — the value of the cut found. Let $n = |V(G)|$, $m$ the number
-of edges. For **every** merge rule satisfying the freshness condition:
+Let $n = |V(G)|$, $m$ the number of edges. Draw a uniformly random
+edge (parallel edges counted with multiplicity), contract it by the
+rule, repeat for $n - 2$ rounds (stopping early if no edge is left),
+and report the number of surviving parallel edges — the value of the
+cut found. The round count is declared up front, which is why the
+cost bound below holds without well-formedness; on a well-formed
+input the rounds end exactly when two vertices remain. For **every** merge rule satisfying the freshness condition:
 
 * **One-sided error.** Every reported value is $\ge \mu(G)$. *Proof:*
   by cut lifting, $\mu$ only grows along a run; a final two-vertex

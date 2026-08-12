@@ -13,10 +13,11 @@ import Mathlib.Data.Sym.Sym2.Order
 # Karger with a pluggable contraction rule
 
 The main `Karger` file runs the contraction loop against an abstract
-pick and reports the cut itself. This exhibit runs the same algorithm under every *representative-style*
-contraction (the two endpoints of the drawn edge are replaced by a
-single vertex `w` of the same type) and shows that the entire
-analysis is a function of one choice: how `w` is picked.
+pick and reports the cut itself. This exhibit runs the same algorithm
+under every *representative-style* contraction (the two endpoints of
+the drawn edge are replaced by a single vertex `w` of the same type)
+and shows that the entire analysis is a function of one choice: how
+`w` is picked.
 
 A `MergeRule` packages that choice (`pick`) together with the single
 obligation the generic cut theory of `ARA.Helpers.MultiGraph` needs:
@@ -47,7 +48,10 @@ alternative, where a vertex *is* the set of original vertices merged
 into it, is a design narrative now: `Variants.lean` records the
 discussion, and the supervertex section of
 `ARA/Helpers/MultiGraph.lean` keeps the exhibit. See
-`KargerVariants.md` for the full comparison.
+`KargerVariants.md` for the full comparison. The framework pieces
+(`RandMonad`, `MonadCost.tick`, `toPMF`, the `𝒟`/`ℙ`/`𝔼` notations)
+come from `ARA.Infrastructure`; the Pointers section of `Karger.lean`
+lists their exact homes.
 -/
 
 namespace ARA
@@ -62,7 +66,9 @@ variable {α : Type} [DecidableEq α]
 /-- A representative-style contraction rule: how to pick the merged
 vertex for a drawn edge, together with the one obligation the generic
 cut theory needs: the pick collides with no *untouched* vertex (it
-may well be one of the two endpoints). -/
+may well be one of the two endpoints). This structure is the
+extension point: instantiate it and every theorem here and in
+`Karger.lean` applies to the new rule. -/
 structure MergeRule (α : Type) [DecidableEq α] where
   /-- The merged vertex for the edge `e` of the current graph `g`. -/
   pick : MultiGraph α → Sym2 α → α
@@ -127,8 +133,10 @@ def KargerVia {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
 
 /-! ## Helper lemmas for the analysis
 
-The `>>=`/`pure`-vs-`PMF.bind`/`PMF.pure` bridges (`pmf_bind_eq`,
-`pmf_pure_eq`) come from `ARA.Infrastructure.Tactics`. -/
+The `pure`/`<$>`-vs-`PMF.pure`/`PMF.map` bridges (`pmf_pure_eq`,
+`pmf_map_eq`) come from `ARA.Infrastructure.Tactics`. The sum lemmas
+and `step_bound` below also serve the survival induction of
+`Karger.lean`. -/
 
 /-- A `Fin`-indexed sum of a function of the list entries is the sum
 over the mapped list. -/
@@ -175,8 +183,7 @@ lemma step_bound {m c k s N : ℕ} (hm : 0 < m) (hc : c ≤ m)
         (((m - c : ℕ) : ℝ≥0∞) *
           (((N : ℕ) : ℝ≥0∞) / (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞))) := by
   obtain ⟨d, rfl⟩ : ∃ d, m = d + c := ⟨m - c, by omega⟩
-  have hdc : d + c - c = d := by omega
-  rw [hdc]
+  rw [Nat.add_sub_cancel]
   -- `(d + c)(k + s + 1) ≤ d(k + s + 3)` from the counting bound.
   have hkey : (d + c) * (k + s + 1) ≤ d * (k + s + 3) := by nlinarith
   -- Rewrite the right-hand side as a single natural fraction.
@@ -193,11 +200,7 @@ lemma step_bound {m c k s N : ℕ} (hm : 0 < m) (hc : c ≤ m)
   rw [hrw]
   -- Cross-multiply and conclude in `ℕ`.
   refine ennreal_div_le_div_nat (by positivity) (by positivity) ?_
-  have h2 := Nat.mul_le_mul_left (N * (k + s + 2)) hkey
-  calc N * ((d + c) * ((k + s + 2) * (k + s + 1)))
-      = N * (k + s + 2) * ((d + c) * (k + s + 1)) := by ring
-    _ ≤ N * (k + s + 2) * (d * (k + s + 3)) := h2
-    _ = d * N * ((k + s + 3) * (k + s + 2)) := by ring
+  nlinarith [Nat.mul_le_mul_left (N * (k + s + 2)) hkey]
 
 /-! ## The run invariant -/
 
@@ -205,7 +208,7 @@ lemma step_bound {m c k s N : ℕ} (hm : 0 < m) (hc : c ≤ m)
 arbitrary stopping target `t` with fuel `k = card − t` (`KargerVia`
 reads it at `t = 2`): well-formedness, the card window, a genuine end
 state, monotonicity of the edge count and of the minimum-cut value.
-(No `Tracks`: a rename model has no partition to track.) -/
+(No `PickTracks`: a rename model has no partition to track.) -/
 theorem support_contractAuxVia
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
@@ -221,13 +224,15 @@ theorem support_contractAuxVia
   | case1 g =>
     intro hwf hcard h hh
     rw [contractAuxVia.eq_1] at hh
+    -- `toPMF_step` (`ARA.Infrastructure.Correctness.Correctness`)
+    -- pushes `toPMF` through the branch via the `toPMF_simp` set
     toPMF_step at hh
     subst hh
     exact ⟨hwf, by omega, le_rfl, Or.inl (by omega), le_rfl, le_rfl⟩
   | case2 k g hm ih =>
     intro hwf hcard h hh
     rw [contractAuxVia.eq_2, dif_pos hm] at hh
-    simp only [toPMF_simp, inst.toPMF_randIdx] at hh
+    toPMF_step at hh
     obtain ⟨i, -, hi⟩ := hh
     have hcard' := card_verts_contractVia R hwf i
     obtain ⟨h1, h2, h3, h4, h5, h6⟩ := ih i (hwf.contractVia R i)
@@ -263,99 +268,84 @@ theorem success_contractAuxVia
   induction k, g using contractAuxVia.induct (R := R) with
   | case1 g =>
     intro hwf hcard
-    have hone : prob (PMF.pure g)
-        {h : MultiGraph α | h.minCutValue = g.minCutValue} = 1 :=
-      prob_pure_of_mem rfl
-    rw [contractAuxVia.eq_1, inst.toPMF_pure, pmf_pure_eq, hone,
-      show ((0 + s + 2) * (0 + s + 1) : ℕ) = ((s + 2) * (s + 1) : ℕ) by ring,
-      ENNReal.div_self (Nat.cast_ne_zero.mpr (by positivity))
-        (ENNReal.natCast_ne_top _)]
+    rw [contractAuxVia.eq_1, inst.toPMF_pure, pmf_pure_eq]
+    refine le_trans (ENNReal.div_le_of_le_mul' ?_)
+      (ge_of_eq (prob_pure_of_mem rfl))
+    rw [mul_one]
+    exact_mod_cast Nat.le_of_eq (by ring)
   | case2 k g hm ih =>
     intro hwf hcard
-    · -- Main case: pick a uniform edge, recurse.
-      rw [contractAuxVia.eq_2, dif_pos hm, toPMF_tick_bind,
-        prob_toPMF_randIdx_bind]
-      -- Fix a minimum cut `S`.
-      obtain ⟨S, hS, hSval⟩ := exists_minCut g (by omega)
-      -- The branch success probability as a function of the contracted edge.
-      set F : Sym2 α → ℝ≥0∞ := fun e =>
-        prob (inst.toPMF (contractAuxVia R k
-            (g.contractEdgeTo e (R.pick g e)) : M _))
-          {h | h.minCutValue = g.minCutValue} with hF
-      have hsum : (∑ i : Fin g.edges.length,
-          prob (inst.toPMF (contractAuxVia R k (contractVia R g i) : M _))
-            {h | h.minCutValue = g.minCutValue}) = (g.edges.map F).sum := by
-        rw [← sum_univ_getElem g.edges F]
-        rfl
-      rw [hsum]
-      -- Every non-crossing edge contributes at least the IH bound.
-      have hbranch : ∀ e ∈ g.edges,
-          (if Crossing S e then 0 else
-            (((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
-              (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞)) ≤ F e := by
-        intro e he
-        by_cases hcr : Crossing S e
-        · simp [hcr]
-        · rw [if_neg hcr, hF]
-          obtain ⟨i, hilen, rfl⟩ := List.getElem_of_mem he
-          have hmem := hwf.incidence _ he
-          have hnd := hwf.loopless _ he
-          have hcard' : (g.contractEdgeTo g.edges[i]
-              (R.pick g g.edges[i])).verts.card = k + (s + 2) := by
-            have := card_verts_contractEdgeTo (R.fresh hwf he) hmem hnd
-            omega
-          rw [← minCutValue_contractEdgeTo_of_notCrossing hwf
-            (R.fresh hwf he) hmem hnd (by omega) hS hSval hcr]
-          exact ih ⟨i, hilen⟩ hwf.contractEdgeTo hcard'
-      -- Count the non-crossing edges: `m - c` of them.
-      have hcount : (g.edges.map fun e =>
-          (if Crossing S e then 0 else
-            (((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
-              (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞))).sum =
-          ((g.edges.length - g.cutValue S : ℕ) : ℝ≥0∞) *
-            ((((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
-              (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞)) :=
-        sum_map_ite_zero (Crossing S) _ g.edges
-      -- Chain the bounds.
-      refine le_trans ?_ (mul_le_mul' le_rfl
-        (le_trans (le_of_eq hcount.symm) (List.sum_le_sum hbranch)))
-      rw [hSval]
-      -- Arithmetic: the counting bound closes the step.
-      have hc_le : g.minCutValue ≤ g.edges.length :=
-        minCutValue_le_length g (by omega)
-      have hbound : g.minCutValue * (k + s + 3) ≤ 2 * g.edges.length := by
-        have := card_mul_minCutValue_le g hwf (by omega)
-        rw [hcard] at this
-        calc g.minCutValue * (k + s + 3)
-            = (k + 1 + (s + 2)) * g.minCutValue := by ring
-          _ ≤ 2 * g.edges.length := this
-      have := step_bound (N := (s + 2) * (s + 1)) hm hc_le hbound
-      rw [show ((k + 1 + s + 2) * (k + 1 + s + 1) : ℕ) =
-          ((k + s + 3) * (k + s + 2) : ℕ) by ring]
-      exact this
+    -- Main case: pick a uniform edge, recurse.
+    rw [contractAuxVia.eq_2, dif_pos hm, toPMF_tick_bind,
+      prob_toPMF_randIdx_bind]
+    -- Fix a minimum cut `S`.
+    obtain ⟨S, hS, hSval⟩ := exists_minCut g (by omega)
+    -- The branch success probability as a function of the contracted edge.
+    set F : Sym2 α → ℝ≥0∞ := fun e =>
+      prob (inst.toPMF (contractAuxVia R k
+          (g.contractEdgeTo e (R.pick g e)) : M _))
+        {h | h.minCutValue = g.minCutValue} with hF
+    have hsum : (∑ i : Fin g.edges.length,
+        prob (inst.toPMF (contractAuxVia R k (contractVia R g i) : M _))
+          {h | h.minCutValue = g.minCutValue}) = (g.edges.map F).sum := by
+      rw [← sum_univ_getElem g.edges F]
+      rfl
+    rw [hsum]
+    -- Every non-crossing edge contributes at least the IH bound.
+    have hbranch : ∀ e ∈ g.edges,
+        (if Crossing S e then 0 else
+          (((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
+            (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞)) ≤ F e := by
+      intro e he
+      by_cases hcr : Crossing S e
+      · simp [hcr]
+      · rw [if_neg hcr, hF]
+        obtain ⟨i, hilen, rfl⟩ := List.getElem_of_mem he
+        have hmem := hwf.incidence _ he
+        have hnd := hwf.loopless _ he
+        have hcard' : (g.contractEdgeTo g.edges[i]
+            (R.pick g g.edges[i])).verts.card = k + (s + 2) := by
+          have := card_verts_contractEdgeTo (R.fresh hwf he) hmem hnd
+          omega
+        rw [← minCutValue_contractEdgeTo_of_notCrossing hwf
+          (R.fresh hwf he) hmem hnd (by omega) hS hSval hcr]
+        exact ih ⟨i, hilen⟩ hwf.contractEdgeTo hcard'
+    -- Count the non-crossing edges: `m - c` of them.
+    have hcount : (g.edges.map fun e =>
+        (if Crossing S e then 0 else
+          (((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
+            (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞))).sum =
+        ((g.edges.length - g.cutValue S : ℕ) : ℝ≥0∞) *
+          ((((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
+            (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞)) :=
+      sum_map_ite_zero (Crossing S) _ g.edges
+    -- Chain the bounds.
+    refine le_trans ?_ (mul_le_mul' le_rfl
+      (le_trans (le_of_eq hcount.symm) (List.sum_le_sum hbranch)))
+    rw [hSval]
+    -- Arithmetic: the counting bound closes the step.
+    have hc_le : g.minCutValue ≤ g.edges.length :=
+      minCutValue_le_length g (by omega)
+    have hbound : g.minCutValue * (k + s + 3) ≤ 2 * g.edges.length := by
+      have := card_mul_minCutValue_le g hwf (by omega)
+      rw [hcard] at this
+      calc g.minCutValue * (k + s + 3)
+          = (k + 1 + (s + 2)) * g.minCutValue := by ring
+        _ ≤ 2 * g.edges.length := this
+    rw [show ((k + 1 + s + 2) * (k + 1 + s + 1) : ℕ) =
+        ((k + s + 3) * (k + s + 2) : ℕ) by ring]
+    exact step_bound (N := (s + 2) * (s + 1)) hm hc_le hbound
   | case3 k g hm =>
     intro _ _
-    · -- No edges left: the graph is unchanged, success with probability `1`.
-      have hone : prob (PMF.pure g)
-          {h : MultiGraph α | h.minCutValue = g.minCutValue} = 1 :=
-        prob_pure_of_mem rfl
-      rw [contractAuxVia.eq_2, dif_neg hm, inst.toPMF_pure, pmf_pure_eq, hone]
-      rw [ENNReal.div_le_iff
-        (Nat.cast_ne_zero.mpr (by positivity :
-          ((k + 1 + s + 2) * (k + 1 + s + 1) : ℕ) ≠ 0))
-        (ENNReal.natCast_ne_top _), one_mul]
-      exact_mod_cast Nat.mul_le_mul (by omega : s + 2 ≤ k + 1 + s + 2)
-        (by omega : s + 1 ≤ k + 1 + s + 1)
+    -- No edges left: the graph is unchanged, success with probability `1`.
+    rw [contractAuxVia.eq_2, dif_neg hm, inst.toPMF_pure, pmf_pure_eq]
+    refine le_trans (ENNReal.div_le_of_le_mul' ?_)
+      (ge_of_eq (prob_pure_of_mem rfl))
+    rw [mul_one]
+    exact_mod_cast Nat.mul_le_mul (by omega : s + 2 ≤ k + 1 + s + 2)
+      (by omega : s + 1 ≤ k + 1 + s + 1)
 
 /-! ## Main theorems -/
-
-private lemma kargerVia_eq_map {M} [Monad M] [LawfulMonad M] [RandMonad M]
-    [MonadCost ℕ M] (g : MultiGraph α) :
-    (KargerVia R g : M ℕ)
-      = (fun h => h.edges.length) <$>
-          contractAuxVia R (g.verts.card - 2) g := by
-  rw [map_eq_bind_pure_comp]
-  rfl
 
 /-- One-sided error. Every value a run reports is at least the
 minimum-cut value. -/
@@ -385,7 +375,8 @@ theorem kargerVia_success_prob
   rw [show ((0 + 2) * (0 + 1) : ℕ) = 2 by norm_num,
     show g.verts.card - 2 + 0 + 2 = g.verts.card by omega,
     show g.verts.card - 2 + 0 + 1 = g.verts.card - 1 by omega] at hmain
-  rw [kargerVia_eq_map, LawfulRandMonad.toPMF_map, pmf_map_eq, prob_map]
+  unfold KargerVia
+  rw [bind_pure_comp, LawfulRandMonad.toPMF_map, pmf_map_eq, prob_map]
   refine le_trans (by exact_mod_cast hmain)
     (prob_mono_of_support fun h hh hev => ?_)
   obtain ⟨hwf', h2', -, hend, -, -⟩ :=
@@ -432,8 +423,7 @@ lemma expected_cost_contractAuxVia
     refine le_trans (add_le_add le_rfl (uniform_avg_le_of_forall
       (fun i => le_trans (ih i) (mul_le_mul' le_rfl
         (Nat.cast_le.mpr (length_edges_contractVia_le R g i)))) hm.ne')) ?_
-    rw [show ((k + 1 : ℕ) : ℝ≥0∞) = (k : ℝ≥0∞) + 1 by push_cast; ring]
-    rw [add_mul, one_mul, add_comm]
+    rw [Nat.cast_add_one, add_mul, one_mul, add_comm]
   | case3 k g hm =>
     rw [contractAuxVia.eq_2, dif_neg hm, expected_cost_toPMF_pure]
     exact bot_le
@@ -465,13 +455,7 @@ omit [DecidableEq α] in
 /-- The `inf` of an unordered pair is one of its elements. -/
 lemma sym2_inf_mem (e : Sym2 α) : e.inf ∈ e := by
   induction e with
-  | _ a b =>
-    rw [Sym2.inf_mk]
-    rcases le_total a b with h | h
-    · rw [inf_eq_left.mpr h]
-      exact Sym2.mem_mk_left a b
-    · rw [inf_eq_right.mpr h]
-      exact Sym2.mem_mk_right a b
+  | _ a b => simpa [Sym2.mem_iff] using min_choice a b
 
 /-- The order rule: merge into the smaller endpoint. Freshness is
 trivial, the pick is an endpoint, hence not an untouched vertex. -/
@@ -499,9 +483,7 @@ lemma enumPick_mem (ℓ : α ↪ ℕ) (e : Sym2 α) : enumPick ℓ e ∈ e := by
   induction e with
   | _ u v =>
     show (if ℓ u ≤ ℓ v then u else v) ∈ s(u, v)
-    split_ifs
-    · exact Sym2.mem_mk_left u v
-    · exact Sym2.mem_mk_right u v
+    split_ifs <;> simp
 
 /-- The enumeration rule: merge into the endpoint of smaller label.
 Freshness is trivial, the pick is an endpoint. -/
@@ -515,12 +497,12 @@ obligation is genuine (compare `orderRule`/`enumRule`), and the supply
 is `ℕ`'s order in disguise. -/
 def freshRule : MergeRule ℕ where
   pick g _ := g.verts.sup id + 1
-  fresh := by
-    intro g e _ _ h
-    obtain ⟨hv, -⟩ := Finset.mem_filter.mp h
-    have := Finset.le_sup (f := id) hv
+  fresh _ _ h := by
+    have := Finset.le_sup (f := id) (Finset.mem_filter.mp h).1
     simp only [id_eq] at this
     omega
+
+/-! ### Demo graphs -/
 
 /-- Demo graph: two triangles joined by a single bridge, the global
 minimum cut is `1` (the bridge). -/

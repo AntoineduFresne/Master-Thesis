@@ -48,8 +48,9 @@ $v$ is redirected to $w$, and the resulting loops (the parallel copies
 of $e$ itself) are deleted. Parallel edges are **kept**. The fibre map
 is updated by $rep(w) := rep(u) \cup rep(v)$, all other fibres
 unchanged; initially $rep(v) = \{v\}$. The pick collides with no
-untouched vertex (*freshness*), so $|V(G/e)| = |V(G)| - 1$ and
-$|E(G/e)| \le |E(G)|$.
+untouched vertex (*freshness*), so $|V(G/e)| = |V(G)| - 1$. In all
+cases $|E(G/e)| < |E(G)|$: the copies of $e$ are deleted, and this
+strict drop is what terminates the loop.
 
 **Randomness model.** Each round draws an edge uniformly from the
 current edge multiset, independently across rounds; drawing uniformly
@@ -58,9 +59,10 @@ proportional to its multiplicity.
 
 **Algorithm** $\mathrm{Karger}(G)$:
 
-1. Repeat $n - 2$ times (stopping early if no edge remains): draw an
-   edge $e$ uniformly from the current edge multiset and replace the
-   current graph by its contraction along $e$.
+1. Repeat until two vertices remain (stopping early if no edge
+   remains): draw an edge $e$ uniformly from the current edge multiset
+   and replace the current graph by its contraction along $e$. By the
+   cardinality drop this takes exactly $n - 2$ rounds.
 2. Return the **partition** $\{S, \bar S\}$ formed by the fibres
    $rep(x)$ of the two surviving vertices, together with its value:
    each fibre is the set of original vertices merged into its
@@ -81,7 +83,8 @@ list); $C(G)$ is the total (random) cost.
 ## 3. Correctness (one-sided error)
 
 **Lemma 1 (cut lifting).** Every cut of $G/e$ is a cut of $G$ of the
-same value. Consequently $\lambda(G/e) \ge \lambda(G)$.
+same value. Consequently $\lambda(G/e) \ge \lambda(G)$ when
+$n \ge 3$: $G/e$ must still have a cut.
 
 *Proof.* Let $e = \{u,v\}$ and let $S'$ be a cut of $G/e$. If
 $u \notin S'$, take $S := S'$; if $u \in S'$, take
@@ -91,7 +94,7 @@ loops (copies of $\{u,v\}$) never cross: $w_G(S) = w_{G/e}(S')$. Both
 sides of $S$ are nonempty because both sides of $S'$ are.
 $\blacksquare$
 
-**Theorem 1 (the output is a cut).** On every run the output
+**Theorem 1 (the output is a cut).** For $n \ge 2$, on every run the output
 $(\{S, \bar S\}, c)$ satisfies: each side is a genuine cut of $G$
 ($\emptyset \ne S \subsetneq V$), $c = w(S)$ for each side, and
 $c \ge \lambda(G)$ — the algorithm never undershoots.
@@ -194,12 +197,15 @@ $1 - x \le e^{-x}$.
 
 ## 6. Complexity
 
-**Theorem 4 (expected cost).** For every input,
+**Theorem 4 (expected cost).** For every well-formed input,
 $$\mathbb{E}[C(G)] \;\le\; (n-2)\, m,$$
 and $k$ amplified runs cost at most $k (n-2) m$ in expectation.
 
-*Proof.* Contraction never increases the edge count, so each of the
-at most $n - 2$ rounds costs at most $m$; sum and take expectations.
+*Proof.* The loop counts no rounds, so the round bound is derived:
+under well-formedness each contraction removes exactly one vertex,
+hence at most $n - 2$ rounds run. Contraction never increases the
+edge count, so each round costs at most $m$; sum and take
+expectations.
 Amplification is linear by independence and linearity of
 expectation. $\blacksquare$
 

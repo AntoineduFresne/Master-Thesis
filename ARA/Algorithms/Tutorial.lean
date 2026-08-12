@@ -1053,18 +1053,67 @@ attached and no arithmetic to state it.
 
 Here in `RandMember` the error goes in one direction only: the output
 can be `false` while `x` is present (the draw simply missed it), but
-never `true` while `x` is absent. The proof reads the support of "draw,
-then run a branch" one branch at a time: an output is reachable exactly
-when some branch reaches it, which is
-`mem_support_toPMF_randIdx_bind`. It then picks out the index that
-produced the `true` and turns it into a membership witness.
+never `true` while `x` is absent.
 
-That lemma is the uniform-pivot member of the `mem_support_toPMF_*`
-family in `ARA/Infrastructure/Randomness/LawfulRandMonad.lean`, whose
-other members read a `pure`, a `bind`, a trailing `return f x`, and
-two computations combined by a pure function. Between them a support
-proof never has to unfold a distribution by hand, which is what makes
-this tier one `obtain` per layer of the algorithm.
+Here is the code of this step:
+
+```
+theorem randMember_sound
+    {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (x : α) (L : List α) :
+    ∀ b ∈ 𝒟_{M}[RandMember x L].support, b = true → x ∈ L := by
+  intro b hb hbt
+  subst hbt
+  match L with
+  | [] =>
+    rw [RandMember.eq_1] at hb
+    toPMF_step at hb
+    simp at hb
+  | a :: L =>
+    rw [RandMember.eq_2] at hb
+    obtain ⟨i, hi⟩ := mem_support_toPMF_randIdx_bind.mp hb
+    toPMF_step at hi
+    have hx : (a :: L)[(i : ℕ)] = x := by simpa using hi.symm
+    exact List.mem_iff_getElem.mpr ⟨(i : ℕ), i.isLt, hx⟩
+```
+
+The statement quantifies over the support: for every output the
+program can produce, if that output is `true` then `x` really is in
+the list.
+
+The proof follows that sentence. `hb` says `true` is reachable. On the
+empty list nothing is drawn and the answer is `false`, so `hb` is
+absurd and `simp` closes the case. On `a :: L` the program draws
+first, so `mem_support_toPMF_randIdx_bind` replaces "reachable by the
+whole program" with "reachable by the branch at some position `i`",
+and `i` is the position that answered `true`. `toPMF_step` reads that
+answer, `(a :: L)[i] == x`, which gives `(a :: L)[i] = x`. A position
+holding `x` is exactly what `List.mem_iff_getElem` needs.
+
+The lemma we used belongs to the `mem_support_toPMF_*` family in
+`ARA/Infrastructure/Randomness/LawfulRandMonad.lean`. There is one
+lemma per way of building a program, and each one turns "this output
+is reachable" into a statement about the pieces the program is made
+of.
+
+- `mem_support_toPMF_pure`, for `pure a`: the only reachable output
+  is `a`.
+- `mem_support_toPMF_bind`, for `m >>= f`: an output is reachable
+  when `m` can return some `a` and `f a` can then return that output.
+- `mem_support_toPMF_bind_pure`, for a `do` block whose last line is
+  `return (f x)`: an output is reachable when it is `f a` for some
+  `a` that the block can reach.
+- `mem_support_toPMF_seq₂`, for two computations combined by a pure
+  function `g`: an output is reachable when it is `g a b` for some
+  reachable `a` and some reachable `b`.
+- `mem_support_toPMF_randIdx_bind`, for `randIdx L hL >>= f`: an
+  output is reachable when some branch reaches it. The `bind` lemma
+  above would also ask that the drawn index be reachable. Here that
+  condition is gone, because a uniform draw reaches every position.
+  This is the one used above.
+
+With these lemmas we hope you can prove a support statement by peeling
+the program one layer at a time and applying one of them at each layer.
 
 Real examples: `karger_isCut` (every output is a genuine cut),
 `freivalds_complete` and `schwartzZippel_complete` (never a false

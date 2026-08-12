@@ -300,10 +300,7 @@ variable {β : Type} [DecidableEq β] {α : Type} [DecidableEq α]
 private lemma map_self_isDiag (e : Sym2 β) (w : β) :
     (Sym2.map (redirectTo e w) e).IsDiag := by
   induction e with
-  | _ u v =>
-    have h1 : redirectTo s(u, v) w u = w := by simp [redirectTo]
-    have h2 : redirectTo s(u, v) w v = w := by simp [redirectTo]
-    rw [Sym2.map_mk, h1, h2, Sym2.mk_isDiag_iff]
+  | _ u v => simp [redirectTo]
 
 def contractAt (pick : MultiGraph β → Sym2 β → β)
     (g : MultiGraph β) (i : Fin g.edges.length) : MultiGraph β :=
@@ -313,13 +310,10 @@ theorem length_edges_contractAt_lt (pick : MultiGraph β → Sym2 β → β)
     (g : MultiGraph β) (i : Fin g.edges.length) :
     (contractAt pick g i).edges.length < g.edges.length := by
   rw [contractAt, edges_contractEdgeTo]
-  set e := g.edges[(i : ℕ)] with he
-  set w := pick g e with hw
-  have hlen : (g.edges.map (Sym2.map (redirectTo e w))).length = g.edges.length := by simp
-  refine lt_of_lt_of_le ?_ (le_of_eq hlen)
-  refine List.length_filter_lt_length_iff_exists.mpr
-    ⟨Sym2.map (redirectTo e w) e, List.mem_map_of_mem (List.getElem_mem _), ?_⟩
-  simpa using map_self_isDiag e w
+  refine lt_of_lt_of_le (List.length_filter_lt_length_iff_exists.mpr
+    ⟨_, List.mem_map_of_mem (List.getElem_mem _),
+      by simpa using map_self_isDiag ..⟩)
+    (by simp)
 
 def Karger {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     (pick : MultiGraph β → Sym2 β → β) (g : MultiGraph β) : M (Finset β × ℕ) :=
@@ -383,7 +377,7 @@ def KargerFreshCut {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     (g : MultiGraph ℕ) : M (Finset (Finset ℕ) × ℕ) :=
   KargerCut freshPick g (fun a => {a})
 
-def idLabel : ℕ ↪ ℕ := ⟨id, fun _ _ h => h⟩
+def idLabel : ℕ ↪ ℕ := .refl ℕ
 
 #eval (KargerUnion kargerDemo : IO (Finset (Finset ℕ) × ℕ))
 #eval (KargerOrder kargerDemo : IO (Finset ℕ × ℕ))

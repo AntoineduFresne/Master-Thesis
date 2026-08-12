@@ -18,6 +18,9 @@ risky small graphs by recursing twice and keeping the better output.
 
 ## Main results
 
+For `n` the number of vertices, `m` the number of edges (with
+multiplicity) and `d = ksDepth n` the recursion depth, we have:
+
 * `kargerStein_finds_min`: a run returns an actual minimum cut
   with probability at least `1 / (ksDepth n + 3)`, where `ksDepth n`
   is the recursion depth (`≈ 2·log₂ n`; the `⌈log⌉` depth bound is
@@ -132,15 +135,16 @@ def KargerStein {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     M (Finset (Finset α) × ℕ) :=
   kargerSteinAux pick (ksDepth g.verts.card) (g, fun a => {a})
 
--- IO version (executable)
+/-- Karger–Stein at `M = IO`: executable, on `ℕ` vertices with the
+demo pick. -/
 def KargerStein_IO : MultiGraph ℕ → IO (Finset (Finset ℕ) × ℕ) :=
-  KargerStein freshRule.pick
+  KargerStein demoPick
 
-#eval KargerStein_IO kargerDemo
+#eval KargerStein_IO demoGraph
 
 -- PMF version (noncomputable specification)
 noncomputable example : MultiGraph ℕ → PMF (Finset (Finset ℕ) × ℕ) :=
-  KargerStein freshRule.pick
+  KargerStein demoPick
 
 /-! ## The leaf: a full contraction run
 
@@ -153,14 +157,15 @@ both base cases of the success induction need. -/
 private lemma success_ksLeaf_small
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
-    (R : MergeRule α) {g : MultiGraph α} {rep : α → Finset α}
+    {pick : MultiGraph α → Sym2 α → α}
+    (hfresh : Fresh pick) {g : MultiGraph α} {rep : α → Finset α}
     (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (h3 : g.verts.card ≤ 3)
     (ht : PickTracks g₀ g rep) :
     ((1 : ℕ) : ℝ≥0∞) / ((0 + 3 : ℕ) : ℝ≥0∞) ≤
-      ℙ_{M}[(contractPick R.pick 2 g rep >>= fun q =>
+      ℙ_{M}[(contractPick pick 2 g rep >>= fun q =>
           pure (q.1.verts.image q.2, q.1.edges.length) :
             M (Finset (Finset α) × ℕ)) ∈ {o | o.2 = g.minCutValue}] := by
-  refine le_trans ?_ (success_kargerBody R hwf h2 ht)
+  refine le_trans ?_ (success_kargerBody hfresh hwf h2 ht)
   have h6 : g.verts.card * (g.verts.card - 1) ≤ 6 := by
     rcases (by omega : g.verts.card = 2 ∨ g.verts.card = 3) with h | h <;>
       simp [h]
@@ -225,10 +230,11 @@ reported value never undershoots either minimum. -/
 private lemma support_kargerSteinAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
-    (R : MergeRule α) :
+    {pick : MultiGraph α → Sym2 α → α}
+    (hfresh : Fresh pick) :
     ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
       2 ≤ p.1.verts.card → PickTracks g₀ p.1 p.2 →
-      ∀ o ∈ 𝒟_{M}[kargerSteinAux R.pick fuel p].support,
+      ∀ o ∈ 𝒟_{M}[kargerSteinAux pick fuel p].support,
         (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
           g₀.minCutValue ≤ o.2 ∧ p.1.minCutValue ≤ o.2 := by
   intro fuel p
@@ -236,7 +242,7 @@ private lemma support_kargerSteinAux
   | case1 p =>
     intro hwf h2 ht o ho
     rw [kargerSteinAux.eq_1] at ho
-    exact support_kargerBody R hwf h2 ht o ho
+    exact support_kargerBody hfresh hwf h2 ht o ho
   | case2 fuel p h4 ih =>
     intro hwf h2 ht o ho
     rw [kargerSteinAux.eq_2, if_pos h4] at ho
@@ -246,7 +252,7 @@ private lemma support_kargerSteinAux
     · intro o' ho'
       obtain ⟨q, hq, ho''⟩ := mem_support_toPMF_bind.mp ho'
       obtain ⟨hwf'', hcard'', -, -, -, hmin'', ht''⟩ :=
-        support_contractPick (M := M) R g₀ (ksTarget p.1.verts.card)
+        support_contractPick (M := M) hfresh g₀ (ksTarget p.1.verts.card)
           (ksTarget_two_le _) p.1 p.2 hwf (ksTarget_lt h4).le ht q hq
       obtain ⟨hcut, hle₀, hle'⟩ := ih q hwf''
         (le_trans (ksTarget_two_le _) hcard'') ht'' o' ho''
@@ -255,7 +261,7 @@ private lemma support_kargerSteinAux
   | case3 fuel p h4 =>
     intro hwf h2 ht o ho
     rw [kargerSteinAux.eq_2, if_neg h4] at ho
-    exact support_kargerBody R hwf h2 ht o ho
+    exact support_kargerBody hfresh hwf h2 ht o ho
 
 /-! ## Success probability -/
 
@@ -284,12 +290,13 @@ least `1/(ksDepth n + 3)`. -/
 private theorem success_kargerSteinAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
-    (R : MergeRule α) :
+    {pick : MultiGraph α → Sym2 α → α}
+    (hfresh : Fresh pick) :
     ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
       2 ≤ p.1.verts.card → PickTracks g₀ p.1 p.2 →
       ksDepth p.1.verts.card ≤ fuel →
       ((1 : ℕ) : ℝ≥0∞) / ((ksDepth p.1.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-        ℙ_{M}[kargerSteinAux R.pick fuel p ∈
+        ℙ_{M}[kargerSteinAux pick fuel p ∈
           {o | o.2 = p.1.minCutValue}] := by
   intro fuel p
   induction fuel, p using kargerSteinAux.induct with
@@ -301,7 +308,7 @@ private theorem success_kargerSteinAux
       rw [ksDepth_of_ge (by omega)] at hd0
       omega
     rw [kargerSteinAux.eq_1, hd0]
-    exact success_ksLeaf_small R hwf h2 h3 ht
+    exact success_ksLeaf_small hfresh hwf h2 h3 ht
   | case2 fuel p h4 ih =>
     intro hwf h2 ht hdepth
     rw [kargerSteinAux.eq_2, if_pos h4]
@@ -313,13 +320,13 @@ private theorem success_kargerSteinAux
     have hdt : ksDepth (ksTarget p.1.verts.card) ≤ fuel := by omega
     -- Survival to `t = ksTarget n` vertices happens with probability
     -- at least `1/2`, by the definition of the target.
-    have hsurv := success_contractPick (M := M) R
+    have hsurv := success_contractPick (M := M) hfresh
       (s := ksTarget p.1.verts.card - 2) p.1 p.2 hwf (by omega)
     rw [show ksTarget p.1.verts.card - 2 + 2 = ksTarget p.1.verts.card by omega,
       show ksTarget p.1.verts.card - 2 + 1 = ksTarget p.1.verts.card - 1 by
         omega] at hsurv
     have h1 : (1 : ℝ≥0∞) / 2 ≤
-        prob (inst.toPMF (contractPick R.pick
+        prob (inst.toPMF (contractPick pick
             (ksTarget p.1.verts.card) p.1 p.2 : M _))
           {q | q.1.minCutValue = p.1.minCutValue} := by
       refine le_trans ?_ hsurv
@@ -332,13 +339,13 @@ private theorem success_kargerSteinAux
     have hp : (1 : ℝ≥0∞) / 2 *
         (((1 : ℕ) : ℝ≥0∞) /
           ((ksDepth (ksTarget p.1.verts.card) + 3 : ℕ) : ℝ≥0∞)) ≤
-        ℙ_{M}[(contractPick R.pick (ksTarget p.1.verts.card) p.1 p.2 >>=
-            fun q => kargerSteinAux R.pick fuel q : M _) ∈
+        ℙ_{M}[(contractPick pick (ksTarget p.1.verts.card) p.1 p.2 >>=
+            fun q => kargerSteinAux pick fuel q : M _) ∈
           {o | o.2 = p.1.minCutValue}] := by
       refine le_prob_toPMF_bind h1 ?_
       intro q hqgood hqsupp
       obtain ⟨hwf'', hcard2'', -, hcase, -, -, ht''⟩ :=
-        support_contractPick (M := M) R g₀ (ksTarget p.1.verts.card)
+        support_contractPick (M := M) hfresh g₀ (ksTarget p.1.verts.card)
           (ksTarget_two_le _) p.1 p.2 hwf (ksTarget_lt h4).le ht q hqsupp
       have hqmin : q.1.minCutValue = p.1.minCutValue := hqgood
       rcases hcase with hct | hnil
@@ -351,10 +358,10 @@ private theorem success_kargerSteinAux
         have hmin0 : q.1.minCutValue = 0 :=
           Nat.le_zero.mp (le_trans (minCutValue_le_length q.1 h2')
             (by simp [hnil]))
-        have hsub := support_kargerSteinAux_edgeless (M := M) R.pick fuel q hnil
+        have hsub := support_kargerSteinAux_edgeless (M := M) pick fuel q hnil
         refine le_trans ?_
           (prob_mono_of_support
-            (p := inst.toPMF (kargerSteinAux R.pick fuel q : M _))
+            (p := inst.toPMF (kargerSteinAux pick fuel q : M _))
             (s := Set.univ) fun o ho _ => ?_)
         · rw [prob_univ]
           rw [ENNReal.div_le_iff
@@ -367,16 +374,16 @@ private theorem success_kargerSteinAux
           show (0 : ℕ) = p.1.minCutValue
           rw [← hqmin, hmin0]
     -- One-sidedness of the branch, for the amplify composition.
-    have hsupp : ∀ o ∈ 𝒟_{M}[(contractPick R.pick
+    have hsupp : ∀ o ∈ 𝒟_{M}[(contractPick pick
           (ksTarget p.1.verts.card) p.1 p.2 >>=
-          fun q => kargerSteinAux R.pick fuel q : M _)].support,
+          fun q => kargerSteinAux pick fuel q : M _)].support,
         p.1.minCutValue ≤ o.2 := by
       intro o ho
       obtain ⟨q, hq, ho'⟩ := mem_support_toPMF_bind.mp ho
       obtain ⟨hwf'', hcard'', -, -, -, hmin'', ht''⟩ :=
-        support_contractPick (M := M) R g₀ (ksTarget p.1.verts.card)
+        support_contractPick (M := M) hfresh g₀ (ksTarget p.1.verts.card)
           (ksTarget_two_le _) p.1 p.2 hwf (ksTarget_lt h4).le ht q hq
-      obtain ⟨-, -, hle'⟩ := support_kargerSteinAux R fuel q hwf''
+      obtain ⟨-, -, hle'⟩ := support_kargerSteinAux hfresh fuel q hwf''
         (le_trans ht2 hcard'') ht'' o ho'
       exact le_trans hmin'' hle'
     have hamp := amplify_argmin_success (f := Prod.snd)
@@ -421,7 +428,7 @@ private theorem success_kargerSteinAux
   | case3 fuel p h4 =>
     intro hwf h2 ht _
     rw [kargerSteinAux.eq_2, if_neg h4, ksDepth_of_lt h4]
-    exact success_ksLeaf_small R hwf h2 (by omega) ht
+    exact success_ksLeaf_small hfresh hwf h2 (by omega) ht
 
 /-! ## Main theorems -/
 
@@ -431,12 +438,13 @@ never undershoots the minimum. -/
 theorem kargerStein_isCut
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
-    (R : MergeRule α) (g : MultiGraph α) (hwf : g.WF)
+    {pick : MultiGraph α → Sym2 α → α}
+    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
-    ∀ o ∈ 𝒟_{M}[KargerStein R.pick g].support,
+    ∀ o ∈ 𝒟_{M}[KargerStein pick g].support,
       (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
   intro o ho
-  obtain ⟨hcut, hle, -⟩ := support_kargerSteinAux (M := M) R
+  obtain ⟨hcut, hle, -⟩ := support_kargerSteinAux (M := M) hfresh
     (ksDepth g.verts.card) (g, fun a => {a}) hwf h2 (PickTracks.init g) o ho
   exact ⟨hcut, hle⟩
 
@@ -446,11 +454,12 @@ exponential improvement over a single run's `2/(n(n−1))`. -/
 theorem kargerStein_success_prob
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
-    (R : MergeRule α) (g : MultiGraph α) (hwf : g.WF)
+    {pick : MultiGraph α → Sym2 α → α}
+    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
     ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-      ℙ_{M}[KargerStein R.pick g ∈ {o | o.2 = g.minCutValue}] := by
-  exact success_kargerSteinAux (M := M) R (ksDepth g.verts.card)
+      ℙ_{M}[KargerStein pick g ∈ {o | o.2 = g.minCutValue}] := by
+  exact success_kargerSteinAux (M := M) hfresh (ksDepth g.verts.card)
     (g, fun a => {a}) hwf h2 (PickTracks.init g) le_rfl
 
 /-- The Karger–Stein theorem. A single run returns an actual
@@ -460,14 +469,15 @@ exactly `minCutValue`) with probability at least
 theorem kargerStein_finds_min
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
-    (R : MergeRule α) (g : MultiGraph α) (hwf : g.WF)
+    {pick : MultiGraph α → Sym2 α → α}
+    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
     ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-      ℙ_{M}[KargerStein R.pick g ∈ {o | ∀ S ∈ o.1,
+      ℙ_{M}[KargerStein pick g ∈ {o | ∀ S ∈ o.1,
           g.IsCut S ∧ g.cutValue S = g.minCutValue}] := by
-  refine le_trans (kargerStein_success_prob R g hwf h2)
+  refine le_trans (kargerStein_success_prob hfresh g hwf h2)
     (prob_mono_of_support fun o ho hval => ?_)
-  obtain ⟨hall, -⟩ := kargerStein_isCut R g hwf h2 o ho
+  obtain ⟨hall, -⟩ := kargerStein_isCut hfresh g hwf h2 o ho
   exact fun S hS => ⟨(hall S hS).1, (hall S hS).2.trans hval⟩
 
 /-! ## Complexity
@@ -481,10 +491,11 @@ future work. -/
 
 private lemma cost_kargerSteinAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {g₀ : MultiGraph α} (R : MergeRule α) :
+    {g₀ : MultiGraph α} {pick : MultiGraph α → Sym2 α → α}
+    (hfresh : Fresh pick) :
     ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
       PickTracks g₀ p.1 p.2 →
-      𝔼_{M}[cost (kargerSteinAux R.pick fuel p :
+      𝔼_{M}[cost (kargerSteinAux pick fuel p :
           TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
         ((2 ^ (fuel + 2) - 2 : ℕ) : ℝ≥0∞) *
           ((p.1.verts.card * p.1.edges.length : ℕ) : ℝ≥0∞) := by
@@ -493,7 +504,7 @@ private lemma cost_kargerSteinAux
   | case1 p =>
     intro hwf _
     rw [kargerSteinAux.eq_1, expected_cost_toPMF_bind_pure]
-    refine le_trans (expected_cost_contractPick R 2 p.1 p.2 hwf) ?_
+    refine le_trans (expected_cost_contractPick hfresh 2 p.1 p.2 hwf) ?_
     have hnat : (p.1.verts.card - 2) * p.1.edges.length ≤
         (2 ^ (0 + 2) - 2) * (p.1.verts.card * p.1.edges.length) := by
       calc (p.1.verts.card - 2) * p.1.edges.length
@@ -507,9 +518,9 @@ private lemma cost_kargerSteinAux
     have h2 : (2 : ℕ) ≤ 2 ^ (fuel + 2) := Nat.le_self_pow (by omega) 2
     rw [kargerSteinAux.eq_2, if_pos h4, show (2 : ℕ) = 1 + 1 from by norm_num,
       expected_cost_amplify]
-    have hbr : 𝔼[cost (contractPick R.pick
+    have hbr : 𝔼[cost (contractPick pick
           (ksTarget p.1.verts.card) p.1 p.2 >>=
-          fun q => kargerSteinAux R.pick fuel q :
+          fun q => kargerSteinAux pick fuel q :
             TimeMT ℕ M (Finset (Finset α) × ℕ))] ≤
         ((2 ^ (fuel + 2) - 1 : ℕ) : ℝ≥0∞) *
           ((p.1.verts.card * p.1.edges.length : ℕ) : ℝ≥0∞) := by
@@ -519,14 +530,14 @@ private lemma cost_kargerSteinAux
       · intro tm htm
         have hret := mem_support_timedPMF (inst := inst) htm
         obtain ⟨hwf'', -, hcardle'', -, hlen'', -, ht''⟩ :=
-          support_contractPick (M := TimeMT ℕ M) R g₀
+          support_contractPick (M := TimeMT ℕ M) hfresh g₀
             (ksTarget p.1.verts.card) (ksTarget_two_le _) p.1 p.2 hwf
             (ksTarget_lt h4).le ht tm.ret hret
         refine le_trans (ih tm.ret hwf'' ht'') ?_
         exact mul_le_mul' le_rfl
           (by exact_mod_cast Nat.mul_le_mul hcardle'' hlen'')
       · refine le_trans (add_le_add
-          (expected_cost_contractPick R (ksTarget p.1.verts.card) p.1 p.2 hwf)
+          (expected_cost_contractPick hfresh (ksTarget p.1.verts.card) p.1 p.2 hwf)
           le_rfl) ?_
         have hnat : (p.1.verts.card - ksTarget p.1.verts.card) *
             p.1.edges.length +
@@ -560,7 +571,7 @@ private lemma cost_kargerSteinAux
   | case3 fuel p h4 =>
     intro hwf _
     rw [kargerSteinAux.eq_2, if_neg h4, expected_cost_toPMF_bind_pure]
-    refine le_trans (expected_cost_contractPick R 2 p.1 p.2 hwf) ?_
+    refine le_trans (expected_cost_contractPick hfresh 2 p.1 p.2 hwf) ?_
     have hpos : 0 < 2 ^ (fuel + 1 + 2) - 2 := by
       have : (4 : ℕ) ≤ 2 ^ (fuel + 1 + 2) := by
         calc (4 : ℕ) = 2 ^ 2 := by norm_num
@@ -581,12 +592,13 @@ freshness, like the fuel-free Karger cost bound: the recursion's cost
 is controlled by the run invariant. -/
 theorem kargerStein_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    (R : MergeRule α) (g : MultiGraph α) (hwf : g.WF) :
-    𝔼_{M}[cost KargerStein R.pick g] ≤
+    {pick : MultiGraph α → Sym2 α → α}
+    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) :
+    𝔼_{M}[cost KargerStein pick g] ≤
       ((2 ^ (ksDepth g.verts.card + 2) - 2 : ℕ) : ℝ≥0∞) *
         ((g.verts.card * g.edges.length : ℕ) : ℝ≥0∞) := by
   unfold KargerStein
-  exact cost_kargerSteinAux (g₀ := g) R (ksDepth g.verts.card)
+  exact cost_kargerSteinAux (g₀ := g) hfresh (ksDepth g.verts.card)
     (g, fun a => {a}) hwf (PickTracks.init g)
 
 end ARA
