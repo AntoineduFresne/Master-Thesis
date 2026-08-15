@@ -63,11 +63,17 @@ proportional to its multiplicity.
    remains): draw an edge $e$ uniformly from the current edge multiset
    and replace the current graph by its contraction along $e$. By the
    cardinality drop this takes exactly $n - 2$ rounds.
-2. Return the **partition** $\{S, \bar S\}$ formed by the fibres
-   $rep(x)$ of the two surviving vertices, together with its value:
-   each fibre is the set of original vertices merged into its
-   survivor — one side of the cut — and $c$ is the number of
-   remaining edges.
+2. Return the **partition** of $V$ formed by the fibres $rep(x)$ of
+   the surviving vertices, together with its value: each fibre is the
+   set of original vertices merged into its survivor — one side of the
+   cut — and $c$ is the number of remaining edges.
+
+   Normally two vertices survive and the partition is $\{S, \bar S\}$.
+   On the early-stop branch (the edges run out before two vertices are
+   reached) more than two can survive (if the graph is not connected),
+   and the returned partition then has more than two blocks, each of
+   value $0$. So the invariant the algorithm actually maintains —
+   and the one Theorem 2 is stated against — is a partition of $V$ into at least two nonempty blocks.
 
 When two vertices remain the surviving edges are exactly the
 original edges crossing that two-set partition — so the reported $c$
@@ -136,8 +142,9 @@ value. Together with Lemma 1: contracting a non-crossing edge
 preserves $\lambda$ exactly when $S$ is minimum.
 
 **Theorem 2 (success probability).** For $n \ge 2$, the algorithm
-returns an actual *minimum cut* — both sides of the returned
-partition are cuts of value exactly $\lambda(G)$ — with probability
+returns an actual minimum cut — the output is a partition of $V$
+into at least two nonempty blocks, and every block is a cut of value
+exactly $\lambda(G)$ — with probability
 $$\Pr\bigl[w(\mathrm{Karger}(G)) = \lambda(G)\bigr]
  \;\ge\; \frac{2}{n(n-1)} .$$
 By Lemma 1' it suffices to prove the same bound for the reported

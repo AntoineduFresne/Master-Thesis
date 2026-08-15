@@ -25,8 +25,11 @@ multiplicity) and `d = ksDepth n` the recursion depth, we have:
   with probability at least `1 / (ksDepth n + 3)`, where `ksDepth n`
   is the recursion depth (`≈ 2·log₂ n`; the `⌈log⌉` depth bound is
   `KargerStein.md` §6, the resulting success bound its §4 corollary).
-* `kargerStein_isCut`: one-sided error: every output is a partition
-  into genuine cuts of the reported value, never undershooting.
+* `kargerStein_isCut`: one-sided error: every output really is a
+  partition of the vertices into at least two blocks (`IsCutPartition`),
+  each of them a genuine cut of the reported value, never
+  undershooting. The partition clause is what stops the member-wise
+  claim from holding vacuously of an empty output.
 * `kargerStein_cost_le`: expected cost at most `(2^(d+2) − 2)·n·m` in
   the edge-list cost model (the interim bound of `KargerStein.md` §5;
   the level-sum `7n²m` refinement is future work).
@@ -235,7 +238,8 @@ private lemma support_kargerSteinAux
     ∀ fuel (p : MultiGraph α × (α → Finset α)), p.1.WF →
       2 ≤ p.1.verts.card → RepTracks g₀ p.1 p.2 →
       ∀ o ∈ 𝒟_{M}[kargerSteinAux pick fuel p].support,
-        (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
+        g₀.IsCutPartition o.1 ∧
+          (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
           g₀.minCutValue ≤ o.2 ∧ p.1.minCutValue ≤ o.2 := by
   intro fuel p
   induction fuel, p using kargerSteinAux.induct with
@@ -247,16 +251,17 @@ private lemma support_kargerSteinAux
     intro hwf h2 ht o ho
     rw [kargerSteinAux.eq_2, if_pos h4] at ho
     refine support_amplify_subset
-      (V := {o | (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
+      (V := {o | g₀.IsCutPartition o.1 ∧
+        (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
         g₀.minCutValue ≤ o.2 ∧ p.1.minCutValue ≤ o.2}) ?_ ?_ 2 ho
     · intro o' ho'
       obtain ⟨q, hq, ho''⟩ := mem_support_toPMF_bind.mp ho'
       obtain ⟨hwf'', hcard'', -, -, -, hmin'', ht''⟩ :=
         support_contractPick (M := M) hfresh g₀ (ksTarget p.1.verts.card)
           (ksTarget_two_le _) p.1 p.2 hwf (ksTarget_lt h4).le ht q hq
-      obtain ⟨hcut, hle₀, hle'⟩ := ih q hwf''
+      obtain ⟨hpart, hcut, hle₀, hle'⟩ := ih q hwf''
         (le_trans (ksTarget_two_le _) hcard'') ht'' o' ho''
-      exact ⟨hcut, hle₀, le_trans hmin'' hle'⟩
+      exact ⟨hpart, hcut, hle₀, le_trans hmin'' hle'⟩
     · exact argmin_mem Prod.snd
   | case3 fuel p h4 =>
     intro hwf h2 ht o ho
@@ -383,7 +388,7 @@ private theorem success_kargerSteinAux
       obtain ⟨hwf'', hcard'', -, -, -, hmin'', ht''⟩ :=
         support_contractPick (M := M) hfresh g₀ (ksTarget p.1.verts.card)
           (ksTarget_two_le _) p.1 p.2 hwf (ksTarget_lt h4).le ht q hq
-      obtain ⟨-, -, hle'⟩ := support_kargerSteinAux hfresh fuel q hwf''
+      obtain ⟨-, -, -, hle'⟩ := support_kargerSteinAux hfresh fuel q hwf''
         (le_trans ht2 hcard'') ht'' o ho'
       exact le_trans hmin'' hle'
     have hamp := amplify_argmin_success (f := Prod.snd)
@@ -442,11 +447,12 @@ theorem kargerStein_isCut
     (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
     ∀ o ∈ 𝒟_{M}[KargerStein pick g].support,
-      (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
+      g.IsCutPartition o.1 ∧
+        (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
   intro o ho
-  obtain ⟨hcut, hle, -⟩ := support_kargerSteinAux (M := M) hfresh
+  obtain ⟨hpart, hcut, hle, -⟩ := support_kargerSteinAux (M := M) hfresh
     (ksDepth g.verts.card) (g, fun a => {a}) hwf h2 (RepTracks.init g) o ho
-  exact ⟨hcut, hle⟩
+  exact ⟨hpart, hcut, hle⟩
 
 /-- Karger–Stein reports the minimum-cut value with probability at
 least `1/(ksDepth n + 3)`, and with `ksDepth n ≈ 2 log₂ n` this is an
@@ -473,12 +479,12 @@ theorem kargerStein_finds_min
     (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF)
     (h2 : 2 ≤ g.verts.card) :
     ((1 : ℕ) : ℝ≥0∞) / ((ksDepth g.verts.card + 3 : ℕ) : ℝ≥0∞) ≤
-      ℙ_{M}[KargerStein pick g ∈ {o | ∀ S ∈ o.1,
-          g.IsCut S ∧ g.cutValue S = g.minCutValue}] := by
+      ℙ_{M}[KargerStein pick g ∈ {o | g.IsCutPartition o.1 ∧
+          ∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = g.minCutValue}] := by
   refine le_trans (kargerStein_success_prob hfresh g hwf h2)
     (prob_mono_of_support fun o ho hval => ?_)
-  obtain ⟨hall, -⟩ := kargerStein_isCut hfresh g hwf h2 o ho
-  exact fun S hS => ⟨(hall S hS).1, (hall S hS).2.trans hval⟩
+  obtain ⟨hpart, hall, -⟩ := kargerStein_isCut hfresh g hwf h2 o ho
+  exact ⟨hpart, fun S hS => ⟨(hall S hS).1, (hall S hS).2.trans hval⟩⟩
 
 /-! ## Complexity
 

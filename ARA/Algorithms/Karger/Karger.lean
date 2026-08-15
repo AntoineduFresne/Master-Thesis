@@ -85,10 +85,14 @@ multiplicity), we have:
 
 * `karger_finds_min`: a single run returns an actual minimum cut
   with probability at least `2 / (n (n - 1))`, for every pick
-  satisfying `Fresh`.
-* `karger_isCut`: one-sided error, on every run: each reported
-  side is a genuine cut of the input, of exactly the reported value,
-  and that value never undershoots the minimum.
+  satisfying `Fresh`. "An actual minimum cut" is the conjunction of
+  `IsCutPartition` (the output really is a partition of the vertices
+  into at least two blocks) with the member-wise claim below; the
+  member-wise claim alone would hold vacuously of an empty output.
+* `karger_isCut`: one-sided error, on every run: the output is a
+  partition of the input's vertices into at least two blocks, each
+  reported side is a genuine cut of the input of exactly the reported
+  value, and that value never undershoots the minimum.
 * `success_contractPick`: survival of the minimum cut through partial
   contraction, the kernel shared with Karger–Stein
   (`karger_success_prob` is its `s = 0` value-level corollary).
@@ -432,6 +436,37 @@ structure RepTracks (g₀ g : MultiGraph α) (rep : α → Finset α) : Prop whe
   /-- Cuts flatten with the same value. -/
   cut : ∀ 𝒮 ⊆ g.verts, g.cutValue 𝒮 = g₀.cutValue (𝒮.biUnion rep)
 
+/-- Distinct live vertices have distinct fibres: two disjoint nonempty
+sets cannot be equal. -/
+lemma RepTracks.injOn {g₀ g : MultiGraph α} {rep : α → Finset α}
+    (ht : RepTracks g₀ g rep) : Set.InjOn rep g.verts := by
+  intro x hx y hy hxy
+  by_contra hne
+  obtain ⟨a, ha⟩ := ht.nonempty x hx
+  exact Finset.disjoint_left.mp (ht.disj x hx y hy hne) ha (hxy ▸ ha)
+
+/-- The fibres of the live vertices partition the original vertex set, into
+as many blocks as there are live vertices. -/
+lemma RepTracks.isCutPartition {g₀ g : MultiGraph α} {rep : α → Finset α}
+    (ht : RepTracks g₀ g rep) (h2 : 2 ≤ g.verts.card) :
+    g₀.IsCutPartition (g.verts.image rep) where
+  subset S hS := by
+    obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hS
+    exact ht.subset x hx
+  nonempty S hS := by
+    obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hS
+    exact ht.nonempty x hx
+  exists_unique a ha := by
+    obtain ⟨x, hx, hax⟩ := ht.covers a ha
+    refine ⟨rep x, ⟨Finset.mem_image_of_mem _ hx, hax⟩, ?_⟩
+    rintro S ⟨hS, haS⟩
+    obtain ⟨y, hy, rfl⟩ := Finset.mem_image.mp hS
+    by_cases hxy : y = x
+    · exact congrArg rep hxy
+    · exact absurd hax
+        (Finset.disjoint_right.mp (ht.disj x hx y hy (Ne.symm hxy)) haS)
+  two_le := by rwa [Finset.card_image_of_injOn ht.injOn]
+
 /-- The singleton assignment tracks the original graph. No `WF` needed. -/
 lemma RepTracks.init (g : MultiGraph α) : RepTracks g g (fun a => {a}) where
   subset _ hx := Finset.singleton_subset_iff.mpr hx
@@ -754,10 +789,14 @@ bound; `karger_finds_min` strengthens it to the textbook statement
 along the support, not by re-induction. -/
 
 /-- Everything a finished run of Karger's body guarantees on a
-tracked pair, unconditionally: every reported side is a genuine cut
-of the tracked graph of value exactly the reported number, and that
-number undershoots neither minimum. Needs `Fresh pick`,
-where the algorithm itself needed only `pick`. -/
+tracked pair, unconditionally: the reported family is a partition of
+the tracked graph's vertices into at least two blocks, every one of
+those blocks is a genuine cut of value exactly the reported number, and
+that number undershoots neither minimum. Needs `Fresh pick`, where the
+algorithm itself needed only `pick`.
+
+The partition clause is what makes the member-wise clause say
+something: `∀ S ∈ o.1, …` alone is satisfied by an empty output. -/
 theorem support_kargerBody
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] {g₀ : MultiGraph α}
@@ -767,13 +806,14 @@ theorem support_kargerBody
     ∀ o ∈ 𝒟_{M}[(contractPick pick 2 g rep >>= fun q =>
         pure (q.1.verts.image q.2, q.1.edges.length) :
           M (Finset (Finset α) × ℕ))].support,
-      (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
+      g₀.IsCutPartition o.1 ∧
+        (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
         g₀.minCutValue ≤ o.2 ∧ g.minCutValue ≤ o.2 := by
   intro o ho
   obtain ⟨q, hq, rfl⟩ := mem_support_toPMF_bind_pure.mp ho
   obtain ⟨hwf', h2', -, hend, -, hmin, ht'⟩ :=
     support_contractPick (M := M) hfresh g₀ 2 le_rfl g rep hwf h2 ht q hq
-  refine ⟨fun S hS => ?_, ?_, ?_⟩
+  refine ⟨ht'.isCutPartition h2', fun S hS => ?_, ?_, ?_⟩
   · obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hS
     exact ⟨ht'.isCut_rep h2' hx, ht'.cutValue_rep hwf' hend hx⟩
   · obtain ⟨x, hx⟩ := Finset.card_pos.mp (by omega : 0 < q.1.verts.card)
@@ -781,21 +821,23 @@ theorem support_kargerBody
     exact minCutValue_le (ht'.isCut_rep h2' hx)
   · exact le_trans hmin (minCutValue_le_length q.1 h2')
 
-/-- Everything a single run guarantees, unconditionally: every reported
-side is a genuine cut of `g` of value exactly the reported number, and
-that number never undershoots the minimum. -/
+/-- Everything a single run guarantees, unconditionally: the output is
+a partition of `g`'s vertices into at least two blocks, every one of
+those blocks is a genuine cut of `g` of value exactly the reported
+number, and that number never undershoots the minimum. -/
 theorem karger_isCut
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     ∀ o ∈ 𝒟_{M}[Karger pick g].support,
-      (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
+      g.IsCutPartition o.1 ∧
+        (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
   intro o ho
   unfold Karger at ho
-  obtain ⟨hcut, hmin, -⟩ :=
+  obtain ⟨hpart, hcut, hmin, -⟩ :=
     support_kargerBody hfresh hwf h2 (RepTracks.init g) o ho
-  exact ⟨hcut, hmin⟩
+  exact ⟨hpart, hcut, hmin⟩
 
 /-- The value-level survival bound for Karger's body on a tracked
 pair: the reported number is the *current* minimum-cut value with
@@ -840,23 +882,29 @@ theorem karger_success_prob
   success_kargerBody hfresh hwf h2 (RepTracks.init g)
 
 /-- Karger's theorem, pick-abstract and cut-level. A single run
-returns an actual minimum cut (every reported side is a genuine cut of
-`g` of value exactly `minCutValue`) with probability at least
+returns an actual minimum cut — the output partitions `g`'s vertices
+into at least two blocks, each of which is a genuine cut of `g` of
+value exactly `minCutValue` — with probability at least
 `2 / (n (n − 1))`. Obtained from the value-level bound by
 strengthening the event along the run's support invariant
-(`karger_isCut`), not by re-induction. -/
+(`karger_isCut`), not by re-induction.
+
+The `IsCutPartition` conjunct is what makes this the textbook
+statement rather than a weaker one: without it the event is satisfied
+by an empty output, and the theorem would assert only that whatever the
+algorithm happened to report was a minimum cut. -/
 theorem karger_finds_min
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      ℙ_{M}[Karger pick g ∈ {o | ∀ S ∈ o.1,
-          g.IsCut S ∧ g.cutValue S = g.minCutValue}] := by
+      ℙ_{M}[Karger pick g ∈ {o | g.IsCutPartition o.1 ∧
+          ∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = g.minCutValue}] := by
   refine le_trans (karger_success_prob hfresh g hwf h2)
     (prob_mono_of_support fun o ho hval => ?_)
-  obtain ⟨hall, -⟩ := karger_isCut hfresh g hwf h2 o ho
-  exact fun S hS => ⟨(hall S hS).1, (hall S hS).2.trans hval⟩
+  obtain ⟨hpart, hall, -⟩ := karger_isCut hfresh g hwf h2 o ho
+  exact ⟨hpart, fun S hS => ⟨(hall S hS).1, (hall S hS).2.trans hval⟩⟩
 
 /-! ## Complexity
 
@@ -976,7 +1024,7 @@ theorem karger_amplified
       ℙ_{M}[amplify (argmin Prod.snd) k (Karger pick g)
           ∈ {o | o.2 = g.minCutValue}] :=
   amplify_argmin_success
-    (fun o ho => (karger_isCut hfresh g hwf h2 o ho).2)
+    (fun o ho => (karger_isCut hfresh g hwf h2 o ho).2.2)
     (karger_success_prob hfresh g hwf h2) k
 
 /-- Amplified cost: `k + 1` runs cost at most `k + 1` times the
