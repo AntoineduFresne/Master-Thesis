@@ -384,6 +384,14 @@ algorithm contracting listed edges into fresh picks can start it with
 `init` and carry it with `step`.
 -/
 
+/-- Redirection sends a touched vertex to the merge target. -/
+private lemma redirectTo_of_mem {e : Sym2 α} {w x : α} (h : x ∈ e) :
+    redirectTo e w x = w := if_pos h
+
+/-- Redirection leaves an untouched vertex alone. -/
+private lemma redirectTo_of_notMem {e : Sym2 α} {w x : α} (h : x ∉ e) :
+    redirectTo e w x = x := if_neg h
+
 /-- A live vertex after a contraction is either the merge target, which
 carries the merged fibre, or a vertex the edge did not touch, which
 keeps its own. -/
@@ -432,9 +440,6 @@ lemma RepTracks.init (g : MultiGraph α) : RepTracks g g (fun a => {a}) where
   covers a ha := ⟨a, ha, Finset.mem_singleton_self a⟩
   cut 𝒮 _ := by rw [Finset.biUnion_singleton_eq_self]
 
-
---- golfed until here
-
 /-- Tracking survives one contraction of an edge into a fresh
 pick, with the fibre update. -/
 lemma RepTracks.step {g₀ g : MultiGraph α} {rep : α → Finset α}
@@ -442,33 +447,43 @@ lemma RepTracks.step {g₀ g : MultiGraph α} {rep : α → Finset α}
     {e : Sym2 α} (he : e ∈ g.edges)
     {w : α} (hfresh : w ∉ g.verts.filter (· ∉ e)) :
     RepTracks g₀ (g.contractEdgeTo e w) (updateRep rep e w) := by
+  -- All we need from `he` is that the edge is incident and not a loop.
   have hmem := hwf.incidence e he
   have hnd := hwf.loopless e he
   clear he
+  -- `Sym2 α` is a quotient, so the two endpoints can only be reached
+  -- through its eliminator.
   revert hfresh hmem hnd
   induction e with
   | _ u v =>
     intro hfresh hmem hnd
     have hu := hmem u (Sym2.mem_mk_left u v)
     have hv := hmem v (Sym2.mem_mk_right u v)
-    -- The freshness workhorse: every vertex surviving untouched
+    -- The freshness: every vertex surviving untouched
     -- differs from the pick.
     have hne : ∀ x ∈ g.verts, x ∉ s(u, v) → x ≠ w := by
       intro x hx hxe hxw
       exact hfresh (hxw ▸ Finset.mem_filter.mpr ⟨hx, hxe⟩)
+    -- The five fields of `RepTracks`, in order.
     refine ⟨?_, ?_, ?_, ?_, ?_⟩
+    -- `subset`: a live fibre still consists of original vertices. The
+    -- merged one is a union of two such, the others are unchanged.
     · intro x hx
       rcases updateRep_cases rep hne hx with ⟨rfl, hup⟩ | ⟨hxv, -, hup⟩
       · rw [hup, repOf_mk]
         exact Finset.union_subset (ht.subset u hu) (ht.subset v hv)
       · rw [hup]
         exact ht.subset x hxv
+    -- `nonempty`: the merged fibre contains `rep u`, which is nonempty.
     · intro x hx
       rcases updateRep_cases rep hne hx with ⟨rfl, hup⟩ | ⟨hxv, -, hup⟩
       · rw [hup, repOf_mk]
         exact (ht.nonempty u hu).mono Finset.subset_union_left
       · rw [hup]
         exact ht.nonempty x hxv
+    -- `disj`: four cases, `x` and `y` each merged or untouched. The
+    -- merged-merged one is impossible since `x ≠ y`; the mixed ones
+    -- split the union and use disjointness at each endpoint.
     · intro x hx y hy hxy
       rcases updateRep_cases rep hne hx with ⟨rfl, hupx⟩ | ⟨hxv, hxe, hupx⟩ <;>
         rcases updateRep_cases rep hne hy with ⟨rfl, hupy⟩ | ⟨hyv, hye, hupy⟩
@@ -481,6 +496,10 @@ lemma RepTracks.step {g₀ g : MultiGraph α} {rep : α → Finset α}
           ht.disj x hxv v hv fun h => hxe (h ▸ Sym2.mem_mk_right u v)⟩
       · rw [hupx, hupy]
         exact ht.disj x hxv y hyv hxy
+    -- `covers`: an original vertex `a` sat in some fibre `rep x`. If
+    -- the edge touched `x` that fibre moved into the merged one,
+    -- otherwise it stayed put. Note this case splits on `x ∈ e`, not on
+    -- the contracted vertex set, so `updateRep_cases` does not apply.
     · intro a ha
       obtain ⟨x, hx, hax⟩ := ht.covers a ha
       by_cases hxe : x ∈ s(u, v)
@@ -490,6 +509,9 @@ lemma RepTracks.step {g₀ g : MultiGraph α} {rep : α → Finset α}
       · refine ⟨x, Finset.mem_insert_of_mem (Finset.mem_filter.mpr ⟨hx, hxe⟩), ?_⟩
         rw [updateRep_of_ne rep _ (hne x hx hxe)]
         exact hax
+    -- `cut`: values are preserved. Transport the cut along the
+    -- redirection, then check that flattening through the updated `rep`
+    -- gives the same set of original vertices, by double inclusion.
     · intro 𝒮' h𝒮'
       rw [cutValue_contractEdgeTo_of_pointwise
           (S := g.verts.filter (redirectTo s(u, v) w · ∈ 𝒮')) hwf
@@ -499,29 +521,32 @@ lemma RepTracks.step {g₀ g : MultiGraph α} {rep : α → Finset α}
       ext a
       simp only [Finset.mem_biUnion, Finset.mem_filter]
       constructor
+      -- Left to right: the witness `x` is a vertex of `g`; it either
+      -- moved into the merge target or stayed itself.
       · rintro ⟨x, ⟨hxv, hx𝒮'⟩, hax⟩
         by_cases hxe : x ∈ s(u, v)
-        · rw [redirectTo, if_pos hxe] at hx𝒮'
-          refine ⟨w, hx𝒮', ?_⟩
-          rw [updateRep_self]
-          exact mem_repOf_of_mem hxe hax
-        · rw [redirectTo, if_neg hxe] at hx𝒮'
+        · rw [redirectTo_of_mem hxe] at hx𝒮'
+          exact ⟨w, hx𝒮', by rw [updateRep_self]; exact mem_repOf_of_mem hxe hax⟩
+        · rw [redirectTo_of_notMem hxe] at hx𝒮'
           exact ⟨x, hx𝒮',
             by rw [updateRep_of_ne rep _ (hne x hxv hxe)]; exact hax⟩
+      -- Right to left: the witness `y` is a vertex of the contracted
+      -- graph, so `updateRep_cases` splits it; if it is the merge target
+      -- its fibre is a union, and `a` came from one of the two endpoints.
       · rintro ⟨y, hy𝒮', hay⟩
-        have hyv' := h𝒮' hy𝒮'
-        rw [verts_contractEdgeTo] at hyv'
-        rcases Finset.mem_insert.mp hyv' with rfl | hyf
-        · rw [updateRep_self, repOf_mk] at hay
+        rcases updateRep_cases rep hne (h𝒮' hy𝒮') with ⟨rfl, hup⟩ | ⟨hyv, hye, hup⟩
+        · rw [hup, repOf_mk] at hay
           rcases Finset.mem_union.mp hay with ha' | ha'
           · exact ⟨u, ⟨hu, by
-              rw [redirectTo, if_pos (Sym2.mem_mk_left u v)]; exact hy𝒮'⟩, ha'⟩
+              rw [redirectTo_of_mem (Sym2.mem_mk_left u v)]; exact hy𝒮'⟩, ha'⟩
           · exact ⟨v, ⟨hv, by
-              rw [redirectTo, if_pos (Sym2.mem_mk_right u v)]; exact hy𝒮'⟩, ha'⟩
-        · obtain ⟨hyv, hye⟩ := Finset.mem_filter.mp hyf
-          refine ⟨y, ⟨hyv, by rw [redirectTo, if_neg hye]; exact hy𝒮'⟩, ?_⟩
-          rw [updateRep_of_ne rep _ (hne y hyv hye)] at hay
-          exact hay
+              rw [redirectTo_of_mem (Sym2.mem_mk_right u v)]; exact hy𝒮'⟩, ha'⟩
+        · rw [hup] at hay
+          exact ⟨y, ⟨hyv, by rw [redirectTo_of_notMem hye]; exact hy𝒮'⟩, hay⟩
+
+
+--- golfed until here
+
 
 /-- Every live fibre is a genuine cut of the tracked graph. -/
 lemma RepTracks.isCut_rep {g₀ g : MultiGraph α} {rep : α → Finset α}

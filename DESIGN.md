@@ -99,7 +99,10 @@ Giry monad:
   Returns:
   the distribution over β obtained by "sampling" from the first distribution and
   then "sampling" from the second distribution. That is, the probability of obtaining b in β from (bind P f) is the sum over all e in α of the probability of obtaining e from P times the probability of obtaining b from f e, i.e. assigns b : β to the probability:
-  ∑ e : α, P e * (f e) b
+  ∑' e : α, P e * (f e) b
+
+  (a `tsum`, not a finite sum: `α` need not be finite. This is Mathlib's
+  `PMF.bind_apply`.)
 
   It is used concretely like this:
   * we write `pure x` for `PMF.pure x`;
@@ -138,7 +141,7 @@ The third is the semantic layer, used only by proofs:
   they are provable, lawfulness is what lets a proof use them.)
 
 Instantiating different `M` yields: `M=IO` (run it), `M=PMF` (the specification),
-`M = TimeMT ℕ IO` (benchmark), and `M = TimeMT ℕ PMF` the joint distribution over
+`M = TimeMT ℕ IO`, and `M = TimeMT ℕ PMF` the joint distribution over
 `(output, cost)` pairs, which is where all expected cost analysis happens. `TimeMT`
 is a writer-style transformer: `TimeMT C M α` wraps `M (TimeM C α)` where `TimeM C α`
 is the pair `⟨ret, time⟩`; `pure a` costs `0` and `bind` adds the times of its two halves.
@@ -152,9 +155,10 @@ an executable benchmark.
 Practice of algorithm formalisation produced a classification of the different forms of "correctness" one talks about when speaking about correctness of algorithms. We built the API around this classification:
 
 1. Dirac (Las Vegas): the output distribution is a point mass at the specification,
-  an ordinary deterministic Lean function written independently of the algorithm that
-  computes the intended answer (`L.mergeSort (· ≤ ·)` for Quicksort, `orderStat L k` for
-  Quickselect). For example, the statement `𝒟_{M}[Quicksort L] = PMF.pure (L.mergeSort (· ≤ ·))`
+  which is a deterministic Lean term naming the intended answer, written independently of the
+  algorithm (`sortSpec L` for Quicksort, `orderStat L k` for Quickselect; both are
+  definite descriptions and so noncomputable, which costs nothing for something that is
+  never run). For example, the statement `𝒟_{M}[Quicksort L] = PMF.pure (sortSpec L)`
   says the randomness changes the running time but never the answer, or more simply that the
   distribution is a Dirac at a certain deterministic answer that satisfies the specification.
 
@@ -166,23 +170,66 @@ Practice of algorithm formalisation produced a classification of the different f
    reservoir sampling's uniformity.
 
 3. Support + probability (Monte Carlo): two separate claims about an algorithm that is allowed to be wrong.
-  The support of a distribution is the set of values it can actually return, `{a | p a ≠ 0}`, so a statement
-  about the support holds on every run with no probability attached. This is where one-sided error is
-  expressed: every output of Karger is a genuine cut whose reported value never undershoots the true minimum, so the algorithm can only err by reporting too large a value. Freivalds has the same shape, always answering "equal" on equal matrices.
+  The support of a distribution is the set of values it can actually return, `{a | p a ≠ 0}`, so a statement about the support holds on every run with no probability attached. This is where one-sided error is expressed: every output of Karger is a partition of the vertices into at least two blocks, each of them a being a cut with the reported value, and that value never undershoots the true minimum, so the algorithm can only err by reporting too large a value. Freivalds has the same shape, always answering "equal" on equal matrices.
+
+  A support claim over a collection needs to make sure that this collection is non empty: the natural phrasing
+  `∀ S ∈ output, g.IsCut S ∧ g.cutValue S = g.minCutValue` says every reported block is a minimum cut and is satisfied vacuously by an empty output, so on its own it never asserts that a cut was found at all. The fix is `MultiGraph.IsCutPartition`, carried alongside: the blocks are nonempty subsets of the vertices, every vertex lies in exactly one, and there are at least two. In Karger's case the structure was already proved (it is the `RepTracks` run invariant) and merely discarded by the readout, which images the working graph through `rep` and `RepTracks.isCutPartition` carries it across.
 
   The second claim attaches a probability to being exactly right: Karger reports the true minimum with probability at least `2/(n(n−1))`, Freivalds errs with probability at most `1/2`. Together they are what makes repetition work: because the error is one-sided, running `k` times and keeping the best answer is sound, and the failure probability falls to `(1−p)^k` (`Correctness/Amplify`).
 
   The treap algorithm sits in this tier from another angle. It is never wrong: every output is a valid binary search tree, which is a support claim holding on every run, so there is no success probability to state. What the randomness affects is the shape of the output, and the theorem is therefore an expectation rather than a probability: `𝔼[height] ≤ 3·log₂(n+3) + 4`. This uses `expVal`, the expectation of a function of the output (same machinery as expected cost), applied to a measure of the result instead of the running time.
 
+### Multiple ways of proving
+
+`eq_pure_of_support_subsingleton` (in `Correctness/Correctness.lean`) states the implication
+tier 3 ⇒ tier 1: a support claim upgrades to a Dirac claim as soon as the specification has
+at most one solution. (Sufficient, not necessary: a Dirac output may well satisfy a property
+with many solutions.) That is "Dirac correctness is support correctness plus uniqueness of the
+specification."
+
+A nice thing with having a support tier is that it inducts cleanly, because the support
+of a uniform draw is the union of the branch supports (`support_toPMF_randIdx_bind`), so the
+branches never have to agree on anything and each is discharged in isolation; the branch
+obligation is then literally the textbook induction step. The Dirac tier demands that every
+branch produce the same value (`toPMF_randIdx_bind_dirac`), which is a real extra obligation.
+So a Las Vegas algorithm may be proved the way a Monte Carlo one is, and then read as
+deterministic using `eq_pure_of_support_subsingleton`.
+
+Two further routes to a Dirac theorem are therefore available beside the default collapse,
+and the framework prescribes none of the three:
+
+* `toPMF_randIdx_bind_dirac_spec` the collapse still happens at the draw, but each branch
+  need only supply some deterministic output meeting the specification; uniqueness of the
+  specification restores the agreement. Use when the branch reasoning is equational, so the
+  `@[spec_transport]` machinery still applies.
+* Support tier, then `eq_pure_of_support_subsingleton`: no value at all during the induction.
+  `support_step` is the unpacker (the twin of `toPMF_step`): it peels ticks, distributes
+  `toPMF`, discharges the draw, and turns the membership into one binder per random choice and
+  one per recursive call. `@[spec_preserve]` is the twin of `@[spec_transport]`.
+
+`Quicksort` carries all the three types of proofs, one per collapse, so the comparison is concrete. They
+differ in how much of the specification the induction has to carry. `quicksort_correct` carries
+the value `sortSpec L` at every step, and closes in one line. `quicksort_correct_spec_of_branch_spec`
+carries a witness but never `sortSpec`. `quicksort_sorted` carries nothing at all. The last two
+re-derive the first, without appealing to it, as `quicksort_correct_of_branch_spec` and
+`quicksort_correct_of_support`. All three share their mathematics: the equational assembly lemma
+`sortSpec_partition` is derived from the property one `sortedPerm_concat_pivot` by `eq_sortSpec`,
+so the routes differ in packaging rather than in content.
+
+The price of the support route is automation, and it explains why the Dirac one exists.
+`@[spec_transport]` lemmas are equations and `simp` chains equations, which is the whole reason
+`dirac_correct` is one line. `@[spec_preserve]` obligations are implications, which `simp`
+cannot chain, so the support tier must be written by hand or using other style of automation.
+
 Costs follow the same layering. Upper bounds are stated in `ℝ≥0∞`, the extended non-negative reals `[0, ∞]`, because every sum of non-negative terms converges there, possibly to `∞`, so no series needs a convergence proof before it can be manipulated. Exact closed forms are more natural in `ℝ`, and `toReal` moves a value there; since `toReal` sends `∞` to `0`, it may only be used once the value is known to be finite, and that finiteness comes from first proving a crude bound such as Quicksort's `≤ C(n,2)`.
 
 On top of expectations sits the tail-bound tier (`TailBounds.lean`). Markov's inequality turns any expected-cost theorem into a tail bound for free: `ℙ_{M}[cost m > k] ≤ 𝔼_{M}[cost m]/(k+1)`. Because costs are ℕ-valued, cost `> k` is the same event as cost `≥ k+1`, so the strict form divides by `k+1` (so is free of any `k ≠ 0` side condition).
 
-A cost analysis admits three readings of increasing strength, and the framework supplies all three from the same tick-annotated definition.
+A cost analysis has here three readings, all supplied from the same tick-annotated definition. From decreasing strength: cost Law to expectation to tail bound.
+
+- Cost law `costPMF m` is the whole distribution of the running time. For example `costPMF m = PMF.pure c` says the algorithm costs exactly `c` on every run.
 - The expectation `𝔼_{M}[cost m]`
 - Tail bound `ℙ_{M}[cost m > k]`
-- Cost law `costPMF m` is the whole distribution of the running time. For example `costPMF m = PMF.pure c` says
-  the algorithm costs exactly `c` on every run.
 
 ## Module dependency structure
 
@@ -203,7 +250,10 @@ Mathlib.PMF ← SimpAttr ← Tactics ← Randomness/LawfulRandMonad ┤
                                         │                ├← Complexity/TailBounds   (+ Variance)
                                         │                └← Correctness/Amplify     (+ Correctness)
                                         └←──┬← Correctness/Correctness
-                 Complexity/MonadCost ←─────┘
+                 Complexity/MonadCost ←─────┤
+            Complexity/TimedSemantics ←─────┘  (for the lawful-tick peel
+                                                `toPMF_tick_bind`, used by
+                                                `toPMF_step`/`support_step`)
 Helpers/*     ← Mathlib only (pure mathematics, no Infrastructure;
                 Infrastructure may consume Helpers)
 Algorithms/*  ← Infrastructure + Helpers + fine-grained Mathlib extras.

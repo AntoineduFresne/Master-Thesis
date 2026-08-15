@@ -56,7 +56,10 @@ ARA/
 │   │                              tail bounds on the running time
 │   ├── Correctness/    proving what comes out
 │   │   ├── Correctness.lean       Dirac / distributional / support recipes,
-│   │   │                          `toPMF_step`, `dirac_finish`, `@[spec_transport]`
+│   │   │                          `toPMF_step`, `dirac_finish`, `@[spec_transport]`,
+│   │   │                          `support_step`, `@[spec_preserve]`, and the
+│   │   │                          support ⇒ Dirac bridge
+│   │   │                          `eq_pure_of_support_subsingleton`
 │   │   └── Amplify.lean           `amplify best k m`: k independent runs, keep
 │   │                              the best — ℙ[success] ≥ 1 − (1−p)^k
 │   ├── SimpAttr.lean          the registered simp sets
