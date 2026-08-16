@@ -669,9 +669,6 @@ private abbrev randMax_branch
   isolation and with the randomness left out entirely. Tagging it
   `@[spec_transport]` places it in the pool of lemmas the tactic of
   Step 5 tries on each branch, which is why that step is one line.
-  This is also why the lemma has to be an equation: that tactic hands
-  the pool to `simp`, and `simp` rewrites with equations, from left to
-  right.
 
   Only `RandMax` has a specification. A specification names a single
   value (here the maximum), so only an algorithm whose output is a
@@ -1189,12 +1186,6 @@ are sorted then so is the concatenation. `support_finish` does the
 peeling and then chains those implications, which is why
 `quicksort_sorted` closes its recursive case with the single line
 `support_finish qs_branch at hS`.
-
-A support statement is also a route to a Dirac one. If the property
-you proved has at most one solution, `eq_pure_of_support_subsingleton`
-turns "every reachable output satisfies `P`" into "the output
-distribution is a point mass", and the value it sits on is that
-solution.
 
 Real examples: `karger_isCut` (every output is a genuine cut),
 `freivalds_complete` and `schwartzZippel_complete` (never a false
