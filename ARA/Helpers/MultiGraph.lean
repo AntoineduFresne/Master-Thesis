@@ -122,6 +122,19 @@ structure IsCut (g : MultiGraph α) (S : Finset α) : Prop where
   /-- The far side is nonempty. -/
   proper : ∃ v ∈ g.verts, v ∉ S
 
+/-- `parts` partitions the vertices of `g` into at least two non-empty blocks.
+vertex classes rather than a single side. -/
+structure IsCutPartition (g : MultiGraph α) (parts : Finset (Finset α)) : Prop where
+  /-- Every block consists of vertices. -/
+  subset : ∀ S ∈ parts, S ⊆ g.verts
+  /-- Every block is nonempty. -/
+  nonempty : ∀ S ∈ parts, S.Nonempty
+  /-- Every vertex lies in exactly one block. -/
+  exists_unique : ∀ a ∈ g.verts, ∃! S, S ∈ parts ∧ a ∈ S
+  /-- There are at least two blocks, so each one is a proper cut and
+  the partition separates something. -/
+  two_le : 2 ≤ parts.card
+
 /-- The global minimum-cut value (GraphLib's `stMinCutValue` pattern:
 an `sInf` over achievable cut values, quantified over all cuts instead
 of `s`-`t` separators). -/

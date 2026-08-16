@@ -687,9 +687,18 @@ private abbrev randMax_branch
   because that is what `L[i]` carries with it. `dirac_finish` (which
   behind is a simp) can then use the side conditions by itself.
 
-  Real examples: `mergeSort_partition_cons` in `Quicksort`, and the
+  Real examples: `sortSpec_partition_cons` in `Quicksort`, and the
   three `orderStat_*_branch` lemmas in `Quickselect`, one per case of
   its split.
+
+  A specification has to name a value, but the value may be a definite
+  description: something a property pins down uniquely. `listMax` below
+  is the maximum, an iterated `max`. Quicksort's is `sortSpec L`, the
+  sorted list, built from `SortedLE` by choice because nothing in the
+  library already denoted it. Any Lean term is allowed here and you may
+  want to prove that an algorithm agrees with some other implementation.
+  You just have to be careful on whether the term you name for the
+  specification is the thing you meant to talk about.
 -/
 
 /-- Specification: the maximum of a list (with `default` for `[]`). -/
@@ -939,6 +948,40 @@ not stated. It can also be a base case whose specification has to
 be unfolded by hand, as in `quickselect_correct`.
 
 Real examples: `quicksort_correct`, `quickselect_correct`.
+
+There are two other routes to a Dirac theorem, for when the
+specification is more naturally a property than a value. Naming a
+value first means every branch must be proved equal to that one
+expression, and the second route below avoids that. Both are in
+`ARA/Infrastructure/Correctness/Correctness.lean`.
+
+- `toPMF_randIdx_bind_dirac_spec` weakens what each branch must supply.
+  Instead of one agreed value it asks for any deterministic output
+  meeting a specification `P`, plus the fact that `P` has at most one
+  solution. It is `toPMF_randIdx_bind_dirac` with the agreement
+  recovered from uniqueness rather than assumed.
+
+- The support route drops the value for the whole induction. Prove the
+  Step 5c statement "every reachable output satisfies `P`", then apply
+  `eq_pure_of_support_subsingleton`, which upgrades it to a point mass
+  as soon as `P` has at most one solution. This is the route that
+  inducts most cleanly, because the support of a draw is the union
+  of the branch supports, so the branches never have to agree on
+  anything and each is discharged on its own.
+
+The second route is worth understanding even if you do not use it,
+because it says what the tiers of Step 5 are to each other: Dirac
+correctness (5a) is support correctness (5c) plus uniqueness of the
+specification.
+
+The price is automation. `@[spec_transport]` lemmas are equations, and
+`simp` chains equations, which is why `dirac_correct` is one line. The
+support route's branch obligations are implications, which `simp`
+cannot chain, so it gets an unpacker (`support_step`) and you write the
+assembly step yourself. `Quicksort` carries all three proofs, side by
+side, if you want to compare them: `quicksort_correct` (the default
+recipe), `quicksort_correct_spec_of_branch_spec` (route A), and
+`quicksort_sorted` plus `quicksort_correct_spec_of_support` (route B).
 -/
 
 /-- Correctness. For any lawful random monad and any lawful cost model,
@@ -1127,10 +1170,36 @@ of.
 With these lemmas we hope you can prove a support statement by peeling
 the program one layer at a time and applying one of them at each layer.
 
+`support_step` does that peeling in one call, for when you would
+rather not pick the lemma at each layer. It is the support-tier twin
+of `toPMF_step`: lawful ticks vanish, `toPMF` distributes, and the
+draw disappears, since it reaches every position.
+
+What it leaves is the hypothesis rewritten in terms of the pieces the
+run is built from. In `Quicksort` it becomes "`S1` is reachable by the
+recursive call on the `<`-side, `S2` is reachable by the call on the
+`≥`-side, and the output is `S1 ++ pivot :: S2`". That is the
+induction step of the textbook proof with the randomness gone, and the
+inductive hypotheses now apply to `S1` and `S2` directly.
+
+The mathematics is still yours to supply, as it was in Step 4. There
+it was an equation tagged `@[spec_transport]`; here it is an
+implication tagged `@[spec_preserve]`, saying that if the two sides
+are sorted then so is the concatenation. `support_finish` does the
+peeling and then chains those implications, which is why
+`quicksort_sorted` closes its recursive case with the single line
+`support_finish qs_branch at hS`.
+
+A support statement is also a route to a Dirac one. If the property
+you proved has at most one solution, `eq_pure_of_support_subsingleton`
+turns "every reachable output satisfies `P`" into "the output
+distribution is a point mass", and the value it sits on is that
+solution.
+
 Real examples: `karger_isCut` (every output is a genuine cut),
 `freivalds_complete` and `schwartzZippel_complete` (never a false
 "unequal" or "nonzero"), `support_shuffle` (every output is a
-permutation). -/
+permutation), `quicksort_sorted` (every output is sorted). -/
 
 omit [Inhabited α] in
 /-- One-sided error. If the output is `true`, then `x` is in the list.
@@ -1241,6 +1310,8 @@ theorem randMember_amplified
     {p : ENNReal} (hp : p ≤ ℙ_{M}[RandMember x L = true]) (k : ℕ) :
     1 - (1 - p) ^ k ≤ ℙ_{M}[amplify (· || ·) k (RandMember x L) = true] :=
   amplify_or_success hp k
+
+-- done until here
 
 /-!
 ## Step 6: expected cost
