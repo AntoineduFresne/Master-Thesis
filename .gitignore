@@ -5,7 +5,8 @@
 
 # private working material — not part of the published framework
 archive/
-writeup/
+writeup/presentation/
+# writeup/thesis/ is tracked locally (baseline 18 Aug 2026) so edits can be diffed; do not push
 
 # local editor / assistant configuration
 .vscode/
