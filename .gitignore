@@ -5,8 +5,7 @@
 
 # private working material — not part of the published framework
 archive/
-writeup/presentation
-writeup/thesis
+writeup/
 
 # local editor / assistant configuration
 .vscode/
