@@ -5,7 +5,17 @@
 
 # private working material — not part of the published framework
 archive/
-writeup/
+writeup/presentation/
+# writeup/thesis/ is tracked locally (baseline 18 Aug 2026) so edits can be diffed; do not push
+# LaTeX build artifacts of the thesis
+writeup/thesis/*.aux
+writeup/thesis/*.log
+writeup/thesis/*.out
+writeup/thesis/*.fls
+writeup/thesis/*.fdb_latexmk
+writeup/thesis/*.synctex.gz
+writeup/thesis/*.toc
+writeup/texput.log
 
 # local editor / assistant configuration
 .vscode/
