@@ -22,7 +22,6 @@ namespace Cslib.Algorithms.Lean
 
 /-- Monad transformer that threads a time cost `T` through an
     arbitrary base monad `M`. -/
-
 @[ext]
 structure TimeMT (T : Type u) (M : Type (max u v) → Type w) (α : Type v) : Type w where
   run : M (TimeM T α)

@@ -9,7 +9,7 @@ import ARA.Infrastructure.Randomness.LawfulRandMonad
 # The probability core: expectations, events, and the `ℙ` notation
 
 The generic probability functionals of a randomized computation,
-independent of any cost model: what an algorithm *outputs* with what
+independent of any cost model: what an algorithm outputs with what
 probability, and the expected value of a functional of its output.
 Everything here is about `PMF` and `toPMF` alone, so it sits below
 both the correctness and the complexity layers, a pure-probability
@@ -20,7 +20,7 @@ cost machinery to use it.
 
 * `expVal p g`: the expectation `Σ' a, p a * g a`, with the
   `pure`/`bind`/`map`/uniform decomposition API. Used both for
-  *structural* output functionals (a random tree's height) and, one
+  structural output functionals (a random tree's height) and, one
   layer up, as the definition behind `expected_cost`.
 * `prob p s`: the probability of an event, with the event algebra
   (singletons, complements, `bind`, `pure`).
@@ -37,7 +37,7 @@ open ENNReal
 /-!
 ## Expected values of output functionals
 
-For randomized algorithms whose interesting measure is a *structural*
+For randomized algorithms whose interesting measure is a structural
 functional of the output, the height of a random tree, the size of a
 random cut, rather than a tick count, we provide the bare expectation
 `expVal p g = Σ' a, p a * g a` with the same `bind`/`pure`/uniform
@@ -151,9 +151,9 @@ lemma expVal_toPMF_seq₂
 /-!
 ## The mean of a `ℕ`-valued distribution
 
-The special case of `expVal` that a *cost law* asks for. Naming it
+The special case of `expVal` that a cost law asks for. Naming it
 lets a statement read as its mathematics does: `𝔼[couponCollector n]`
-rather than `expVal (couponCollector n) (fun k => (k : ℝ≥0∞))`.
+rather than `expVal (couponCollector n) (fun k => (k : ENNReal))`.
 -/
 
 /-- The mean of a distribution over `ℕ`. -/
@@ -242,6 +242,19 @@ computation needs.
   refine (tsum_eq_single a fun b hb => ?_).trans (Set.indicator_of_mem rfl ⇑p)
   exact Set.indicator_of_notMem (fun h : b ∈ ({a} : Set α) => hb h) ⇑p
 
+/-- The probability of a finite event is the sum of its point
+probabilities: `ℙ[m ∈ S] = ∑ s ∈ S, ℙ[m = s]`. -/
+lemma prob_finset {α : Type*} (p : PMF α) (s : Finset α) :
+    prob p ↑s = ∑ a ∈ s, p a := by
+  rw [prob_eq_toOuterMeasure, PMF.toOuterMeasure_apply_finset]
+
+/-- Disjoint events add. -/
+lemma prob_union_of_disjoint {α : Type*} (p : PMF α) {s t : Set α}
+    (h : Disjoint s t) : prob p (s ∪ t) = prob p s + prob p t := by
+  unfold prob
+  rw [Set.indicator_union_of_disjoint h]
+  exact ENNReal.tsum_add
+
 /-- An event and its complement split the total mass. -/
 lemma prob_add_compl {α : Type*} (p : PMF α) (s : Set α) :
     prob p s + prob p sᶜ = 1 := by
@@ -305,11 +318,11 @@ lemma prob_toPMF_randIdx_bind
 /-- Sequential success composition: to succeed after a bind it is
 enough to land in a good set and then succeed from every good,
 reachable outcome, the "survive, then recurse" step of a recursive
-Monte-Carlo analysis (Karger–Stein's branch bound). -/
+Monte-Carlo analysis (a recursive branch bound). -/
 lemma le_prob_toPMF_bind
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {β γ : Type} {m : M β} {f : β → M γ} {Good : Set β} {Ev : Set γ}
-    {p₁ p₂ : ℝ≥0∞}
+    {p₁ p₂ : ENNReal}
     (h1 : p₁ ≤ prob (inst.toPMF m) Good)
     (h2 : ∀ b ∈ Good, b ∈ (inst.toPMF m).support →
       p₂ ≤ prob (inst.toPMF (f b)) Ev) :
@@ -382,7 +395,7 @@ theorem prob_ge_le_expVal_div {α : Type*} (p : PMF α)
 ## Post-processing transfer
 
 An algorithm often has two legitimate read-outs of the same run: the
-*witness* it computes and the *number* the analysis bounds (Karger
+witness it computes and the number the analysis bounds (Karger
 returns a cut; the analysis bounds the cut's value). `prob_map` and
 `prob_congr_of_support` let a probability statement proved for one
 read-out be reused verbatim for the other, with no re-induction: the
@@ -414,7 +427,7 @@ lemma prob_map {α β : Type*} (p : PMF α) (f : α → β) (s : Set β) :
     PMF.toOuterMeasure_map_apply]
 
 /-- Post-processing transfer. Two read-outs of the same
-computation (possibly into *different* types) that succeed together
+computation (possibly into different types) that succeed together
 on the support have the same success probability. -/
 lemma prob_congr_of_support {α β γ : Type*} (p : PMF α)
     {f : α → β} {h : α → γ} {s : Set β} {t : Set γ}
@@ -481,5 +494,12 @@ scoped macro "ℙ_{" M:term "}[" e:term:51 " ∈ " S:term:51 "]" : term =>
 computation (no monad index needed). -/
 scoped macro "ℙ[" m:term:51 " ∈ " S:term "]" : term =>
   `(prob (LawfulRandMonad.toPMF $m) $S)
+
+-- Smoke test: at the notation level, a finite event is the sum of its
+-- point probabilities.
+example {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] {β : Type}
+    (e : M β) (S : Finset β) :
+    ℙ_{M}[e ∈ (↑S : Set β)] = ∑ b ∈ S, ℙ_{M}[e = b] :=
+  prob_finset _ S
 
 end ARA

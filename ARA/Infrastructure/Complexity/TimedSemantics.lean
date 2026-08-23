@@ -10,7 +10,7 @@ import ARA.Infrastructure.Complexity.MonadCost
 /-!
 # Timed semantics
 
-The meaning of a `TimeMT`-timed computation, that is what it *outputs* as
+The meaning of a `TimeMT`-timed computation, that is what it outputs as
 opposed to what it costs. Split out of `ExpectedCost` because none of
 it mentions an expected value; it sits between the cost transformer
 (`TimeMT`, `MonadCost`) and the cost analysis (`ExpectedCost`), which
@@ -42,7 +42,7 @@ instance instRandMonadTimeMT {M} [Monad M] [RandMonad M] :
   randFin n := TimeMT.lift (RandMonad.randFin n)
 
 /-- In `TimeMT`, `randIdx` is a lifted `randIdx` of the base monad.
-Stated at the *term* level (not on `.run`): this is the form a user's
+Stated at the term level (not on `.run`): this is the form a user's
 goal actually contains, so `cost_step` can expose the `TimeMT.lift`
 with no `show` desugaring. -/
 @[expected_cost_simp] lemma randIdx_timeMT

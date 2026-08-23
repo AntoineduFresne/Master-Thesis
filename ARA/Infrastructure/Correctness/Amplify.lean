@@ -23,7 +23,7 @@ so the failure probability decays geometrically in the number of runs
 This is the "repeat and keep the best" argument, proved once and inherited by
 every Monte-Carlo algorithm (`karger_amplified` is the first client).
 
-The hypotheses are phrased on an *invariant* set `V` containing the
+The hypotheses are phrased on an invariant set `V` containing the
 support of one run, typically supplied by the algorithm's one-sided
 correctness theorem ("every output is at least the minimum cut"):
 
@@ -179,7 +179,7 @@ combined with a success-keeping `best` succeed with probability at
 least `1 − (1 − p) ^ k`. -/
 theorem amplify_success
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] {β : Type}
-    {best : β → β → β} {m : M β} {S V : Set β} {p : ℝ≥0∞}
+    {best : β → β → β} {m : M β} {S V : Set β} {p : ENNReal}
     (hsupp : (𝒟[m]).support ⊆ V)
     (hclosed : ∀ a ∈ V, ∀ b ∈ V, best a b ∈ V)
     (hkeep : ∀ a ∈ V, ∀ b ∈ V, a ∈ S ∨ b ∈ S → best a b ∈ S)
@@ -206,7 +206,7 @@ test that never says `true` in error, which seems to be the commonest
 Monte-Carlo shape. -/
 theorem amplify_or_success
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {m : M Bool} {p : ℝ≥0∞} (hp : p ≤ ℙ[m = true]) (k : ℕ) :
+    {m : M Bool} {p : ENNReal} (hp : p ≤ ℙ[m = true]) (k : ℕ) :
     1 - (1 - p) ^ k ≤ ℙ[amplify (· || ·) k m = true] := by
   have h := amplify_success (M := M) (best := (· || ·))
     (m := m) (S := {true}) (V := Set.univ) (p := p)
@@ -218,7 +218,7 @@ theorem amplify_or_success
     (by rw [prob_singleton]; exact hp) k
   rwa [prob_singleton] at h
 
-/-- Keep whichever answer has the smaller *measure* `f`. -/
+/-- Keep whichever answer has the smaller measure `f`. -/
 def argmin {β γ : Type} [LinearOrder γ] (f : β → γ) (a b : β) : β :=
   if f a ≤ f b then a else b
 
@@ -228,12 +228,12 @@ attains `c` with probability at least `p`, then keeping the
 smallest-measure answer over `k` independent runs attains `c` with
 probability at least `1 − (1 − p) ^ k`.
 
-This is the shape a Monte-Carlo algorithm that returns a *witness*
+This is the shape a Monte-Carlo algorithm that returns a witness
 (Karger returns a cut, not a number) needs; `amplify_min_success` is
 the special case `f = id`, where the witness is its own measure. -/
 theorem amplify_argmin_success
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {β γ : Type} [LinearOrder γ] {f : β → γ} {m : M β} {c : γ} {p : ℝ≥0∞}
+    {β γ : Type} [LinearOrder γ] {f : β → γ} {m : M β} {c : γ} {p : ENNReal}
     (hsupp : ∀ b ∈ (𝒟[m]).support, c ≤ f b)
     (hp : p ≤ ℙ[m ∈ {b | f b = c}]) (k : ℕ) :
     1 - (1 - p) ^ k ≤ ℙ[amplify (argmin f) k m ∈ {b | f b = c}] :=
@@ -261,7 +261,7 @@ independent runs is exactly `v` with probability at least
 success theorems a one-sided algorithm already provides. -/
 theorem amplify_min_success
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {β : Type} [LinearOrder β] {m : M β} {v : β} {p : ℝ≥0∞}
+    {β : Type} [LinearOrder β] {m : M β} {v : β} {p : ENNReal}
     (hsupp : ∀ b ∈ (𝒟[m]).support, v ≤ b)
     (hp : p ≤ ℙ[m = v]) (k : ℕ) :
     1 - (1 - p) ^ k ≤ ℙ[amplify min k m = v] := by
@@ -276,7 +276,7 @@ theorem amplify_min_success
 never-overshooting algorithm. -/
 theorem amplify_max_success
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
-    {β : Type} [LinearOrder β] {m : M β} {v : β} {p : ℝ≥0∞}
+    {β : Type} [LinearOrder β] {m : M β} {v : β} {p : ENNReal}
     (hsupp : ∀ b ∈ (𝒟[m]).support, b ≤ v)
     (hp : p ≤ ℙ[m = v]) (k : ℕ) :
     1 - (1 - p) ^ k ≤ ℙ[amplify max k m = v] := by
@@ -298,7 +298,7 @@ theorem amplify_max_success
 theorem expected_cost_amplify
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] {β : Type}
     (best : β → β → β) (k : ℕ) (m : TimeMT ℕ M β) :
-    𝔼[cost amplify best (k + 1) m] = (k + 1 : ℝ≥0∞) * 𝔼[cost m] := by
+    𝔼[cost amplify best (k + 1) m] = (k + 1 : ENNReal) * 𝔼[cost m] := by
   induction k with
   | zero => simp only [zero_add, Nat.cast_zero, amplify_one, one_mul]
   | succ k ih =>

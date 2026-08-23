@@ -329,7 +329,7 @@ lemma toPMF_randVecOn_true {M} [Monad M] [LawfulMonad M]
 ## Executable sampling for ordered types
 
 `randElem`/`randVecOn` enumerate an abstract `Finset`, which needs
-choice; over a `LinearOrder` the *sorted* enumeration is canonical and
+choice; over a `LinearOrder` the sorted enumeration is canonical and
 computable, restoring `#eval` for grid algorithms. The laws coincide
 (`toPMF_randElemSorted`, `toPMF_randVecOnSorted`), so every theorem
 about the abstract samplers transfers verbatim.

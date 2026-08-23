@@ -228,7 +228,7 @@ lemma ennreal_natCast_div_inv {a b : ℕ} (ha : a ≠ 0) :
       (Or.inl (ENNReal.natCast_ne_top _)),
     inv_inv, mul_comm, ← div_eq_mul_inv]
 
-/-- Division comparison in `ℝ≥0∞` for natural fractions, by
+/-- Division comparison in `ENNReal` for natural fractions, by
 cross-multiplication in `ℕ`. -/
 lemma ennreal_div_le_div_nat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)
     (h : a * d ≤ c * b) :
@@ -242,9 +242,9 @@ lemma ennreal_div_le_div_nat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)
     (Or.inl (ENNReal.natCast_ne_top d))]
   exact_mod_cast h
 
-/-- The ℚ≥0 → ℝ≥0∞ bridge for probability bounds: a comparison of
+/-- The ℚ≥0 → ENNReal bridge for probability bounds: a comparison of
 natural fractions proved in `ℚ≥0`, where Mathlib's counting results
-(e.g. Schwartz–Zippel) live, transfers directly to the `ℝ≥0∞` the
+(e.g. Schwartz–Zippel) live, transfers directly to the `ENNReal` the
 framework's probabilities live in. One call replaces the
 cross-multiplication ceremony. -/
 lemma ennreal_div_le_div_of_nnrat {a b c d : ℕ} (hb : 0 < b) (hd : 0 < d)

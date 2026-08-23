@@ -9,12 +9,12 @@ import ARA.Infrastructure.Complexity.TimeMT
 /-!
 # MonadCost
 
-A typeclass for monads that can track computational cost.
+A typeclass for monads with a cost-charging operation.
 
 ## Design
 
-`MonadCost C M` provides a single operation `tick : C → M Unit` that
-records a cost increment. By varying the instance, the same algorithm
+`MonadCost C M` provides a single operation `tick : C → M Unit`.
+By varying the instance, the same algorithm
 can run in cost-free mode (where `tick` is a no-op) or in timed mode
 (where `tick` accumulates cost).
 
@@ -33,14 +33,13 @@ namespace ARA
 
 open Cslib.Algorithms.Lean
 
-/-- A typeclass for monads that can track computational cost.
-`tick c` records a cost of `c`. -/
+/-- A typeclass for monads with a cost-charging operation. -/
 class MonadCost (C : Type) (M : Type → Type) where
-  /-- Record a cost increment of `c`. -/
+  /-- Charge a cost of `c`. -/
   tick : C → M Unit
 
 /-- Default instance: ticking is a no-op (`pure ()`).
-This is used when running the algorithm without cost tracking.
+This is used when we don't want to track the cost.
 Low priority so that the `TimeMT` instance takes precedence. -/
 instance (priority := 100) instMonadCostDefault
     {C} {M} [Monad M] : MonadCost C M where

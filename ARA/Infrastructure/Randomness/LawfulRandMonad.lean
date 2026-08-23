@@ -16,10 +16,10 @@ and maps `randFin` to the uniform distribution.
 
 ## Architectural note
 
-The primitive entropy source is `randFin n`, which generates
-a uniform random element of `Fin n`. This is decoupled from
-any particular data structure. Derived helpers like `randIdx`
-for lists are provided as convenience functions.
+The primitive draw is `randFin n`, a choice among `n`
+alternatives, decoupled from any particular data structure.
+Derived helpers like `randIdx` for lists are provided as
+convenience functions.
 
 ## Main declarations
 
@@ -35,15 +35,13 @@ namespace ARA
 ### `RandMonad`: primitive "entropy" source
 -/
 
-/-- A monad with access to uniform random generation over `Fin n`.
-Every finite discrete choice is isomorphic to `Fin n`, making this
-the universal primitive for finite randomness. -/
+/-- A random monad: a monad `M` with one function `randFin`, its source
+of randomness. -/
 class RandMonad (M : Type → Type) [Monad M] where
-  /-- Generate a uniform random element of `Fin n`. -/
+  /-- An element of `M (Fin n)`. -/
   randFin (n : ℕ) [NeZero n] : M (Fin n)
 
-/-- Derived polymorphic helper: pick a random valid index into a
-nonempty list. -/
+/-- `randFin` at the length of a nonempty list. -/
 def randIdx {M} [Monad M] [RandMonad M] {α}
     (L : List α) (h : 0 < L.length := by grind) : M (Fin L.length) :=
   have : NeZero L.length := ⟨h.ne'⟩

@@ -11,17 +11,17 @@ import ARA.Infrastructure.Randomness.Prob
 
 The second-moment upgrade of the tail-bound tier: where Markov bounds
 `ℙ(g ≥ k)` by `E[g]/k`, Chebyshev bounds the probability of a
-*deviation from the mean* by `Var[g]/k²`, strictly sharper whenever
+deviation from the mean by `Var[g]/k²`, strictly sharper whenever
 the second moment is controlled, and much cheaper than Chernoff.
 
-Everything lives in `ℝ≥0∞`, where subtraction truncates; the absolute
+Everything lives in `ENNReal`, where subtraction truncates; the absolute
 deviation is therefore taken symmetrically:
 `absSub x y = (x − y) + (y − x)`: exactly one summand is nonzero, so
 this is `|x − y|`.
 
 ## Main declarations
 
-* `absSub x y` (`x ⊖ y`): `|x − y|` in `ℝ≥0∞`
+* `absSub x y` (`x ⊖ y`): `|x − y|` in `ENNReal`
 * `variance`: `Var[g] = E[(g ⊖ E[g])²]`
 * `variance_add_sq_mean` / `variance_eq_sub`: the classical identity
   `Var[g] = E[g²] − E[g]²` (no hypothesis beyond a finite mean)
@@ -34,36 +34,36 @@ open ENNReal
 
 /-! ## The symmetric distance -/
 
-/-- `|x − y|` in `ℝ≥0∞`: truncated subtraction in both directions,
+/-- `|x − y|` in `ENNReal`: truncated subtraction in both directions,
 exactly one summand is nonzero. Written `x ⊖ y`. -/
-noncomputable def absSub (x y : ℝ≥0∞) : ℝ≥0∞ := (x - y) + (y - x)
+noncomputable def absSub (x y : ENNReal) : ENNReal := (x - y) + (y - x)
 
-/-- `x ⊖ y`: the symmetric distance `|x − y|` in `ℝ≥0∞`, where
+/-- `x ⊖ y`: the symmetric distance `|x − y|` in `ENNReal`, where
 ordinary subtraction truncates. -/
 scoped notation:70 x " ⊖ " y => absSub x y
 
-lemma absSub_comm (x y : ℝ≥0∞) : absSub x y = absSub y x := by
+lemma absSub_comm (x y : ENNReal) : absSub x y = absSub y x := by
   rw [absSub, absSub, add_comm]
 
-@[simp] lemma absSub_self (x : ℝ≥0∞) : absSub x x = 0 := by
+@[simp] lemma absSub_self (x : ENNReal) : absSub x x = 0 := by
   simp [absSub]
 
-lemma absSub_of_le {x y : ℝ≥0∞} (h : y ≤ x) : absSub x y = x - y := by
+lemma absSub_of_le {x y : ENNReal} (h : y ≤ x) : absSub x y = x - y := by
   rw [absSub, tsub_eq_zero_of_le h, add_zero]
 
 /-- The algebraic core of the variance identity, valid for all
-`x, y : ℝ≥0∞` (including `∞`): `|x − y|² + 2xy = x² + y²`. -/
-lemma absSub_sq_add_two_mul (x y : ℝ≥0∞) :
+`x, y : ENNReal` (including `∞`): `|x − y|² + 2xy = x² + y²`. -/
+lemma absSub_sq_add_two_mul (x y : ENNReal) :
     absSub x y ^ 2 + 2 * x * y = x ^ 2 + y ^ 2 := by
   -- Ordered finite case: write the larger side as `b + c`.
-  have key : ∀ {a b : ℝ≥0∞}, b ≤ a → b ≠ ⊤ →
+  have key : ∀ {a b : ENNReal}, b ≤ a → b ≠ ⊤ →
       absSub a b ^ 2 + 2 * a * b = a ^ 2 + b ^ 2 := by
     intro a b hba hb
     obtain ⟨c, rfl⟩ := exists_add_of_le hba
     rw [absSub_of_le le_self_add, ENNReal.add_sub_cancel_left hb]
     ring
   -- One infinite argument: both sides are `⊤ + _`.
-  have htop : ∀ {b : ℝ≥0∞}, b ≠ ⊤ →
+  have htop : ∀ {b : ENNReal}, b ≠ ⊤ →
       absSub ⊤ b ^ 2 + 2 * ⊤ * b = ⊤ ^ 2 + b ^ 2 := by
     intro b hb
     have habs : absSub ⊤ b = ⊤ := by
@@ -88,12 +88,12 @@ lemma absSub_sq_add_two_mul (x y : ℝ≥0∞) :
 /-! ## Variance -/
 
 /-- Variance: the expected squared deviation from the mean. -/
-noncomputable def variance {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) : ℝ≥0∞ :=
+noncomputable def variance {α : Type*} (p : PMF α) (g : α → ENNReal) : ENNReal :=
   expVal p (fun a => (g a ⊖ expVal p g) ^ 2)
 
 /-- The variance identity in cancellation-free form,
 `Var[g] + 2·E[g]² = E[g²] + E[g]²`, valid with no hypotheses. -/
-lemma variance_add_sq_mean {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) :
+lemma variance_add_sq_mean {α : Type*} (p : PMF α) (g : α → ENNReal) :
     variance p g + 2 * expVal p g ^ 2 =
       expVal p (fun a => g a ^ 2) + expVal p g ^ 2 := by
   have hpt : ∀ a, (g a ⊖ expVal p g) ^ 2 + 2 * expVal p g * g a
@@ -109,7 +109,7 @@ lemma variance_add_sq_mean {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) :
 
 /-- The variance identity `Var[g] = E[g²] − E[g]²`, whenever the
 mean is finite. -/
-theorem variance_eq_sub {α : Type*} (p : PMF α) (g : α → ℝ≥0∞)
+theorem variance_eq_sub {α : Type*} (p : PMF α) (g : α → ENNReal)
     (hμ : expVal p g ≠ ⊤) :
     variance p g = expVal p (fun a => g a ^ 2) - expVal p g ^ 2 := by
   have hμ2 : expVal p g ^ 2 ≠ ⊤ := ENNReal.pow_ne_top hμ
@@ -124,7 +124,7 @@ theorem variance_eq_sub {α : Type*} (p : PMF α) (g : α → ℝ≥0∞)
 
 /-- Chebyshev's inequality: the probability that `g` deviates from
 its mean by at least `k` is at most `Var[g] / k²`. -/
-theorem chebyshev {α : Type*} (p : PMF α) (g : α → ℝ≥0∞) {k : ℝ≥0∞}
+theorem chebyshev {α : Type*} (p : PMF α) (g : α → ENNReal) {k : ENNReal}
     (hk0 : k ≠ 0) (hktop : k ≠ ⊤) :
     prob p {a | k ≤ g a ⊖ expVal p g} ≤ variance p g / k ^ 2 := by
   have h := prob_ge_le_expVal_div p

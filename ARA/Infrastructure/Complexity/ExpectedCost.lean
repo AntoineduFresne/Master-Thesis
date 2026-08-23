@@ -313,7 +313,7 @@ Lets `cost_step` erase the trailing `return (f x)` of a branch. -/
 /-- Support-aware continuation bound: if every continuation reachable
 from the support costs at most `c`, the bind costs at most the head
 plus `c`, the recursive-call step of a cost analysis whose bound
-depends on run invariants (Karger–Stein). -/
+depends on run invariants. -/
 lemma expected_cost_toPMF_bind_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {α β : Type} {m : TimeMT ℕ M α} {f : α → TimeMT ℕ M β} {c : ENNReal}
@@ -353,7 +353,7 @@ lemma expected_cost_toPMF_seq₂
 
 * `TimedPMF m`:      distribution over `(value, time)` pairs obtained
   by interpreting `m : TimeMT ℕ M α` via a `LawfulRandMonad`.
-* `𝔼[cost m]`:      `expected_cost (TimedPMF m) : ℝ≥0∞`, for an
+* `𝔼[cost m]`:      `expected_cost (TimedPMF m) : ENNReal`, for an
   already-timed `m`. `cost` marks that the averaged quantity is the
   running time; expands to the underlying form so `simp`/`rw` match
   the bridge lemmas without unfolding hints.
@@ -386,7 +386,7 @@ as `ℝ`. Use type ascription `(f L : TimeMT ℕ M _)` when `f` is polymorphic. 
 scoped macro "𝔼ℝ[cost " m:term "]" : term =>
   `((expected_cost (TimedPMF $m)).toReal)
 
-/-- `𝔼_{M}[cost e]`: expected runtime (`ℝ≥0∞`) of the
+/-- `𝔼_{M}[cost e]`: expected runtime (`ENNReal`) of the
 monad-polymorphic algorithm `e`, instantiated at the random monad `M`
 and timed via `TimeMT ℕ M`: the expectation `𝔼_{M}` of the
 running-time random variable `cost e`; elaborates to
@@ -487,7 +487,7 @@ scoped macro_rules
 ## Uniform-pivot recipes
 
 The two lemmas below package the algorithm-independent steps of a
-uniform-pivot cost analysis, so that a new algorithm's *step lemma* is
+uniform-pivot cost analysis, so that a new algorithm's step lemma is
 one `rw` plus its branch decomposition:
 
 ```
@@ -598,9 +598,9 @@ lemma runtime_toReal_le
 ## The cost distribution
 
 Beyond its expectation (`𝔼[cost ·]`) and its tail bounds
-(`ℙ_runtime`), the running time of a computation has a *law*:
+(`ℙ_runtime`), the running time of a computation has a law:
 `costPMF m`, the third reading of a cost analysis. It is what a
-*determinism* claim needs. `schwartzZippel_costPMF` and
+determinism claim needs. `schwartzZippel_costPMF` and
 `costPMF_shuffle` state that those algorithms cost `1` and `0` on
 every run, not merely on average, which an expectation cannot
 say. `CouponCollector` studies the same tier from the other side: it
@@ -617,7 +617,7 @@ noncomputable def costPMF {M : Type → Type} [Monad M] [LawfulMonad M]
 /-- A vanishing mean forces a Dirac law at `0`. Costs are
 `ℕ`-valued, so "free in expectation" and "free on every run" coincide:
 this upgrades any `𝔼[cost …] = 0` theorem (every sampler has one)
-to a statement about the cost *law*. -/
+to a statement about the cost law. -/
 lemma costPMF_eq_pure_zero {M} [Monad M] [LawfulMonad M]
     [inst : LawfulRandMonad M] {β : Type} {m : TimeMT ℕ M β}
     (h : 𝔼[cost m] = 0) : costPMF m = PMF.pure 0 := by

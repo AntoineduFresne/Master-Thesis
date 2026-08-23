@@ -18,7 +18,7 @@ perfectly well-defined `PMF` (total mass `1`). `CouponCollector` is
 the first client; a sub-probability layer for the program-level loop
 is future work.
 
-Everything is proved directly in `ℝ≥0∞` (Mathlib's geometric
+Everything is proved directly in `ENNReal` (Mathlib's geometric
 distribution is measure-theoretic and real-valued; the expectation
 computation below (the layer-cake exchange) needs no summability
 side conditions at all).
@@ -38,7 +38,7 @@ namespace ARA
 
 open ENNReal
 
-private lemma geometric_mass (q : ℝ≥0∞) (hq : q < 1) :
+private lemma geometric_mass (q : ENNReal) (hq : q < 1) :
     HasSum (fun k : ℕ => q ^ k * (1 - q)) 1 := by
   have htsum : ∑' k : ℕ, q ^ k * (1 - q) = 1 := by
     rw [ENNReal.tsum_mul_right, ENNReal.tsum_geometric,
@@ -48,34 +48,34 @@ private lemma geometric_mass (q : ℝ≥0∞) (hq : q < 1) :
   exact htsum.symm
 
 /-- A nonzero success probability leaves failure probability `< 1`. -/
-lemma one_sub_lt_one {p : ℝ≥0∞} (hp0 : p ≠ 0) : 1 - p < 1 :=
+lemma one_sub_lt_one {p : ENNReal} (hp0 : p ≠ 0) : 1 - p < 1 :=
   ENNReal.sub_lt_self ENNReal.one_ne_top one_ne_zero hp0
 
 /-- The geometric distribution: `k` failures before the first success,
 `P(k) = qᵏ(1 − q)`, for failure probability `q < 1`. -/
-noncomputable def geometric (q : ℝ≥0∞) (hq : q < 1) : PMF ℕ :=
+noncomputable def geometric (q : ENNReal) (hq : q < 1) : PMF ℕ :=
   ⟨fun k => q ^ k * (1 - q), geometric_mass q hq⟩
 
-@[simp] lemma geometric_apply (q : ℝ≥0∞) (hq : q < 1) (k : ℕ) :
+@[simp] lemma geometric_apply (q : ENNReal) (hq : q < 1) (k : ℕ) :
     geometric q hq k = q ^ k * (1 - q) := rfl
 
 /-- Expectation of the geometric law: `q/(1 − q)` expected
 failures before the first success. Proved by the layer-cake exchange
-`k = #{j | j < k}`; in `ℝ≥0∞` the double-sum swap is unconditional. -/
-theorem mean_geometric (q : ℝ≥0∞) (hq : q < 1) :
+`k = #{j | j < k}`; in `ENNReal` the double-sum swap is unconditional. -/
+theorem mean_geometric (q : ENNReal) (hq : q < 1) :
     𝔼[geometric q hq] = q * (1 - q)⁻¹ := by
   unfold mean
   have h0 : (1 - q) ≠ 0 := (tsub_pos_of_lt hq).ne'
   have htop : (1 - q) ≠ ⊤ := ne_top_of_le_ne_top ENNReal.one_ne_top tsub_le_self
   -- `k` as a sum of indicators.
-  have hk : ∀ k : ℕ, (k : ℝ≥0∞) = ∑' j : ℕ, if j < k then 1 else 0 := by
+  have hk : ∀ k : ℕ, (k : ENNReal) = ∑' j : ℕ, if j < k then 1 else 0 := by
     intro k
     rw [tsum_eq_sum (s := Finset.range k) fun j hj =>
       if_neg fun h => hj (Finset.mem_range.mpr h)]
     rw [Finset.sum_congr rfl fun j hj => if_pos (Finset.mem_range.mp hj)]
     simp
   unfold expVal
-  calc ∑' k, geometric q hq k * (k : ℝ≥0∞)
+  calc ∑' k, geometric q hq k * (k : ENNReal)
       = ∑' k, ∑' j, if j < k then q ^ k * (1 - q) else 0 := by
         refine tsum_congr fun k => ?_
         rw [hk k, ← ENNReal.tsum_mul_left]
@@ -107,13 +107,13 @@ theorem mean_geometric (q : ℝ≥0∞) (hq : q < 1) :
 /-- The law of the number of trials until the first success, for
 success probability `p`: the failure count plus the successful trial.
 This is the cost law of one retry-until-success stage. -/
-noncomputable def geometricTrials (p : ℝ≥0∞) (hp0 : p ≠ 0) : PMF ℕ :=
+noncomputable def geometricTrials (p : ENNReal) (hp0 : p ≠ 0) : PMF ℕ :=
   (geometric (1 - p) (one_sub_lt_one hp0)).map (· + 1)
 
 /-- Expected number of trials until the first success: `1/p`.
 The form a retry-until-success cost analysis consumes directly (the
 coupon collector's stage `m` has `p = m/n`, hence `n/m` draws). -/
-theorem mean_geometricTrials {p : ℝ≥0∞} (hp0 : p ≠ 0) (hptop : p ≠ ⊤)
+theorem mean_geometricTrials {p : ENNReal} (hp0 : p ≠ 0) (hptop : p ≠ ⊤)
     (hp1 : p ≤ 1) :
     𝔼[geometricTrials p hp0] = p⁻¹ := by
   rw [geometricTrials, mean_map_add_one, mean_geometric,
