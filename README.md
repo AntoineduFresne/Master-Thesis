@@ -2,10 +2,10 @@
 
 A framework where a randomized algorithm is written once and that single definition serves, depending on the instantiation of the abstract random monad, as:
 
-* an **executable program** (`IO`, real randomness — `#eval` it),
-* a **distribution** (`PMF`, the mathematical specification),
-* a **timed algorithm** (`TimeMT ℕ M`, cost accumulated per `tick`),
-* a **benchmark** (`TimeMT ℕ IO`, executable with a clock).
+* an executable program (`IO`, real randomness — `#eval` it),
+* a distribution (`PMF`, the mathematical specification),
+* a timed algorithm (`TimeMT ℕ M`, cost accumulated per `tick`),
+* a benchmark (`TimeMT ℕ IO`, executable with a clock).
 
 Correctness and expected-complexity proofs then follow a fixed recipe in
 which the framework tries to automate everything except the

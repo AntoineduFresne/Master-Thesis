@@ -80,7 +80,7 @@ Notes:
 
 ## Probability in the logic: `PMF` and the Giry monad
 
-A distribution over a type `α` is a `PMF α`: a function `α → ℝ≥0∞` whose
+A distribution over a type `α` is a `PMF α`: a function `α → ENNReal` whose
 values sum to `1` (Mathlib). Any such function induces a probability
 measure (`PMF.toOuterMeasure`, `PMF.toMeasure`) where singletons are measurable,
 and conversely, on a countable type, a probability measure with measurable singletons
@@ -221,7 +221,7 @@ The price of the support route is automation, and it explains why the Dirac one 
 `dirac_correct` is one line. `@[spec_preserve]` obligations are implications, which `simp`
 cannot chain, so the support tier must be written by hand or using other style of automation.
 
-Costs follow the same layering. Upper bounds are stated in `ℝ≥0∞`, the extended non-negative reals `[0, ∞]`, because every sum of non-negative terms converges there, possibly to `∞`, so no series needs a convergence proof before it can be manipulated. Exact closed forms are more natural in `ℝ`, and `toReal` moves a value there; since `toReal` sends `∞` to `0`, it may only be used once the value is known to be finite, and that finiteness comes from first proving a crude bound such as Quicksort's `≤ C(n,2)`.
+Costs follow the same layering. Upper bounds are stated in `ENNReal`, the extended non-negative reals `[0, ∞]`, because every sum of non-negative terms converges there, possibly to `∞`, so no series needs a convergence proof before it can be manipulated. Exact closed forms are more natural in `ℝ`, and `toReal` moves a value there; since `toReal` sends `∞` to `0`, it may only be used once the value is known to be finite, and that finiteness comes from first proving a crude bound such as Quicksort's `≤ C(n,2)`.
 
 On top of expectations sits the tail-bound tier (`TailBounds.lean`). Markov's inequality turns any expected-cost theorem into a tail bound for free: `ℙ_{M}[cost m > k] ≤ 𝔼_{M}[cost m]/(k+1)`. Because costs are ℕ-valued, cost `> k` is the same event as cost `≥ k+1`, so the strict form divides by `k+1` (so is free of any `k ≠ 0` side condition).
 
@@ -269,7 +269,7 @@ cost-tier facts and live in `Complexity/SamplerCosts`.
 ## Known limitations
 
 * `PMF` forces total mass 1, so a genuine retry-until-success loop is not a
-  `PMF` program. `Randomness/SPMF.lean` addresses this: `SPMF := OptionT PMF`
+  `PMF` program. `FutureWork/SPMF.lean` addresses this: `SPMF := OptionT PMF`
   carries the divergence probability on `none`, and `retry` is conditioning
   rather than domain theory (`mass_retry_eq_one` is the Las Vegas theorem).
   What remains is the cost reading over `SPMF` and the program-level coupon
