@@ -34,12 +34,12 @@ Write $D := AB - C$; note $A(Br) = Cr \iff Dr = 0$, and $AB = C
 **Theorem 1 (completeness).** If $AB = C$ the algorithm accepts with
 probability $1$.
 
-*Proof.* $D = 0$, so $Dr = 0$ for every $r$. $\blacksquare$
+Proof. $D = 0$, so $Dr = 0$ for every $r$. $\blacksquare$
 
 **Theorem 2 (soundness).** If $AB \ne C$ the algorithm accepts with
 probability at most $1/2$ — over any commutative ring.
 
-*Proof.* Since $D \ne 0$, fix indices $(i, j)$ with $D_{ij} \ne 0$.
+Proof. Since $D \ne 0$, fix indices $(i, j)$ with $D_{ij} \ne 0$.
 Define the bit-flip involution
 $\varphi : \{0,1\}^n \to \{0,1\}^n$ that flips the $j$-th
 coordinate: $\varphi(r)_j = 1 - r_j$ and $\varphi(r)_l = r_l$ for
@@ -47,7 +47,7 @@ $l \ne j$. Then $\varphi \circ \varphi = \mathrm{id}$ and $\varphi$
 is a bijection pairing the $2^n$ vectors into $2^{n-1}$ disjoint
 pairs $\{r, \varphi(r)\}$.
 
-*Claim: at most one vector of each pair is accepting.* The $i$-th
+Claim: at most one vector of each pair is accepting. The $i$-th
 coordinate of $D\varphi(r)$ differs from that of $Dr$ by
 $$\bigl(D\varphi(r)\bigr)_i - (Dr)_i \;=\; D_{ij}\,\varepsilon,
  \qquad \varepsilon = \pm 1 \in R,$$

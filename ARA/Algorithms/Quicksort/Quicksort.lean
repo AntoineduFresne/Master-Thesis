@@ -33,11 +33,16 @@ For `L` the input list and `n` its length, we have:
 
 * `quicksort_correct`: generic correctness over any
   `LawfulRandMonad`: the output distribution is the Dirac mass at
-  `L.mergeSort (· ≤ ·)`, the algorithm deterministically returns
-  the sorted list (existential form: `quicksort_correct_spec`).
+  `sortSpec L`, the algorithm deterministically returns the sorted
+  list (existential form: `quicksort_correct_spec`). Proved two further
+  independent ways — `quicksort_correct_spec_of_branch_spec` (route A,
+  the per-branch specification collapse) and `quicksort_sorted` plus
+  `quicksort_correct_spec_of_support` (route B, the support tier and
+  the bridge) — to exhibit the three correctness routes the framework
+  offers. Each re-derives the theorem above without appealing to it.
 * `quicksort_cost_le_real`: For arbitrary lists (possibly with
   duplicates), bounds the expected cost by `C(n,2)`, tight on
-  all-equal inputs. Its `ℝ≥0∞` core also supplies the finiteness
+  all-equal inputs. Its `ENNReal` core also supplies the finiteness
   fact needed by the exact-formula proof.
 * `quicksort_cost_exact`: Quantifies the exact expected
   cost over any `LawfulRandMonad`: sorting a list of `n` distinct
@@ -161,39 +166,202 @@ private lemma quicksort_eq_bind
 /-!
 ### Generic correctness theorem
 
-The proof is the Tutorial's recipe: one `dirac_correct` call. The
-transport lemma is `mergeSort_partition` (from `Helpers`), restated
-below in the `simp`-normal form a collapsed branch actually has
-(`++ [x] ++` normalizes to `++ x :: ·`, `· ≥ p` to `p ≤ ·`), so
-`dirac_finish` can fire it.
+The specification is `sortSpec L`, the sorted list of `L`: the unique
+list that is sorted and permutes `L` (`ARA.Helpers.Partition`).
+
+Quicksort is proved correct three times, once by each collapse the
+infrastructure offers, to show that the framework does not prescribe a
+proof. The three differ in how much of the specification the induction
+has to carry:
+
+* The default recipe, immediately below: one `dirac_correct` call,
+  which collapses with `toPMF_randIdx_bind_dirac`. Every branch must
+  produce the same named value, so the specification `sortSpec L` is
+  present at every step. Driven by the equational transport lemma
+  `sortSpec_partition_cons`. One line, and what a new algorithm follows
+  by default.
+
+* Route A: `toPMF_randIdx_bind_dirac_spec`. Each branch produces some
+  deterministic output meeting the specification, and the branches are
+  not required to agree; `sortedPerm_unique` restores the agreement at
+  the collapse. The induction carries a witness but never `sortSpec`.
+
+* Route B: the support tier plus `eq_pure_of_support_subsingleton`. No
+  value at all during the induction, because the support of the draw is
+  a union and the branches are independent. Its branch obligation is
+  literally the induction step of the textbook proof.
+
+All three end at the same statement. `quicksort_correct_of_branch_spec`
+and `quicksort_correct_of_support` close the loop by re-deriving the
+first theorem from the other two, each without appealing to it.
 -/
 
+/-- Transport lemma for the default recipe: `sortSpec_partition`
+restated in the `simp`-normal form a collapsed branch actually has
+(`++ [x] ++` normalizes to `++ x :: ·`, `· ≥ p` to `p ≤ ·`), so
+`dirac_finish` can fire it. -/
 @[spec_transport]
-private lemma mergeSort_partition_cons (L : List α) (i : ℕ) (h : i < L.length) :
-    ((L.eraseIdx i).filter (fun x => x < L[i])).mergeSort (· ≤ ·) ++ L[i] ::
-      ((L.eraseIdx i).filter (fun x => L[i] ≤ x)).mergeSort (· ≤ ·) =
-      L.mergeSort (· ≤ ·) := by
-  simpa using mergeSort_partition L ⟨i, h⟩
+private lemma sortSpec_partition_cons (L : List α) (i : ℕ) (h : i < L.length) :
+    sortSpec ((L.eraseIdx i).filter (fun x => x < L[i])) ++ L[i] ::
+      sortSpec ((L.eraseIdx i).filter (fun x => L[i] ≤ x)) =
+      sortSpec L := by
+  simpa [pivotLT, pivotGE] using sortSpec_partition L ⟨i, h⟩
 
-/-- Correctness. For any lawful random monad and any lawful cost
-model, `Quicksort` returns exactly the sorted list: its output
-distribution is the Dirac mass at `L.mergeSort (· ≤ ·)`,
-independently of the random pivot choices and of the ticks. -/
+/-- Correctness. For any lawful random monad and any lawful cost model,
+`Quicksort` returns exactly the sorted list: its output distribution is
+the Dirac mass at `sortSpec L`, independently of the random pivot
+choices and of the ticks. -/
 theorem quicksort_correct
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
-    𝒟_{M}[Quicksort L] = PMF.pure (L.mergeSort (· ≤ ·)) := by
+    𝒟_{M}[Quicksort L] = PMF.pure (sortSpec L) := by
   dirac_correct Quicksort
 
 /-- The output is a sorted permutation of the input (existential
-specification form of `quicksort_correct`). -/
+specification form of `quicksort_correct`). This is the textbook
+statement, and it is equivalent to the Dirac form rather than weaker:
+`sortedPerm_unique` turns the existential back into `sortSpec L`. -/
 theorem quicksort_correct_spec
-    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M] (L : List α) :
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
     ∃ Output : List α,
       𝒟_{M}[Quicksort L] = pure Output ∧
       Output.SortedLE ∧ Output.Perm L :=
-  ⟨L.mergeSort (· ≤ ·), quicksort_correct L, sortedLE_mergeSort,
-    mergeSort_perm L _⟩
+  ⟨sortSpec L, quicksort_correct L, sortedLE_sortSpec L, sortSpec_perm L⟩
+
+-- ----------------------------------------
+-- Route A: collapse from per-branch specifications
+-- ----------------------------------------
+
+/-!
+### Route A
+
+The same theorem with the specification value out of the induction but
+a witness still in it. Each branch is shown to be deterministic and to
+meet the specification — "sorted, and a permutation of the input" — and
+the branches are not shown to agree. `toPMF_randIdx_bind_dirac_spec`
+supplies the agreement from `sortedPerm_unique` at the moment of the
+collapse.
+
+Compared with the default recipe, this is what changes: the branch
+obligation is `∃ Output, … = PMF.pure Output ∧ P Output` rather than an
+equation against a named value, so the assembly step is
+`sortedPerm_concat_pivot` (a property) instead of
+`sortSpec_partition_cons` (an equation). Compared with route B, the
+witness is still threaded through the induction; the pivot draw is
+still a collapse rather than a union.
+-/
+
+/-- Correctness via the per-branch specification collapse: the output
+is deterministic and is a sorted permutation of the input. -/
+theorem quicksort_correct_spec_of_branch_spec
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
+    ∃ Output : List α,
+      𝒟_{M}[Quicksort L] = PMF.pure Output ∧
+      (Output.SortedLE ∧ Output.Perm L) := by
+  induction L using Quicksort.induct with
+  | case1 =>
+    exact ⟨[], by rw [Quicksort.eq_1]; toPMF_step,
+      by simp [sortedLE_iff_pairwise], Perm.refl []⟩
+  | case2 head tail ih1 ih2 =>
+    rw [quicksort_eq_bind head tail]
+    -- The branches need not agree on a value; uniqueness of the
+    -- specification is what lets the uniform draw collapse anyway.
+    refine toPMF_randIdx_bind_dirac_spec sortedPerm_unique fun i => ?_
+    obtain ⟨S1, h1, hs1, hp1⟩ := ih1 i
+    obtain ⟨S2, h2, hs2, hp2⟩ := ih2 i
+    refine ⟨S1 ++ [(head :: tail)[i]] ++ S2, ?_,
+      sortedPerm_concat_pivot (head :: tail) i hs1 hp1 hs2 hp2⟩
+    -- The branch is deterministic: peel the tick, then substitute the
+    -- two recursive laws and let `pure` absorb the binds.
+    toPMF_step qs_branch
+    rw [h1, h2]
+    toPMF_step
+
+/-- Route A re-proves `quicksort_correct`, with no appeal to it and no
+`@[spec_transport]` lemma: `eq_sortSpec` pins the witness down. -/
+theorem quicksort_correct_of_branch_spec
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
+    𝒟_{M}[Quicksort L] = PMF.pure (sortSpec L) := by
+  obtain ⟨Output, hOut, hs, hp⟩ :=
+    quicksort_correct_spec_of_branch_spec (M := M) L
+  rwa [eq_sortSpec hs hp] at hOut
+
+-- ----------------------------------------
+-- Route B: correctness via the support tier
+-- ----------------------------------------
+
+/-!
+### Route B
+
+The same theorem with no specification value in sight. The statement is
+"every list `Quicksort` can output is a sorted permutation of the
+input", a property of the support; the induction never carries a
+witness, because the support of the pivot draw is the union of the
+branch supports and the branches therefore never have to agree.
+
+`support_step` does the framework's half: it peels the tick, pushes
+`toPMF` through the two recursive calls, and turns the membership into
+one binder per random choice and one per recursive call. What is left
+is the mathematics, and it is exactly `sortedPerm_concat_pivot` —
+the same lemma route A uses, before `eq_sortSpec` turns it into an
+equation.
+-/
+
+-- The assembly step is Quicksort's `spec_preserve` lemma. It lives in
+-- `Helpers` (Mathlib-only, no Infrastructure), so the tag is applied
+-- here, where the framework consumes it. Forward, because its four
+-- hypotheses arrive from the inductive hypotheses and its conclusion
+-- is a conjunction.
+attribute [spec_preserve →] sortedPerm_concat_pivot
+
+/-- Correctness, support tier: every reachable output is a sorted
+permutation of the input. -/
+theorem quicksort_sorted
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M]
+    (L : List α) (S : List α) (hS : S ∈ (𝒟_{M}[Quicksort L]).support) :
+    S.SortedLE ∧ S.Perm L := by
+  revert S
+  induction L using Quicksort.induct with
+  | case1 =>
+    intro S hS
+    rw [Quicksort.eq_1] at hS
+    support_step at hS
+    subst hS
+    simp [sortedLE_iff_pairwise]
+  | case2 head tail ih1 ih2 =>
+    intro S hS
+    rw [quicksort_eq_bind head tail] at hS
+    -- `support_finish` unpacks the membership and then chains
+    -- `sortedPerm_concat_pivot` forward against `ih1`/`ih2`. Written
+    -- out it is: `obtain ⟨i, S1, h1, S2, h2, rfl⟩ := hS`, the two
+    -- inductive hypotheses at `i`, and `exact sortedPerm_concat_pivot`.
+    support_finish qs_branch at hS
+
+/-- Route B's closing step: the support statement plus uniqueness of
+the sorting specification gives determinism. The existential is the
+theorem; no value was named to obtain it. -/
+theorem quicksort_correct_spec_of_support
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
+    ∃ Output : List α,
+      𝒟_{M}[Quicksort L] = PMF.pure Output ∧
+      Output.SortedLE ∧ Output.Perm L :=
+  eq_pure_of_support_subsingleton sortedPerm_unique (quicksort_sorted L)
+
+/-- The routes meet: route B re-proves `quicksort_correct`, with no
+appeal to it and no `@[spec_transport]` lemma. The witness produced by
+the bridge is pinned down by `eq_sortSpec`, which is the same
+uniqueness fact the default recipe hides inside the name `sortSpec`. -/
+theorem quicksort_correct_of_support
+    {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
+    [MonadCost ℕ M] [LawfulMonadCost ℕ M] (L : List α) :
+    𝒟_{M}[Quicksort L] = PMF.pure (sortSpec L) := by
+  obtain ⟨Output, hOut, hs, hp⟩ := quicksort_correct_spec_of_support (M := M) L
+  rwa [eq_sortSpec hs hp] at hOut
 
 -- ----------------------------------------
 -- Free Proof: Untimed Quicksort_PMF
@@ -201,14 +369,14 @@ theorem quicksort_correct_spec
 
 /-- Correctness at `M = PMF` (where `toPMF` is the identity). -/
 theorem quicksort_correct_pmf (L : List α) :
-    (Quicksort L : PMF (List α)) = PMF.pure (L.mergeSort (· ≤ ·)) :=
+    (Quicksort L : PMF (List α)) = PMF.pure (sortSpec L) :=
   quicksort_correct (M := PMF) L
 
 /-- Timed PMF correctness for free: `TimeMT ℕ PMF` is itself a lawful
 random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
-instantiates directly, since erasing the clock *is* its `toPMF`. -/
+instantiates directly, since erasing the clock is its `toPMF`. -/
 theorem quicksort_correct_timed_pmf (L : List α) :
-    𝒟_{TimeMT ℕ PMF}[Quicksort L] = PMF.pure (L.mergeSort (· ≤ ·)) :=
+    𝒟_{TimeMT ℕ PMF}[Quicksort L] = PMF.pure (sortSpec L) :=
   quicksort_correct (M := TimeMT ℕ PMF) L
 
 -- ----------------------------------------
@@ -229,7 +397,7 @@ both by functional induction on `Quicksort`:
   the harmonic recurrence, which solves exactly to `2(n+1)H(n) − 4n`
   (`quicksort_cost_exact`).
 
-The upper bound is stated in `ℝ≥0∞`, where no summability bookkeeping
+The upper bound is stated in `ENNReal`, where no summability bookkeeping
 is needed; the exact formula descends to `ℝ` via `toReal`, with
 finiteness supplied by the `C(n,2)` bound.
 -/
@@ -287,7 +455,7 @@ worst case is all-equal inputs `L = [a, a, …, a]`:
 so the recurrence degenerates to `T(n) = (n-1) + T(n-1)` and yields
 `T(n) = n(n-1)/2 = C(n,2)` deterministically. This is the worst case
 across all inputs and pivot sequences, so the expected cost on any list
-is bounded by `C(n,2)`. Its `ℝ≥0∞` form also provides finiteness of
+is bounded by `C(n,2)`. Its `ENNReal` form also provides finiteness of
 the expected cost for free. -/
 
 /-- For an arbitrary list (possibly

@@ -23,7 +23,7 @@ these uniform draws, of size $n \cdot (n-1) \cdots 1 = n!$.
    $h$ followed by $\mathrm{Shuffle}(L \setminus_{\!I})$, where
    $L \setminus_{\!I}$ denotes $L$ with position $I$ deleted.
 
-**Cost model.** The shuffle is a *sampler*: it consumes randomness
+**Cost model.** The shuffle is a sampler: it consumes randomness
 but is charged no cost (its clients pay for what they do with the
 permutation).
 
@@ -33,7 +33,7 @@ permutation).
 of $\mathrm{Shuffle}(L)$ is a permutation of $L$ (equal as
 multisets) almost surely.
 
-*Proof.* Strong induction on $|L|$. Empty case trivial. Otherwise
+Proof. Strong induction on $|L|$. Empty case trivial. Otherwise
 every output has the form $h :: t$ where $h$ is the entry removed at
 position $I$ and, by the induction hypothesis, $t$ is a permutation
 of $L \setminus_{\!I}$. Since $L$ is a permutation of
@@ -44,11 +44,11 @@ $\blacksquare$
 ## 4. Exact distribution
 
 **Theorem 2 (pointwise uniformity / exchangeability).** Let the
-entries of $L$ be pairwise distinct, $|L| = n$. Then for **every**
+entries of $L$ be pairwise distinct, $|L| = n$. Then for every
 list $\pi$ that is a permutation of $L$,
 $$\Pr[\mathrm{Shuffle}(L) = \pi] = \frac{1}{n!}.$$
 
-*Proof.* Strong induction on $n$. For $n = 0$: the only permutation
+Proof. Strong induction on $n$. For $n = 0$: the only permutation
 of $()$ is $()$, returned with probability $1 = 1/0!$.
 
 For $n \ge 1$ write $\pi = h :: t$. Conditioning on the first draw
@@ -61,7 +61,7 @@ because a branch that puts $a_i \ne h$ first cannot produce
 $h :: t$, and a branch with $a_i = h$ produces it exactly when the
 recursive shuffle produces $t$.
 
-Since the entries are distinct, **exactly one** index $i_0$ satisfies
+Since the entries are distinct, exactly one index $i_0$ satisfies
 $a_{i_0} = h$ (at least one because $h$ occurs in $\pi$, hence in
 $L$; at most one by distinctness). Moreover $t$ is a permutation of
 $L \setminus_{\!i_0}$ (cancel the common head $h$ from
@@ -74,15 +74,15 @@ $$\Pr[\mathrm{Shuffle}(L) = \pi]
  \qquad\blacksquare$$
 
 **Theorem 3 (the law is uniform).** For distinct entries, the output
-distribution of $\mathrm{Shuffle}(L)$ **is** the uniform distribution
+distribution of $\mathrm{Shuffle}(L)$ is the uniform distribution
 on the set of the $n!$ orderings of $L$.
 
-*Proof.* By Theorem 2 the law assigns $1/n!$ to each of the $n!$
+Proof. By Theorem 2 the law assigns $1/n!$ to each of the $n!$
 orderings; these probabilities sum to $1$, so (by Theorem 1, or by
 mass alone) every other list has probability $0$. $\blacksquare$
 
 **Remark (why this is exchangeability).** Theorem 2 is the
-*exchangeability lemma* used to relate insertion-order models of
+exchangeability lemma used to relate insertion-order models of
 randomized data structures (e.g. treaps: "insert the keys in a
 uniformly random order") to their recursive descriptions ("pick a
 uniformly random root, recurse"): both reduce to the uniform measure

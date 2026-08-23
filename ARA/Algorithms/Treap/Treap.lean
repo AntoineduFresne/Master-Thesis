@@ -30,7 +30,7 @@ monad `M` (they run in `IO`, specify distributions in `PMF`, …):
   (the shape distribution of a treap).
 
 Neither draws `MonadCost` ticks: for a data structure the analogue of
-runtime is a *structural* measure of the output (the tree height),
+runtime is a structural measure of the output (the tree height),
 handled by the `expVal` output-functional API from `ARA.Infrastructure.Complexity.ExpectedCost`.
 
 ## Main results
@@ -41,7 +41,7 @@ For `n` the number of (distinct) keys, we have:
   (recursive model): every tree the sampler can output is a valid
   BST over the (distinct) keys: its in-order traversal is sorted and a
   permutation of the keys. So the traversal is deterministic even
-  though the tree *shape* is random.
+  though the tree shape is random.
 * `randomBST_height_le`: deterministic bound: height ≤ number of keys.
 * `treap_expVal_exp_height`: the exponential-height bound
   `E[2^height] ≤ C(n+3, 3)` (CLRS-style; the hockey-stick identity
@@ -286,7 +286,7 @@ theorem randomBST_correct_pmf (keys : List ℕ) (hnd : keys.Nodup) (t : Tree)
 
 A deterministic, honest bound: the height never exceeds the number of
 keys (a treap on `n` keys has at most `n` nodes, and height ≤ nodes).
-The `Θ(log n)` *expected* height for the recursive model is proven
+The `Θ(log n)` expected height for the recursive model is proven
 below (`treap_expected_height_le`); for this insertion model it would
 follow from the (future-work) equivalence of the two models.
 -/
@@ -315,7 +315,7 @@ theorem randomBST_height_le
 ## The recursive model and the expected height
 
 `randomBST` above inserts in a random order. The classically
-equivalent *recursive* characterization picks a uniformly random root
+equivalent recursive characterization picks a uniformly random root
 and recurses on the two sides, the exact shape distribution of a
 treap. The recursive form exposes the pivot structure that the
 framework's partition machinery consumes, which is what makes the
@@ -325,7 +325,7 @@ two models is future work.)
 The height analysis is the classic exponential-height argument: the
 recurrence `2^H = 2·max(2^{H_l}, 2^{H_r}) ≤ 2·(2^{H_l} + 2^{H_r})`
 solves against the closed form `E[2^H] ≤ C(n+3, 3)` (the hockey-stick
-identity makes the induction close with *equality*), and the pointwise
+identity makes the induction close with equality), and the pointwise
 inequality `h ≤ k + 2^h/2^k` extracts the logarithm without Jensen.
 -/
 

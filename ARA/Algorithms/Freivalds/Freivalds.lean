@@ -231,7 +231,7 @@ theorem freivalds_cost_exact
   rw [freivalds]
   cost_step
 
-/-- Deterministic cost. The cost law is a point mass: *every* run
+/-- Deterministic cost. The cost law is a point mass: every run
 costs exactly `3n²`, not merely on average. -/
 theorem freivalds_costPMF
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] [DecidableEq R]

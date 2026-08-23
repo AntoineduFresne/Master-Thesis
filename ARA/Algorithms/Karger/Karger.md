@@ -2,12 +2,12 @@
 
 ## 1. Problem
 
-A **multigraph** $G = (V, E)$ consists of a finite vertex set $V$ and
-a finite multiset $E$ of unordered pairs of *distinct* vertices
+A multigraph $G = (V, E)$ consists of a finite vertex set $V$ and
+a finite multiset $E$ of unordered pairs of distinct vertices
 (parallel edges allowed, no loops). Write $n := |V|$, $m := |E|$
 (counted with multiplicity).
 
-*Formalization note.* In Lean an edge is a `Sym2 α` — Mathlib's
+Formalization note. In Lean an edge is a `Sym2 α` — Mathlib's
 unordered pair — and $E$ is a `List (Sym2 α)`, one entry per parallel
 copy. Orientation is not merely irrelevant but inexpressible:
 `s(u,v)` and `s(v,u)` are the same term. The crossing predicate is
@@ -15,11 +15,11 @@ built with `Sym2.lift`, so its symmetry is a *well-definedness
 obligation* discharged at definition time, not a theorem proved
 afterwards.
 
-This matters, because for *directed* graphs the results below are
+This matters, because for directed graphs the results below are
 false. A digraph can have exponentially many minimum cuts (in the
 in-star $v_i \to c$, every $S \ni c$ is a cut of value $0$), and the
 key step of Section 4 breaks: a set can have no outgoing edge while
-*every* edge is incident on it, so a uniformly random edge merges
+every edge is incident on it, so a uniformly random edge merges
 across the cut with probability $1$ rather than $\le 2/n$. Note also
 that $\deg$ below is the incidence degree, which is why the handshake
 identity reads $\sum_v \deg(v) = 2m$ and not $m$.
@@ -33,9 +33,9 @@ repetition in a `List` rather than by GraphLib's `Edge.edgeLabel` over
 a noncomputable `Set` (our `List (Sym2 α)` is their
 `Set (Edge α (Fin m))` with the list position as the label), and
 contraction replaces the two endpoints by a single vertex chosen by a
-*pick* function — handed over as a symmetric function of the unordered
+pick function — handed over as a symmetric function of the unordered
 edge, so there is no orientation and no tie-break — while a fibre map
-*rep* records, for each live vertex, the set of original vertices
+rep records, for each live vertex, the set of original vertices
 merged into it, which seems to be an executable form of quotienting
 the vertex type by a `Setoid`. The vertex type is preserved across the $n-2$ rounds.
 
@@ -45,10 +45,10 @@ the vertex type by a `Setoid`. The vertex type is preserved across the $n-2$ rou
 an edge $e = \{u, v\}$, the contracted multigraph $G/e$ replaces $u$
 and $v$ by the picked vertex $w$; every edge endpoint equal to $u$ or
 $v$ is redirected to $w$, and the resulting loops (the parallel copies
-of $e$ itself) are deleted. Parallel edges are **kept**. The fibre map
+of $e$ itself) are deleted. Parallel edges are kept. The fibre map
 is updated by $rep(w) := rep(u) \cup rep(v)$, all other fibres
 unchanged; initially $rep(v) = \{v\}$. The pick collides with no
-untouched vertex (*freshness*), so $|V(G/e)| = |V(G)| - 1$. In all
+untouched vertex (freshness), so $|V(G/e)| = |V(G)| - 1$. In all
 cases $|E(G/e)| < |E(G)|$: the copies of $e$ are deleted, and this
 strict drop is what terminates the loop.
 
@@ -63,7 +63,7 @@ proportional to its multiplicity.
    remains): draw an edge $e$ uniformly from the current edge multiset
    and replace the current graph by its contraction along $e$. By the
    cardinality drop this takes exactly $n - 2$ rounds.
-2. Return the **partition** of $V$ formed by the fibres $rep(x)$ of
+2. Return the partition of $V$ formed by the fibres $rep(x)$ of
    the surviving vertices, together with its value: each fibre is the
    set of original vertices merged into its survivor — one side of the
    cut — and $c$ is the number of remaining edges.
@@ -77,7 +77,7 @@ proportional to its multiplicity.
 
 When two vertices remain the surviving edges are exactly the
 original edges crossing that two-set partition — so the reported $c$
-*is* $w(S)$ for each side $S$ (Lemma 1' below), computed for free
+is $w(S)$ for each side $S$ (Lemma 1' below), computed for free
 rather than recounted. The analysis tracks the minimum-cut value
 of the working graph, and the bridge promotes every statement about it
 to a statement about the returned sides themselves.
@@ -92,7 +92,7 @@ list); $C(G)$ is the total (random) cost.
 same value. Consequently $\lambda(G/e) \ge \lambda(G)$ when
 $n \ge 3$: $G/e$ must still have a cut.
 
-*Proof.* Let $e = \{u,v\}$ and let $S'$ be a cut of $G/e$. If
+Proof. Let $e = \{u,v\}$ and let $S'$ be a cut of $G/e$. If
 $u \notin S'$, take $S := S'$; if $u \in S'$, take
 $S := S' \cup \{v\}$. In both cases $u$ and $v$ lie on the same side
 of $S$, so redirection does not change which edges cross, and deleted
@@ -108,13 +108,13 @@ $c \ge \lambda(G)$ — the algorithm never undershoots.
 **Lemma 1' (the bridge).** Throughout a run the fibres of the live
 vertices form a partition of $V$ into nonempty parts, and every cut
 $\mathcal{S}$ of the working graph flattens (take the union of the
-fibres of its members) to a cut of $G$ of the *same value*.
+fibres of its members) to a cut of $G$ of the same value.
 Consequently
 $$w(S) = c$$
 on every run and for each returned side $S$: the returned cut has
 exactly the value the run reports.
 
-*Proof.* Induction on the rounds. The base case is the singleton
+Proof. Induction on the rounds. The base case is the singleton
 partition. For the step, contracting $\{u,v\}$ into $w$ replaces the
 parts $rep(u), rep(v)$ by their union (freshness keeps the other
 parts untouched), which preserves the partition property and the
@@ -122,7 +122,7 @@ flattening of any cut. At the end two vertices remain, so by
 Section 2 every cut of the final graph has value equal to its edge
 count. $\blacksquare$
 
-*Proof (of Theorem 1).* By induction on the number of rounds, using Lemma 1: the
+Proof (of Theorem 1). By induction on the number of rounds, using Lemma 1: the
 minimum cut value never decreases under contraction, and at the end
 the output is the value of some cut of the final graph, hence
 $\ge \lambda(\text{final}) \ge \lambda(G)$. (If the edge multiset
@@ -150,13 +150,13 @@ $$\Pr\bigl[w(\mathrm{Karger}(G)) = \lambda(G)\bigr]
 By Lemma 1' it suffices to prove the same bound for the reported
 value $c$, which is what the induction below does.
 
-*Proof.* Fix a minimum cut $S$, $w(S) = \lambda =: c$. We show by
+Proof. Fix a minimum cut $S$, $w(S) = \lambda =: c$. We show by
 induction on $n$ that the $n-2$ contraction rounds avoid all $c$
 crossing edges of $S$ — and then the final two-vertex graph reports
 exactly $c$ — with probability at least $2/(n(n-1))$.
 
-*Base $n = 2$:* no rounds; every edge crosses every cut, so the edge
-count *is* $\lambda(G)$; probability $1 \ge 2/(2\cdot 1)$.
+Base $n = 2$: no rounds; every edge crosses every cut, so the edge
+count is $\lambda(G)$; probability $1 \ge 2/(2\cdot 1)$.
 
 *Step, $n \ge 3$, current graph $G'$ with $\lambda(G') = \lambda$ and
 $m'$ edges:* if $m' = 0$ then $\lambda = 0$ and the output is exact.
@@ -177,7 +177,7 @@ equals $\lambda(G)$ with probability at least
 $$\frac{t(t-1)}{n(n-1)}
  \;=\; \prod_{i=0}^{n-t-1}\Bigl(1 - \frac{2}{n-i}\Bigr).$$
 Theorem 2 is the case $t = 2$; the case $t = \lceil 1 + n/\sqrt2\,\rceil$,
-where the bound is $\ge 1/2$, is the step Karger–Stein recurses on.
+where the bound is $\ge 1/2$, is the step a recursive variant would recurse on.
 
 ## 5. Amplification
 
@@ -193,7 +193,7 @@ $$\Pr\Bigl[\min_{1 \le i \le k} c_i = \lambda(G)\Bigr]
 where $(S_i, c_i)$ is the output of run $i$ and the kept pair is the
 one with smallest $c_i$ (no recomputation: $c_i$ is already there).
 
-*Proof.* Every run outputs a cut, hence a value $\ge \lambda(G)$, so
+Proof. Every run outputs a cut, hence a value $\ge \lambda(G)$, so
 the kept cut has value $\lambda(G)$ iff at least one run achieves it. The runs are independent and each fails with
 probability $\le 1 - p$, so all fail with probability
 $\le (1-p)^k$. $\blacksquare$
@@ -208,7 +208,7 @@ $1 - x \le e^{-x}$.
 $$\mathbb{E}[C(G)] \;\le\; (n-2)\, m,$$
 and $k$ amplified runs cost at most $k (n-2) m$ in expectation.
 
-*Proof.* The loop counts no rounds, so the round bound is derived:
+Proof. The loop counts no rounds, so the round bound is derived:
 under well-formedness each contraction removes exactly one vertex,
 hence at most $n - 2$ rounds run. Contraction never increases the
 edge count, so each round costs at most $m$; sum and take

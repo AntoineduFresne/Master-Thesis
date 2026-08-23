@@ -18,7 +18,7 @@ algorithm. Its output distribution is exactly uniform over the
 permutations of the input: the canonical exact-distribution result
 of the framework's distributional tier.
 
-Like `randBit`/`randVec`, the shuffle is a *sampler*: it consumes
+Like `randBit`/`randVec`, the shuffle is a sampler: it consumes
 randomness but draws no `MonadCost` ticks (`expected_cost_shuffle`),
 so client algorithms (`Treap.randomBST` is the first) pay only for
 their own work.
@@ -211,7 +211,7 @@ lemma expected_cost_shuffle
       (expected_cost_toPMF_bind_pure _ _).trans (ih i)).trans
       (by rw [Finset.sum_const_zero, mul_zero])
 
-/-- The shuffle's *cost law* is the point mass at `0`: it is free on
+/-- The shuffle's cost law is the point mass at `0`: it is free on
 every run, not merely in expectation. -/
 lemma costPMF_shuffle
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]

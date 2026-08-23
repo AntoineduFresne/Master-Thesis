@@ -23,7 +23,7 @@ $\mathrm{QS}(L) : \Omega_L \to \alpha^{n}$.
 
 1. If $L = ()$, return $()$.
 2. Otherwise draw $I \sim \mathrm{Unif}\{0, \dots, |L|-1\}$ and let
-   $p := a_I$ (the *pivot*); let $R$ be $L$ with position $I$ removed.
+   $p := a_I$ (the pivot); let $R$ be $L$ with position $I$ removed.
 3. Partition $R$ into
    $L_{<} := (x \in R : x < p)$ and $L_{\ge} := (x \in R : x \ge p)$,
    preserving order of appearance ($|R| = |L|-1$ comparisons).
@@ -43,7 +43,7 @@ That is, the output distribution is the Dirac measure
 $\delta_{\mathrm{sort}(L)}$: the algorithm is Las Vegas — the
 randomness affects only its running time, never its answer.
 
-*Proof.* By strong induction on $|L|$. For $L = ()$ the algorithm
+Proof. By strong induction on $|L|$. For $L = ()$ the algorithm
 returns $()$ = $\mathrm{sort}(())$ deterministically. For $|L| \ge 1$,
 condition on the pivot index $I = i$; it suffices to show every branch
 returns $\mathrm{sort}(L)$ with probability $1$. Write $p = a_i$, and
@@ -65,7 +65,7 @@ Write $H_n := \sum_{r=1}^{n} 1/r$ for the $n$-th harmonic number.
 of $L$ are pairwise distinct and $|L| = n$, then
 $$\mathbb{E}[C(L)] \;=\; 2(n+1)H_n - 4n .$$
 
-*Proof.* Since only the relative order matters, assume
+Proof. Since only the relative order matters, assume
 $L$ is a permutation of $\{1, \dots, n\}$ and identify each element
 with its rank. For $1 \le i < j \le n$ let $X_{ij}$ be the indicator
 of the event that elements $i$ and $j$ are ever compared. Two elements
@@ -73,7 +73,7 @@ are compared exactly when one of them is chosen as pivot in a call
 whose sublist still contains both — and they are compared at most
 once, so $C(L) = \sum_{i<j} X_{ij}$.
 
-*Claim:* $\Pr[X_{ij} = 1] = \dfrac{2}{j-i+1}$. Consider the set
+Claim: $\Pr[X_{ij} = 1] = \dfrac{2}{j-i+1}$. Consider the set
 $B_{ij} = \{i, i+1, \dots, j\}$ of ranks between $i$ and $j$. As long
 as no element of $B_{ij}$ has been chosen as pivot, all of $B_{ij}$
 stays together in the same sublist (a pivot outside $B_{ij}$ sends the
@@ -99,7 +99,7 @@ comparison, as it must.)*
 **Theorem 3 (quadratic bound, arbitrary lists).** For every list $L$
 (duplicates allowed), $\mathbb{E}[C(L)] \le \binom{n}{2}$.
 
-*Proof.* By strong induction on $n$. The call costs $n - 1$ and
+Proof. By strong induction on $n$. The call costs $n - 1$ and
 recurses on $L_<$ and $L_\ge$ with $|L_<| + |L_\ge| = n - 1$. By the
 induction hypothesis and monotonicity of $\binom{\cdot}{2}$,
 $$\mathbb{E}[C(L)] \le (n-1) + \binom{|L_<|}{2} + \binom{|L_\ge|}{2}
@@ -107,7 +107,7 @@ $$\mathbb{E}[C(L)] \le (n-1) + \binom{|L_<|}{2} + \binom{|L_\ge|}{2}
 using $\binom{a}{2} + \binom{b}{2} \le \binom{a+b}{2}$ (a standard
 convexity fact; proof omitted). $\blacksquare$
 
-*Remark (tightness).* The bound is attained: when all entries are
+Remark (tightness). The bound is attained: when all entries are
 equal, $L_< = ()$ and $L_\ge = R$ in every call, so the cost is
 deterministically $(n-1) + (n-2) + \dots + 1 = \binom{n}{2}$.
 (Observation only — the formalization proves the inequality.)
@@ -119,7 +119,7 @@ deterministically $(n-1) + (n-2) + \dots + 1 = \binom{n}{2}$.
 * $\binom{a}{2} + \binom{b}{2} \le \binom{a+b}{2}$ for all
   $a, b \in \mathbb{N}$.
 
-*Note on Theorem 2.* The pair-indicator argument above is the classical
+Note on Theorem 2. The pair-indicator argument above is the classical
 one. The formalization establishes the same constant
 $2(n+1)H_n - 4n$ by the equivalent route: induction on the
 uniform-pivot recurrence, closed by telescoping the harmonic sums.

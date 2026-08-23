@@ -94,16 +94,13 @@ multiplicity), we have:
   reported side is a genuine cut of the input of exactly the reported
   value, and that value never undershoots the minimum.
 * `success_contractPick`: survival of the minimum cut through partial
-  contraction, the kernel shared with Karger–Stein
+  contraction, stated for an arbitrary stopping target
   (`karger_success_prob` is its `s = 0` value-level corollary).
 * `karger_cost_le`: expected cost at most `(n - 2) * m`, one tick
   per edge scanned.
 * `karger_amplified`: the best of `k` runs succeeds with
   probability at least `1 − (1 − 2/(n(n−1)))^k`.
-The concrete picks (order, labelling, fresh names) and the
-value-level analysis under a bundled `MergeRule` live in
-`DesignDiscussion/`; this file depends only on `Infrastructure` and
-`Helpers`.
+This file depends only on `Infrastructure` and `Helpers`.
 -/
 
 namespace ARA
@@ -195,8 +192,8 @@ def updateRep (rep : α → Finset α) (e : Sym2 α) (w : α) : α → Finset α
 /-- The contraction loop, carrying the report function along: draw a
 uniform edge, contract it into the picked vertex, update the fibre of
 the pick, while `t + 1 ≤ verts.card ∧ 0 < edges.length`. `t` is abstracted
-for future needs: Karger runs with `t = 2` but for example
-Karger–Stein runs `t = ksTarget n`. It terminates since the edge count
+for future needs: Karger runs with `t = 2`, a recursive variant would
+stop earlier. It terminates since the edge count
 drops strictly at each step. Ticks once per scanned edge. -/
 def contractPick {M} [Monad M] [RandMonad M] [MonadCost ℕ M]
     (pick : MultiGraph α → Sym2 α → α) (t : ℕ)
@@ -242,9 +239,8 @@ to satisfy the `Fresh` definition. One can still run the algorithm
 without that assumption, which is why it is the hypothesis of every
 theorem below and of none of the definitions above.
 
-A discussion of the possible picks (order, labelling, fresh names,
-union), and of what each one seems to cost, lives in
-`DesignDiscussion/KargerVariants.lean`. -/
+Which pick to use, and what each choice costs, is discussed in
+`Karger.md`. -/
 
 /-- A demo pick on `ℕ`: merge into one past the largest live vertex.
 It is fresh, the new name exceeding every vertex present. -/
@@ -321,10 +317,10 @@ lemma minCutValue_le_contractAt {pick : MultiGraph α → Sym2 α → α}
 /-- Each element contributes `q`, except those satisfying `p`, which
 contribute nothing: the total is `(length − #p) · q`. -/
 private lemma sum_map_ite_zero {β : Type} (p : β → Prop) [DecidablePred p]
-    (q : ℝ≥0∞) :
+    (q : ENNReal) :
     ∀ l : List β,
       (l.map fun e => if p e then 0 else q).sum =
-        ((l.length - l.countP fun e => decide (p e) : ℕ) : ℝ≥0∞) * q
+        ((l.length - l.countP fun e => decide (p e) : ℕ) : ENNReal) * q
   | [] => by simp
   | e :: l => by
     rw [List.map_cons, List.sum_cons, sum_map_ite_zero p q l]
@@ -350,20 +346,20 @@ which a uniform draw does with probability `(m − c)/m`, carries the
 bound at `k + s + 2` vertices up to the bound at `k + s + 3`. -/
 private lemma step_bound {m c k s N : ℕ} (hm : 0 < m) (hc : c ≤ m)
     (hbound : c * (k + s + 3) ≤ 2 * m) :
-    ((N : ℕ) : ℝ≥0∞) / (((k + s + 3) * (k + s + 2) : ℕ) : ℝ≥0∞) ≤
-      ((m : ℕ) : ℝ≥0∞)⁻¹ *
-        (((m - c : ℕ) : ℝ≥0∞) *
-          (((N : ℕ) : ℝ≥0∞) / (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞))) := by
+    ((N : ℕ) : ENNReal) / (((k + s + 3) * (k + s + 2) : ℕ) : ENNReal) ≤
+      ((m : ℕ) : ENNReal)⁻¹ *
+        (((m - c : ℕ) : ENNReal) *
+          (((N : ℕ) : ENNReal) / (((k + s + 2) * (k + s + 1) : ℕ) : ENNReal))) := by
   obtain ⟨d, rfl⟩ : ∃ d, m = d + c := ⟨m - c, by omega⟩
   rw [Nat.add_sub_cancel]
   -- `(d + c)(k + s + 1) ≤ d(k + s + 3)` from the counting bound.
   have hkey : (d + c) * (k + s + 1) ≤ d * (k + s + 3) := by nlinarith
   -- Rewrite the right-hand side as a single natural fraction.
-  have hrw : (((d + c : ℕ) : ℝ≥0∞))⁻¹ *
-      (((d : ℕ) : ℝ≥0∞) *
-        (((N : ℕ) : ℝ≥0∞) / (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞))) =
-      ((d * N : ℕ) : ℝ≥0∞) /
-        (((d + c) * ((k + s + 2) * (k + s + 1)) : ℕ) : ℝ≥0∞) := by
+  have hrw : (((d + c : ℕ) : ENNReal))⁻¹ *
+      (((d : ℕ) : ENNReal) *
+        (((N : ℕ) : ENNReal) / (((k + s + 2) * (k + s + 1) : ℕ) : ENNReal))) =
+      ((d * N : ℕ) : ENNReal) /
+        (((d + c) * ((k + s + 2) * (k + s + 1)) : ℕ) : ENNReal) := by
     rw [div_eq_mul_inv, div_eq_mul_inv, Nat.cast_mul (d + c), Nat.cast_mul d,
       ENNReal.mul_inv (Or.inl (by exact_mod_cast hm.ne'))
         (Or.inl (ENNReal.natCast_ne_top _))]
@@ -613,7 +609,7 @@ lemma RepTracks.cutValue_rep {g₀ g : MultiGraph α} {rep : α → Finset α}
   · simp [cutValue, hnil]
 
 /-- The run invariant of the pick loop, for an arbitrary stopping
-target `t` (Karger stops at `t = 2`; Karger–Stein at `t = ksTarget n`):
+target `t` (Karger stops at `t = 2`):
 well-formedness, the card window, a genuine end state, monotonicity of
 the edge count and of the minimum-cut value, and tracking. Fuel-free,
 so no card arithmetic is threaded: freshness makes the card drop by
@@ -685,16 +681,15 @@ output lands in `S` (`ARA.Infrastructure.Randomness.Prob`). -/
 /-- Survival of the minimum cut through the loop stopped at `s + 2`
 vertices: the working graph still realizes the original minimum-cut
 value with probability at least `(s+2)(s+1) / (n (n − 1))`. Karger is
-the case `s = 0`; Karger–Stein recurses on `s + 2 = ksTarget n`, where
-the bound is `≥ 1/2`. -/
+the case `s = 0`; a recursive variant would stop at a larger `s + 2`. -/
 theorem success_contractPick
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) (s : ℕ) :
     ∀ (g : MultiGraph α) (rep : α → Finset α), g.WF →
       s + 2 ≤ g.verts.card →
-      (((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
-          ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
+      (((s + 2) * (s + 1) : ℕ) : ENNReal) /
+          ((g.verts.card * (g.verts.card - 1) : ℕ) : ENNReal) ≤
         ℙ_{M}[contractPick pick (s + 2) g rep ∈
           {p | p.1.minCutValue = g.minCutValue}] := by
   intro g rep
@@ -708,7 +703,7 @@ theorem success_contractPick
     -- Fix a minimum cut `S`.
     obtain ⟨S, hS, hSval⟩ := exists_minCut g (by omega)
     -- The branch success probability as a function of the contracted edge.
-    set F : Sym2 α → ℝ≥0∞ := fun e =>
+    set F : Sym2 α → ENNReal := fun e =>
       prob (inst.toPMF (contractPick pick (s + 2)
           (g.contractEdgeTo e (pick g e))
           (updateRep rep e (pick g e)) : M _))
@@ -723,8 +718,8 @@ theorem success_contractPick
     -- Every non-crossing edge contributes at least the recursive bound.
     have hbranch : ∀ e ∈ g.edges,
         (if Crossing S e then 0 else
-          (((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
-            (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞)) ≤ F e := by
+          (((s + 2) * (s + 1) : ℕ) : ENNReal) /
+            (((k + s + 2) * (k + s + 1) : ℕ) : ENNReal)) ≤ F e := by
       intro e he
       by_cases hcr : Crossing S e
       · simp [hcr]
@@ -744,11 +739,11 @@ theorem success_contractPick
     -- Count the non-crossing edges: `m - c` of them.
     have hcount : (g.edges.map fun e =>
         (if Crossing S e then 0 else
-          (((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
-            (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞))).sum =
-        ((g.edges.length - g.cutValue S : ℕ) : ℝ≥0∞) *
-          ((((s + 2) * (s + 1) : ℕ) : ℝ≥0∞) /
-            (((k + s + 2) * (k + s + 1) : ℕ) : ℝ≥0∞)) :=
+          (((s + 2) * (s + 1) : ℕ) : ENNReal) /
+            (((k + s + 2) * (k + s + 1) : ℕ) : ENNReal))).sum =
+        ((g.edges.length - g.cutValue S : ℕ) : ENNReal) *
+          ((((s + 2) * (s + 1) : ℕ) : ENNReal) /
+            (((k + s + 2) * (k + s + 1) : ℕ) : ENNReal)) :=
       sum_map_ite_zero (Crossing S) _ g.edges
     -- Chain the bounds.
     refine le_trans ?_ (mul_le_mul' le_rfl
@@ -778,12 +773,11 @@ theorem success_contractPick
 
 /-! ## Karger's theorem
 
-The *body* of `Karger` is everything after the singleton
+The body of `Karger` is everything after the singleton
 initialisation: the loop at target `2`, then the readout.
 `support_kargerBody` and `success_kargerBody` state what it
 guarantees on any tracked pair; `Karger` consumes them on the
-singleton fibres, Karger–Stein's leaves on their working
-pairs. `karger_isCut` is the cut-level one-sided error, read off the
+singleton fibres. `karger_isCut` is the cut-level one-sided error, read off the
 run invariant; `karger_success_prob` is the value-level survival
 bound; `karger_finds_min` strengthens it to the textbook statement
 along the support, not by re-induction. -/
@@ -806,14 +800,12 @@ theorem support_kargerBody
     ∀ o ∈ 𝒟_{M}[(contractPick pick 2 g rep >>= fun q =>
         pure (q.1.verts.image q.2, q.1.edges.length) :
           M (Finset (Finset α) × ℕ))].support,
-      g₀.IsCutPartition o.1 ∧
-        (∀ S ∈ o.1, g₀.IsCut S ∧ g₀.cutValue S = o.2) ∧
-        g₀.minCutValue ≤ o.2 ∧ g.minCutValue ≤ o.2 := by
+      g₀.IsCutOutput o ∧ g₀.minCutValue ≤ o.2 ∧ g.minCutValue ≤ o.2 := by
   intro o ho
   obtain ⟨q, hq, rfl⟩ := mem_support_toPMF_bind_pure.mp ho
   obtain ⟨hwf', h2', -, hend, -, hmin, ht'⟩ :=
     support_contractPick (M := M) hfresh g₀ 2 le_rfl g rep hwf h2 ht q hq
-  refine ⟨ht'.isCutPartition h2', fun S hS => ?_, ?_, ?_⟩
+  refine ⟨⟨ht'.isCutPartition h2', fun S hS => ?_⟩, ?_, ?_⟩
   · obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hS
     exact ⟨ht'.isCut_rep h2' hx, ht'.cutValue_rep hwf' hend hx⟩
   · obtain ⟨x, hx⟩ := Finset.card_pos.mp (by omega : 0 < q.1.verts.card)
@@ -831,16 +823,15 @@ theorem karger_isCut
     {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
     ∀ o ∈ 𝒟_{M}[Karger pick g].support,
-      g.IsCutPartition o.1 ∧
-        (∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = o.2) ∧ g.minCutValue ≤ o.2 := by
+      g.IsCutOutput o ∧ g.minCutValue ≤ o.2 := by
   intro o ho
   unfold Karger at ho
-  obtain ⟨hpart, hcut, hmin, -⟩ :=
+  obtain ⟨hout, hmin, -⟩ :=
     support_kargerBody hfresh hwf h2 (RepTracks.init g) o ho
-  exact ⟨hpart, hcut, hmin⟩
+  exact ⟨hout, hmin⟩
 
 /-- The value-level survival bound for Karger's body on a tracked
-pair: the reported number is the *current* minimum-cut value with
+pair: the reported number is the current minimum-cut value with
 probability at least `2 / (n (n − 1))`. -/
 theorem success_kargerBody
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -848,12 +839,12 @@ theorem success_kargerBody
     {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) {g : MultiGraph α} {rep : α → Finset α}
     (hwf : g.WF) (h2 : 2 ≤ g.verts.card) (ht : RepTracks g₀ g rep) :
-    (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
+    (2 : ENNReal) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ENNReal) ≤
       ℙ_{M}[(contractPick pick 2 g rep >>= fun q =>
           pure (q.1.verts.image q.2, q.1.edges.length) :
             M (Finset (Finset α) × ℕ)) ∈ {o | o.2 = g.minCutValue}] := by
-  have hmain : (2 : ℝ≥0∞) /
-      ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
+  have hmain : (2 : ENNReal) /
+      ((g.verts.card * (g.verts.card - 1) : ℕ) : ENNReal) ≤
       ℙ_{M}[contractPick pick 2 g rep ∈
         {p | p.1.minCutValue = g.minCutValue}] := by
     simpa using success_contractPick (M := M) hfresh (s := 0) g rep hwf (by omega)
@@ -869,7 +860,7 @@ theorem success_kargerBody
       Nat.le_zero.mp (le_trans (minCutValue_le_length q.1 h2') (le_of_eq hlen))
     rw [hlen, ← hev, hmin0]
 
-/-- A single run *reports the minimum-cut value* with probability at
+/-- A single run reports the minimum-cut value with probability at
 least `2 / (n (n - 1))`, the value-level bound the induction proves;
 `karger_finds_min` below is its cut-level (textbook) form. -/
 theorem karger_success_prob
@@ -877,7 +868,7 @@ theorem karger_success_prob
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     {pick : MultiGraph α → Sym2 α → α}
     (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
+    (2 : ENNReal) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ENNReal) ≤
       ℙ_{M}[Karger pick g ∈ {o | o.2 = g.minCutValue}] :=
   success_kargerBody hfresh hwf h2 (RepTracks.init g)
 
@@ -896,14 +887,14 @@ algorithm happened to report was a minimum cut. -/
 theorem karger_finds_min
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
-    {pick : MultiGraph α → Sym2 α → α}
-    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card) :
-    (2 : ℝ≥0∞) / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞) ≤
-      ℙ_{M}[Karger pick g ∈ {o | g.IsCutPartition o.1 ∧
-          ∀ S ∈ o.1, g.IsCut S ∧ g.cutValue S = g.minCutValue}] := by
+    {pick : MultiGraph α → Sym2 α → α} (hfresh : Fresh pick)
+    (g : MultiGraph α) (hwf : g.WF) {n : ℕ} (hn : n = g.verts.card) (h2 : 2 ≤ n) :
+    (2 : ENNReal) / ((n * (n - 1) : ℕ) : ENNReal) ≤
+      ℙ_{M}[Karger pick g ∈ {o | g.IsMinCutOutput o}] := by
+  subst hn
   refine le_trans (karger_success_prob hfresh g hwf h2)
     (prob_mono_of_support fun o ho hval => ?_)
-  obtain ⟨hpart, hall, -⟩ := karger_isCut hfresh g hwf h2 o ho
+  obtain ⟨⟨hpart, hall⟩, -⟩ := karger_isCut hfresh g hwf h2 o ho
   exact ⟨hpart, fun S hS => ⟨(hall S hS).1, (hall S hS).2.trans hval⟩⟩
 
 /-! ## Complexity
@@ -929,7 +920,7 @@ lemma expected_cost_contractPick
     ∀ (g : MultiGraph α) (rep : α → Finset α), g.WF →
       𝔼_{M}[cost (contractPick pick t g rep :
           TimeMT ℕ M (MultiGraph α × (α → Finset α)))] ≤
-        ((g.verts.card - t : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
+        ((g.verts.card - t : ℕ) : ENNReal) * (g.edges.length : ENNReal) := by
   intro g rep
   induction g, rep using contractPick.induct (pick := pick) (t := t) with
   | case1 g rep h ih =>
@@ -943,7 +934,7 @@ lemma expected_cost_contractPick
         𝔼_{M}[cost (contractPick pick t (contractAt pick g i)
             (updateRep rep g.edges[(i : ℕ)] (pick g g.edges[(i : ℕ)])) :
           TimeMT ℕ M (MultiGraph α × (α → Finset α)))] ≤
-        ((g.verts.card - (t + 1) : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
+        ((g.verts.card - (t + 1) : ℕ) : ENNReal) * (g.edges.length : ENNReal) := by
       intro i
       have hcard := card_verts_contractAt hfresh hwf i
       exact le_trans (ih i (hwf.contractAt pick i))
@@ -951,8 +942,8 @@ lemma expected_cost_contractPick
           (Nat.cast_le.mpr (length_edges_contractAt_lt pick g i).le))
     refine le_trans (add_le_add le_rfl
       (uniform_avg_le_of_forall hbranch h.2.ne')) ?_
-    rw [show ((g.verts.card - t : ℕ) : ℝ≥0∞)
-        = ((g.verts.card - (t + 1) : ℕ) : ℝ≥0∞) + 1 by
+    rw [show ((g.verts.card - t : ℕ) : ENNReal)
+        = ((g.verts.card - (t + 1) : ℕ) : ENNReal) + 1 by
       exact_mod_cast (by omega : g.verts.card - t = g.verts.card - (t + 1) + 1)]
     rw [add_mul, one_mul, add_comm]
   | case2 g rep h =>
@@ -964,13 +955,14 @@ lemma expected_cost_contractPick
 With one tick per edge scanned during a contraction pass, a run on a
 well-formed graph with `n` vertices and `m` edges costs at most
 `(n - 2) * m` in expectation, the fuel-free counterpart of
-`kargerVia_cost_le`. -/
+the fuel-free counterpart of the bounded-round analysis. -/
 theorem karger_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {pick : MultiGraph α → Sym2 α → α}
-    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) :
-    𝔼_{M}[cost Karger pick g] ≤
-      ((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞) := by
+    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF)
+    {n m : ℕ} (hn : n = g.verts.card) (hm : m = g.edges.length) :
+    𝔼_{M}[cost Karger pick g] ≤ ((n - 2 : ℕ) : ENNReal) * (m : ENNReal) := by
+  subst hn; subst hm
   unfold Karger
   rw [expected_cost_toPMF_bind_pure]
   exact expected_cost_contractPick hfresh 2 g _ hwf
@@ -984,18 +976,19 @@ lemma expected_cost_karger_ne_top
     𝔼_{M}[cost Karger pick g] ≠ ⊤ :=
   ne_top_of_le_ne_top
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
-    (karger_cost_le hfresh g hwf)
+    (karger_cost_le hfresh g hwf rfl rfl)
 
 /-- Real-valued corollary: the expected cost is at most `(n - 2) * m`. -/
 theorem karger_cost_le_real
     {M} [Monad M] [LawfulMonad M] [LawfulRandMonad M]
     {pick : MultiGraph α → Sym2 α → α}
-    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) :
-    𝔼ℝ_{M}[cost Karger pick g] ≤
-      ((g.verts.card - 2 : ℕ) : ℝ) * (g.edges.length : ℝ) := by
+    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF)
+    {n m : ℕ} (hn : n = g.verts.card) (hm : m = g.edges.length) :
+    𝔼ℝ_{M}[cost Karger pick g] ≤ ((n - 2 : ℕ) : ℝ) * (m : ℝ) := by
+  subst hn; subst hm
   have := ENNReal.toReal_mono
     (ENNReal.mul_ne_top (ENNReal.natCast_ne_top _) (ENNReal.natCast_ne_top _))
-    (karger_cost_le (M := M) hfresh g hwf)
+    (karger_cost_le (M := M) hfresh g hwf rfl rfl)
   rw [ENNReal.toReal_mul, ENNReal.toReal_natCast, ENNReal.toReal_natCast] at this
   exact this
 
@@ -1018,13 +1011,15 @@ theorem karger_amplified
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M]
     {pick : MultiGraph α → Sym2 α → α}
-    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) (h2 : 2 ≤ g.verts.card)
-    (k : ℕ) :
-    1 - (1 - 2 / ((g.verts.card * (g.verts.card - 1) : ℕ) : ℝ≥0∞)) ^ k ≤
+    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF)
+    {n : ℕ} (hn : n = g.verts.card) (h2 : 2 ≤ n) (k : ℕ) :
+    1 - (1 - 2 / ((n * (n - 1) : ℕ) : ENNReal)) ^ k ≤
       ℙ_{M}[amplify (argmin Prod.snd) k (Karger pick g)
-          ∈ {o | o.2 = g.minCutValue}] :=
+          ∈ {o | o.2 = g.minCutValue}] := by
+  subst hn
+  exact
   amplify_argmin_success
-    (fun o ho => (karger_isCut hfresh g hwf h2 o ho).2.2)
+    (fun o ho => (karger_isCut hfresh g hwf h2 o ho).2)
     (karger_success_prob hfresh g hwf h2) k
 
 /-- Amplified cost: `k + 1` runs cost at most `k + 1` times the
@@ -1032,10 +1027,11 @@ single-run bound `(n − 2) m`. -/
 theorem karger_amplified_cost_le
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     {pick : MultiGraph α → Sym2 α → α}
-    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF) (k : ℕ) :
+    (hfresh : Fresh pick) (g : MultiGraph α) (hwf : g.WF)
+    {n m : ℕ} (hn : n = g.verts.card) (hm : m = g.edges.length) (k : ℕ) :
     𝔼_{M}[cost amplify (argmin Prod.snd) (k + 1) (Karger pick g)] ≤
-      (k + 1 : ℝ≥0∞) *
-        (((g.verts.card - 2 : ℕ) : ℝ≥0∞) * (g.edges.length : ℝ≥0∞)) := by
+      (k + 1 : ENNReal) * (((n - 2 : ℕ) : ENNReal) * (m : ENNReal)) := by
+  subst hn; subst hm
   rw [expected_cost_amplify]
-  exact mul_le_mul' le_rfl (karger_cost_le hfresh g hwf)
+  exact mul_le_mul' le_rfl (karger_cost_le hfresh g hwf rfl rfl)
 end ARA

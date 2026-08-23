@@ -5,8 +5,8 @@
 Let $R$ be a commutative ring that is an integral domain, and let
 $P \in R[X_1, \dots, X_n]$ be a multivariate polynomial. Decide
 whether $P$ is the zero polynomial — given only the ability to
-*evaluate* $P$ at chosen points. Deterministically this can require
-exponentially many evaluations; we allow a **Monte-Carlo** tester
+evaluate $P$ at chosen points. Deterministically this can require
+exponentially many evaluations; we allow a Monte-Carlo tester
 with one-sided error: it must always accept the zero polynomial, and
 accept a nonzero one with probability at most $d/|S|$, where $d$ is
 the total degree of $P$ and $S$ a chosen finite evaluation set.
@@ -35,7 +35,7 @@ wholesale: cost exactly $1$ oracle call, deterministically.
 ## 3. Correctness
 
 **Theorem 1 (completeness).** If $P = 0$ the algorithm accepts with
-probability $1$. *Proof.* $P(r) = 0$ for every $r$. $\blacksquare$
+probability $1$. Proof. $P(r) = 0$ for every $r$. $\blacksquare$
 
 **Theorem 2 (Schwartz–Zippel; soundness).** If $P \ne 0$ has total
 degree $d$, then
@@ -43,12 +43,12 @@ $$\Pr_{r \sim \mathrm{Unif}(S^n)}\bigl[P(r) = 0\bigr]
  \;=\; \frac{\#\{r \in S^n : P(r) = 0\}}{|S|^n}
  \;\le\; \frac{d}{|S|} .$$
 
-*Proof.* By induction on the number of variables $n$.
+Proof. By induction on the number of variables $n$.
 
-*Base $n = 0$:* a nonzero constant never evaluates to $0$; the
+Base $n = 0$: a nonzero constant never evaluates to $0$; the
 left-hand side is $0$.
 
-*Step:* write $P$ as a polynomial in $X_n$ with coefficients in
+Step: write $P$ as a polynomial in $X_n$ with coefficients in
 $R[X_1, \dots, X_{n-1}]$:
 $$P = \sum_{i=0}^{k} P_i(X_1, \dots, X_{n-1})\, X_n^i,
  \qquad P_k \ne 0,$$

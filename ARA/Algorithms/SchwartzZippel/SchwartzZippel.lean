@@ -27,7 +27,7 @@ The sampler is `randVecOn S n` from `ARA.Infrastructure.Randomness.RandVec`
 probability into a grid count). The mathematical core, the
 Schwartz–Zippel counting bound, comes from Mathlib
 (`MvPolynomial.schwartz_zippel_totalDegree`, stated in `ℚ≥0`); the
-bridge to the framework's `ℝ≥0∞` probabilities is a single
+bridge to the framework's `ENNReal` probabilities is a single
 cross-multiplication (`ennreal_div_le_div_nat`).
 
 ## Main results
@@ -40,7 +40,7 @@ point is uniform on the grid `Sⁿ`), we have:
   at most `P.totalDegree / #S`, over any integral domain.
 * `schwartzZippel_cost_exact`: exactly one (wholesale-ticked)
   polynomial evaluation per run, and `schwartzZippel_costPMF`, the
-  cost *law* is the point mass at `1`: deterministic, not just in
+  cost law is the point mass at `1`: deterministic, not just in
   expectation.
 -/
 
@@ -86,7 +86,7 @@ theorem schwartzZippel_complete
     (ENNReal.pow_ne_top (ENNReal.natCast_ne_top _))
 
 /-- Soundness (Schwartz–Zippel). Over an integral domain, a
-*nonzero* polynomial is accepted with probability at most
+nonzero polynomial is accepted with probability at most
 `totalDegree / #S`: one-sided error, tunable via the size of the
 evaluation set. -/
 theorem schwartzZippel_sound [IsDomain R]
@@ -95,7 +95,7 @@ theorem schwartzZippel_sound [IsDomain R]
     {P : MvPolynomial (Fin n) R} (hP : P ≠ 0) (S : Finset R)
     (hS : S.Nonempty) :
     ℙ_{M}[schwartzZippel P S hS = true] ≤
-      (P.totalDegree : ℝ≥0∞) / (S.card : ℝ≥0∞) := by
+      (P.totalDegree : ENNReal) / (S.card : ENNReal) := by
   rw [schwartzZippel, toPMF_tick_bind, toPMF_randVecOn_true]
   -- Align the accepting count with Mathlib's Schwartz–Zippel form.
   rw [show ((Fintype.piFinset fun _ : Fin n => S).filter
@@ -103,7 +103,7 @@ theorem schwartzZippel_sound [IsDomain R]
       (Fintype.piFinset fun _ : Fin n => S).filter
         fun f => MvPolynomial.eval f P = 0 from
     Finset.filter_congr fun f _ => by simp]
-  -- Mathlib's `ℚ≥0` bound crosses to `ℝ≥0∞` in one bridge call.
+  -- Mathlib's `ℚ≥0` bound crosses to `ENNReal` in one bridge call.
   have h := ennreal_div_le_div_of_nnrat (pow_pos hS.card_pos n) hS.card_pos
     (by exact_mod_cast MvPolynomial.schwartz_zippel_totalDegree hP S)
   rw [Nat.cast_pow] at h
@@ -120,7 +120,7 @@ theorem schwartzZippel_cost_exact
   rw [schwartzZippel]
   cost_step
 
-/-- Deterministic cost. The cost law is a point mass: *every* run
+/-- Deterministic cost. The cost law is a point mass: every run
 costs exactly one evaluation, not merely one on average. -/
 theorem schwartzZippel_costPMF
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
@@ -142,7 +142,7 @@ theorem schwartzZippel_sound_pmf [IsDomain R]
     {P : MvPolynomial (Fin n) R} (hP : P ≠ 0) (S : Finset R)
     (hS : S.Nonempty) :
     (schwartzZippel P S hS : PMF Bool) true ≤
-      (P.totalDegree : ℝ≥0∞) / (S.card : ℝ≥0∞) :=
+      (P.totalDegree : ENNReal) / (S.card : ENNReal) :=
   schwartzZippel_sound (M := PMF) hP S hS
 
 end ARA

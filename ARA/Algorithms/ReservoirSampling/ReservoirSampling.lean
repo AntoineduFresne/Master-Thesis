@@ -153,13 +153,14 @@ private lemma toPMF_reservoirAux
 /-- Correctness (exact uniformity). For any `LawfulRandMonad`, each
 element of `L` is returned with probability `count a / |L|`; on a
 distinct list, every element has probability exactly `1/n`. Note the
-statement is about the *whole distribution*, not a point mass. -/
+statement is about the whole distribution, not a point mass. -/
 theorem reservoir_correct
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M]
     [MonadCost ℕ M] [LawfulMonadCost ℕ M] [DecidableEq α]
     (L : List α) (a : α) :
     ℙ_{M}[reservoir L = some a] =
-      (L.count a : ENNReal) / (L.length : ENNReal) := by
+      (L.count a : ENNReal) /
+    (L.length : ENNReal) := by
   cases L with
   | nil =>
     rw [reservoir.eq_1, inst.toPMF_pure, pmf_pure_eq, PMF.pure_apply]
@@ -256,7 +257,7 @@ theorem reservoir_correct_pmf [DecidableEq α] (L : List α) (a : α) :
       (L.count a : ENNReal) / (L.length : ENNReal) :=
   reservoir_correct (M := PMF) L a
 
-/-- The streaming loop's cost *law* is the point mass at the number of
+/-- The streaming loop's cost law is the point mass at the number of
 elements processed: one tick per element, on every run. -/
 private lemma costPMF_reservoirAux
     {M} [Monad M] [LawfulMonad M] [inst : LawfulRandMonad M] :

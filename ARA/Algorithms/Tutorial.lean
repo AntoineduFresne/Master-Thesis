@@ -100,13 +100,14 @@ The reader is encouraged to read those after this tutorial.
   asking yourself how it is even related to a monad. But it is a precise
   notion, and it is defined at the two following levels.
 
-  At the level of the code, we define a source of randomness to "simply"
+  At the level of the code, we define a random monad to "simply"
   be a monad `M`, not necessarily a lawful one, equipped with one
   operation and nothing more:
 
   - `randFin (n : ℕ) [NeZero n] : M (Fin n)`.
 
-  This is the class `RandMonad`, in
+  That one operation is the "source of randomness" of `M`. This is the
+  class `RandMonad`, in
   `ARA/Infrastructure/Randomness/LawfulRandMonad.lean`. Observe what
   it does not say: the draw need not be uniform, nor even that it is
   random. It says that `M` is able to make a finite choice. One
@@ -166,13 +167,14 @@ The reader is encouraged to read those after this tutorial.
   The first two axioms say exactly that `toPMF` is more than a function:
   it is a morphism of monads; the third calibrates it on the primitive.
 
-  So "source of randomness" carries two definitions, one per level, and
-  we use both:
+  So the notion carries two definitions, one per level, and we use
+  both:
 
-  > at the level of the code, a "source of randomness" is a monad `M`
-  > with a primitive function `randFin`. This is `RandMonad`.
+  > at the level of the code, a "random monad" is a monad `M` with a
+  > primitive function `randFin`, its "source of randomness". This is
+  > `RandMonad`.
   >
-  > at the level of the mathematics, a "source of randomness" is a
+  > at the level of the mathematics, a "lawful random monad" is a
   > lawful monad `M` with `randFin`, equipped with a monad morphism
   > into the `PMF` monad that sends this primitive draw to the
   > uniform distribution. This is `LawfulRandMonad`.
@@ -250,7 +252,7 @@ The reader is encouraged to read those after this tutorial.
   it says nothing about what a tick means. The meaning is supplied by
   the class `LawfulMonadCost C M`, in
   `ARA/Infrastructure/Complexity/TimedSemantics.lean`. It presupposes
-  that `M` is a lawful source of randomness, so that `toPMF` is
+  that `M` is a lawful random monad, so that `toPMF` is
   available, and it comes with an axiom:
 
   - `toPMF (tick c) = PMF.pure ()` (for all `c : C`).
@@ -263,8 +265,8 @@ The reader is encouraged to read those after this tutorial.
   > at the level of the code, a cost model is a monad `M` with a
   > primitive function `tick`. This is `MonadCost`.
   >
-  > at the level of the mathematics, it is a lawful source of
-  > randomness `M`, so a `LawfulRandMonad`, with `tick`, which the
+  > at the level of the mathematics, it is a lawful random monad
+  > `M`, so a `LawfulRandMonad`, with `tick`, which the
   > monad morphism into the `PMF` monad sends to the point mass on
   > `()`. This is `LawfulMonadCost`.
 
@@ -730,7 +732,7 @@ private lemma listMax_branch (L : List α) (i : ℕ) (h : i < L.length) :
   same pattern. In each of them:
 
   - `M` is the monad at which we read the algorithm, a lawful
-    source of randomness, typically `PMF`;
+    random monad, typically `PMF`;
   - `e` is the algorithm itself, that is a term of type `M α`, for
     instance `RandMax L` or `RandMember x L`;
   - `v` is one possible output of it, a term of type `α`, for
@@ -758,7 +760,7 @@ private lemma listMax_branch (L : List α) (i : ℕ) (h : i < L.length) :
     `𝒟_{M}[e]` applied to the point `v`. So the two notations are the
     same object seen twice: `𝒟` is the whole distribution, `ℙ` is that
     distribution read at one value, and is therefore a number in
-    `ℝ≥0∞`.
+    `ENNReal`.
 
   - `ℙ_{M}[e ∈ S]` is the same thing for an event rather than a single
     value. It expands to `prob 𝒟_{M}[e] S`, where
@@ -803,7 +805,7 @@ private lemma listMax_branch (L : List α) (i : ℕ) (h : i < L.length) :
     ```
 
     averages the `time` field of the pair and ignores the value. The
-    result is a number in `ℝ≥0∞`. It is defined in
+    result is a number in `ENNReal`. It is defined in
     `ARA/Infrastructure/Complexity/ExpectedCost.lean` and used from
     Step 6 on.
 
@@ -814,7 +816,7 @@ private lemma listMax_branch (L : List α) (i : ℕ) (h : i < L.length) :
     is the same `prob` as in the output notations above, applied this
     time to the joint law and to an event that only looks at the
     `time` component: the set of pairs whose cost is greater than `k`.
-    It is therefore again a number in `ℝ≥0∞`. Similarly
+    It is therefore again a number in `ENNReal`. Similarly
     `ℙ[cost m ≥ k]` expands to `prob (TimedPMF m) {tm | k ≤ tm.time}`.
     They are defined in `ARA/Infrastructure/Complexity/TailBounds.lean`,
     and Step 8 bounds the strict one with `runtime_markov_gt` and the
@@ -907,7 +909,7 @@ private lemma listMax_branch (L : List α) (i : ℕ) (h : i < L.length) :
     `expected_cost_amplify` is stated at `k + 1` instead:
 
     ```
-    𝔼[cost amplify best (k + 1) m] = (k + 1 : ℝ≥0∞) * 𝔼[cost m]
+    𝔼[cost amplify best (k + 1) m] = (k + 1 : ENNReal) * 𝔼[cost m]
     ```
 
     Lastly, `(· || ·)` is Lean's shorthand for
@@ -1302,7 +1304,7 @@ theorem randMember_amplified
     1 - (1 - p) ^ k ≤ ℙ_{M}[amplify (· || ·) k (RandMember x L) = true] :=
   amplify_or_success hp k
 
--- done until here
+-- done until here (the "human" reading: to be continued)
 
 /-!
 ## Step 6: expected cost
@@ -1313,7 +1315,7 @@ theorem randMember_amplified
   `TimeMT ℕ M`, takes the distribution of the (output, cost) pair,
   and averages the cost component.
 
-  Costs live in `ℝ≥0∞`, which is why no summability side condition
+  Costs live in `ENNReal`, which is why no summability side condition
   ever appears: every sum converges, possibly to `∞`, and a proof
   never has to stop to justify itself. Descend to `ℝ` with `toReal`
   at the very end, and only if the closed form needs subtraction (see
@@ -1322,16 +1324,16 @@ theorem randMember_amplified
   The three toys show the three shapes a cost proof takes. `RandMax`
   recurses, so it needs the full pattern, one lemma per stage:
 
-  - the *branch cost*, by `cost_step`. The tactic peels the `TimeMT`
+  - the branch cost, by `cost_step`. The tactic peels the `TimeMT`
     combinators one at a time: a `tick t` contributes `t`, a `pure`
     contributes `0`, a `bind` adds the two. The trailing
     `return max L[i] m` is therefore free, and the branch costs
     `1 + 𝔼[cost RandMax (L.eraseIdx i)]`.
-  - the *recurrence*, by `expected_cost_uniform_step'`. This is the
+  - the recurrence, by `expected_cost_uniform_step'`. This is the
     one place where uniformity of the draw is used: the cost of
     "draw an index, then run the branch" is the uniform average of
     the branch costs, `E(n) = (1/n) Σᵢ (1 + E(n-1))`.
-  - the *closed form*, by induction along `RandMax.induct`, the
+  - the closed form, by induction along `RandMax.induct`, the
     functional-induction principle Lean derives from the definition
     itself. Its cases are the algorithm's cases, so the induction can
     never drift out of step with the recursion. Here every branch
@@ -1433,7 +1435,7 @@ theorem randPick_cost_zero
   determinism.
 
   `RandMax` ticks once per round and never stops early, so it performs
-  exactly `n` comparisons on *every* run, not merely on average. The
+  exactly `n` comparisons on every run, not merely on average. The
   theorem below says precisely that: the cost distribution is a point
   mass at `L.length`. Its proof follows the same skeleton as the
   expected cost (induct along `RandMax.induct`, peel one draw), but
@@ -1466,7 +1468,7 @@ theorem randMax_costPMF
 ## Step 8: a tail bound, for free
 
 8. Markov's inequality turns any expected-cost theorem into a
-  statement about how often the cost is *large*, and the framework
+  statement about how often the cost is large, and the framework
   applies it for you: no induction, no new lemma, one rewrite.
 
   `runtime_markov_gt` is stated in the strict form
@@ -1499,7 +1501,7 @@ theorem randMax_cost_tail
 ## Step 9: averaging something that is not a cost
 
 9. Not every expectation is a running time. When the quantity to
-  average is a function of the *output*, the height of a random
+  average is a function of the output, the height of a random
   tree, the size of a random cut, the tool is `expVal`, with the
   same `pure`/`bind`/uniform decomposition API as expected cost
   applied to the output instead of the clock. It sits one layer below
@@ -1578,14 +1580,14 @@ uniform average of the branch probabilities. `FisherYates` uses it.
 
 Step 5d repeats a run `k` times and never says what that costs.
 `expected_cost_amplify` says it: `k + 1` runs cost `k + 1` times one
-run. `Karger` and `KargerStein` use it to turn a success bound and a
-cost bound into the two bounds of the amplified algorithm.
+run. `Karger` uses it to turn a success bound and a cost bound into
+the two bounds of the amplified algorithm.
 
 ### Second moments
 
 Step 8 stops at the first moment.
 `ARA/Infrastructure/Complexity/Variance.lean` carries the second:
-`variance`, written with `absSub` (notation `⊖`) because `ℝ≥0∞` has no
+`variance`, written with `absSub` (notation `⊖`) because `ENNReal` has no
 subtraction, the classical identity `variance_eq_sub`
 (`Var[g] = E[g²] − E[g]²`), and `chebyshev`
 (`ℙ(|g − E[g]| ≥ k) ≤ Var[g] / k²`). Its cost form is
@@ -1596,7 +1598,7 @@ alone gives too weak a tail.
 
 A `PMF` has total mass `1`, so a computation that terminates only
 almost surely does not fit in one.
-`ARA/Infrastructure/Randomness/SPMF.lean` opens that door with
+`ARA/FutureWork/SPMF.lean` opens that door with
 `SPMF := OptionT PMF`, whose `mass` is the termination probability.
 `RetryMonad` provides the loop, `retry_run_some_of_good` and
 `retry_run_some_of_not_good` give its output law, and
@@ -1627,7 +1629,7 @@ program, so that file states its cost law directly, composing
   reindex the recurrence sum by the rank of that element, with
   `nodup_partition_sum₂`. See the exact cost proofs of `Quicksort` and
   `Quickselect`.
-* Upper bounds instead of exact formulas. Stay in `ℝ≥0∞` and close with
+* Upper bounds instead of exact formulas. Stay in `ENNReal` and close with
   `uniform_avg_le`; finiteness then follows from the bound itself, and
   `toReal_uniform_avg` descends to `ℝ`. See
   `quickselect_cost_le_quadratic`.
@@ -1642,9 +1644,9 @@ program, so that file states its cost law directly, composing
   which is what `treap_expected_height_le` actually runs on.
 * `runtime_markov`, the `≥` form of the tail bound of Step 8.
 * `mem_support_timedPMF`, which carries a support invariant proved at
-  an abstract `M` into the timed reading. `KargerStein` uses it.
+  an abstract `M` into the timed reading.
 
-### The ten case studies
+### The nine case studies
 
 Each file of `ARA/Algorithms` is a worked example, and together they
 cover the tiers this tutorial only sketches:
@@ -1655,8 +1657,6 @@ cover the tiers this tutorial only sketches:
   and an upper bound next to the exact formula.
 * `Karger`: the full Monte Carlo stack on a real algorithm: support,
   success probability, amplification and cost.
-* `KargerStein`: recursion on top of amplification, with
-  `expected_cost_amplify` and `mem_support_timedPMF`.
 * `Freivalds`: the bit-vector sampler, one-sided error, and a cost
   that is the same on every run.
 * `SchwartzZippel`: the grid sampler, with the same three statements.

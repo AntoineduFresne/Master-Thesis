@@ -43,7 +43,7 @@ where $[\,\cdot\,]$ is the Iverson bracket: the held element carries
 weight $s$, every remaining element carries weight $1$ (per
 occurrence), normalized by the total $s + r$.
 
-*Proof.* Induction on $r$. For $r = 0$ the claim reads
+Proof. Induction on $r$. For $r = 0$ the claim reads
 $\Pr[\mathrm{cur} = y] = [y = c]$, true deterministically. Step: the
 next element $x_1$ is adopted with probability $\tfrac{1}{s+1}$ and
 rejected with probability $\tfrac{s}{s+1}$; in both cases the loop
@@ -63,7 +63,7 @@ and $\Pr[\mathrm{Res}(L) = \bot] = 0$. In particular, for pairwise
 distinct entries, every member of $L$ is output with probability
 exactly $1/n$.
 
-*Proof.* Apply the invariant with $s = 1$, $c = a_0$, remaining
+Proof. Apply the invariant with $s = 1$, $c = a_0$, remaining
 stream $a_1, \dots, a_{n-1}$: the weight of $a$ is
 $[a = a_0] + \#\{i \ge 1 : a_i = a\} = \#\{i : a_i = a\}$ over the
 total $1 + (n-1) = n$. The algorithm always holds some stream
@@ -75,5 +75,5 @@ element, so $\bot$ is never returned. $\blacksquare$
 draws on a list of length $n \ge 1$ (and $0$ on the empty list): a
 single pass, deterministically.
 
-*Proof.* One draw per loop iteration, one iteration per element after
+Proof. One draw per loop iteration, one iteration per element after
 the first. $\blacksquare$

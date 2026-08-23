@@ -54,8 +54,15 @@ variable {α : Type} [LinearOrder α] [Inhabited α]
 
 /-- The `k`-th order statistic of `L` (0-indexed): the `k`-th element
 of the sorted list, with `default` as out-of-range default. This is the
-specification `Quickselect` must meet. -/
-def orderStat (L : List α) (k : ℕ) : α := (L.mergeSort (· ≤ ·)).getD k default
+specification `Quickselect` must meet.
+
+`sortSpec L` is the sorted list of `L` (`ARA.Helpers.Partition`), a
+definite description built from `SortedLE`, so this reads as "the
+`k`-th smallest element of `L`" — which is how `Quickselect.md` states
+the problem. `sortSpec` is noncomputable and so is `orderStat`; neither
+is ever run, only proved equal to what `Quickselect` returns. -/
+noncomputable def orderStat (L : List α) (k : ℕ) : α :=
+  (sortSpec L).getD k default
 
 /-! ## Algorithm -/
 
@@ -152,7 +159,7 @@ private lemma quickselect_eq_bind
 /-!
 ### Order-statistic case lemmas
 
-By `mergeSort_partition` (from `ARA.Helpers.Partition`), the sorted
+By `sortSpec_partition` (from `ARA.Helpers.Partition`), the sorted
 version of `L` splits around any pivot as
 `sorted(< pivot) ++ [pivot] ++ sorted(≥ pivot)`, so the order statistic
 of `L` reduces to the order statistic of one side. All three case
@@ -169,8 +176,8 @@ private lemma orderStat_lt_branch (L : List α) (i : ℕ) (hi : i < L.length)
     {k : ℕ} (hk : k < ((L.eraseIdx i).filter (· < L[i])).length) :
     orderStat ((L.eraseIdx i).filter (· < L[i])) k = orderStat L k := by
   symm
-  have h := (mergeSort_partition L ⟨i, hi⟩).symm
-  simp only [Fin.getElem_fin] at h
+  have h := (sortSpec_partition L ⟨i, hi⟩).symm
+  simp only [Fin.getElem_fin, pivotLT, pivotGE] at h
   unfold orderStat
   -- Index `k` lands inside the first block of the split sorted list.
   rw [h, List.append_assoc, List.getD_append _ _ _ _ (by simpa using hk)]
@@ -182,8 +189,8 @@ syntactically. -/
 @[spec_transport]
 private lemma orderStat_eq_branch (L : List α) (i : ℕ) (hi : i < L.length) :
     orderStat L ((L.eraseIdx i).filter (· < L[i])).length = L[i] := by
-  have h := (mergeSort_partition L ⟨i, hi⟩).symm
-  simp only [Fin.getElem_fin] at h
+  have h := (sortSpec_partition L ⟨i, hi⟩).symm
+  simp only [Fin.getElem_fin, pivotLT, pivotGE] at h
   unfold orderStat
   -- Index `k` lands exactly on the singleton `[pivot]` block.
   rw [h, List.append_assoc,
@@ -202,24 +209,24 @@ private lemma orderStat_gt_branch (L : List α) (i : ℕ) (hi : i < L.length)
       orderStat L k := by
   have hk : ((L.eraseIdx i).filter (· < L[i])).length < k := by omega
   symm
-  have h := (mergeSort_partition L ⟨i, hi⟩).symm
-  simp only [Fin.getElem_fin] at h
+  have h := (sortSpec_partition L ⟨i, hi⟩).symm
+  simp only [Fin.getElem_fin, pivotLT, pivotGE] at h
   unfold orderStat
   -- Index `k` lands in the last block; subtract the first block's length…
   rw [h, List.append_assoc,
-    List.getD_append_right _ _ _ _ (by simp only [List.length_mergeSort]; omega)]
+    List.getD_append_right _ _ _ _ (by simp only [length_sortSpec]; omega)]
   rw [List.singleton_append]
   -- …and one more for the pivot.
-  have hidx : k - ((((L.eraseIdx i).filter (· < L[i])).mergeSort (· ≤ ·))).length =
+  have hidx : k - (sortSpec ((L.eraseIdx i).filter (· < L[i]))).length =
       (k - ((L.eraseIdx i).filter (· < L[i])).length - 1) + 1 := by
-    simp only [List.length_mergeSort]; omega
+    simp only [length_sortSpec]; omega
   rw [hidx, List.getD_cons_succ]
 
 /-!
 ### Generic correctness theorem
 
 Stated over any lawful cost model (`LawfulMonadCost`), so the one
-theorem covers the cost-free *and* the timed readings.
+theorem covers the cost-free and the timed readings.
 -/
 
 /-- For any `LawfulRandMonad` and any lawful cost model,
@@ -243,7 +250,7 @@ theorem quickselect_correct_pmf (L : List α) (k : ℕ) :
 
 /-- Timed PMF correctness for free: `TimeMT ℕ PMF` is itself a lawful
 random monad (`instLawfulRandMonadTimeMT`), so the generic theorem
-instantiates directly, since erasing the clock *is* its `toPMF`. -/
+instantiates directly, since erasing the clock is its `toPMF`. -/
 theorem quickselect_correct_timed_pmf (L : List α) (k : ℕ) :
     𝒟_{TimeMT ℕ PMF}[Quickselect L k] = PMF.pure (orderStat L k) :=
   quickselect_correct (M := TimeMT ℕ PMF) L k
@@ -268,7 +275,7 @@ functional induction on `Quickselect`:
   turns the sum over pivots into Knuth's (1971) bivariate harmonic
   closed form (`quickselect_cost_exact`).
 
-The upper bounds are stated in `ℝ≥0∞`, where no summability
+The upper bounds are stated in `ENNReal`, where no summability
 bookkeeping is needed; the exact formula descends to `ℝ` via `toReal`,
 with finiteness supplied by the `C(n,2)` bound.
 -/
@@ -333,7 +340,7 @@ The linear bound below needs distinct elements: on an all-equal list
 the `≥`-side keeps every duplicate, so selecting rank `n-1` degenerates
 to `T(n) = (n-1) + T(n-1) = C(n,2)`. That worst case is itself an upper
 bound for every list and rank, by the same argument as for `Quicksort`.
-Its `ℝ≥0∞` form also provides finiteness of the expected cost for free.
+Its `ENNReal` form also provides finiteness of the expected cost for free.
 -/
 
 /-- For an arbitrary list (possibly
@@ -478,7 +485,7 @@ when the pivot rank `r` exceeds `k`, stops at `r = k`, and enters the
 `n·C(n,k) = n(n−1) + Σ_{r=k+1}^{n−1} C(r,k) + Σ_{s=0}^{k−1} C(n−k+s, s)`
 
 (the second sum reindexed by `s := k−1−r`). Its solution (Knuth 1971,
-*Mathematical analysis of algorithms*) is the bivariate harmonic
+Mathematical analysis of algorithms) is the bivariate harmonic
 closed form `expected_qsel_cost` below. Each partial sum telescopes
 against an explicit closed form by a one-variable induction
 (`qsel_sumA`, `qsel_sumB`), phrased via the ℕ-subtraction-free

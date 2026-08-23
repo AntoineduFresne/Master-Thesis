@@ -40,7 +40,7 @@ The output distribution is the Dirac measure at the $k$-th order
 statistic (Las Vegas; for $k \ge n$ both sides are the default
 element by convention).
 
-*Proof.* Strong induction on $|L|$. The empty case is the convention.
+Proof. Strong induction on $|L|$. The empty case is the convention.
 Otherwise condition on the pivot position; with $p$, $L_<$, $L_\ge$,
 $j = |L_<|$ as above, $\mathrm{sort}(L) = \mathrm{sort}(L_<)
 \mathbin{+\!\!+} (p) \mathbin{+\!\!+} \mathrm{sort}(L_\ge)$ (as in the
@@ -63,12 +63,12 @@ $L$ are pairwise distinct, $|L| = n$, and $k < n$, then
 $$\mathbb{E}[C(L,k)] \;=\;
   2\Bigl(n + 3 + (n+1)H_n - (k+3)H_{k+1} - (n+2-k)H_{n-k}\Bigr).$$
 
-*Proof.* Identify elements with their ranks $1, \dots, n$ and let
+Proof. Identify elements with their ranks $1, \dots, n$ and let
 $t := k + 1$ be the one-indexed target rank. For $1 \le i < j \le n$
 let $X_{ij}$ indicate that ranks $i$ and $j$ are ever compared, so
 $C = \sum_{i<j} X_{ij}$.
 
-*Claim.* With $m := \min(i, t)$ and $M := \max(j, t)$:
+Claim. With $m := \min(i, t)$ and $M := \max(j, t)$:
 $$\Pr[X_{ij} = 1] = \frac{2}{M - m + 1}.$$
 Consider the block $B = \{m, \dots, M\}$ of ranks between (the
 extremes of) $i, j, t$. As long as no pivot falls in $B$, the entire
@@ -88,7 +88,7 @@ $\sum r H_r$ (stated below) yields the closed form. We omit the
 routine summation; the resulting polynomial-harmonic expression is
 exactly the displayed formula. $\blacksquare$
 
-*Note on Theorem 2.* The block/indicator argument above is the
+Note on Theorem 2. The block/indicator argument above is the
 classical presentation; the formalization establishes the same closed
 form by induction on the uniform-pivot recurrence, splitting the rank
 sum at $k$ and telescoping each half against the identities below.
@@ -99,7 +99,7 @@ $$\mathbb{E}[C(L,0)] = 2n - 2H_n .$$
 **Theorem 3 (linear bound, distinct elements).** For distinct entries
 and any $k$: $\mathbb{E}[C(L,k)] \le 4n$.
 
-*Proof.* By strong induction on $n$, bounding the recurrence: the
+Proof. By strong induction on $n$, bounding the recurrence: the
 call costs $n-1$ and recurses on one side whose expected size,
 averaged over the uniform pivot, is at most $\tfrac{3}{4}$-fraction
 of $n$ in the amortized sense; concretely, with $E(n) :=
@@ -114,7 +114,7 @@ $\blacksquare$
 (duplicates allowed) and every $k$:
 $\mathbb{E}[C(L,k)] \le \binom{n}{2}$.
 
-*Proof.* Identical shape to the quicksort quadratic bound: cost
+Proof. Identical shape to the quicksort quadratic bound: cost
 $n - 1$ plus one recursive call on a sublist of total length
 $\le n-1$, and $(n-1) + \binom{n-1}{2} = \binom{n}{2}$. $\blacksquare$
 

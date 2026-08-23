@@ -6,9 +6,9 @@ Store a finite set of keys $K \subseteq \mathbb{N}$, $|K| = n$, in a
 **binary search tree** (BST) whose shape is randomized so that its
 expected height is $O(\log n)$ — without rebalancing logic. A binary
 tree is either a leaf or a node $(\ell, x, r)$ with subtrees $\ell,
-r$ and key $x$; its **inorder traversal** lists left subtree, key,
+r$ and key $x$; its inorder traversal lists left subtree, key,
 right subtree; it is a BST over $K$ iff the inorder traversal is the
-strictly increasing enumeration of $K$. The **height** $h(t)$ is
+strictly increasing enumeration of $K$. The height $h(t)$ is
 $0$ for a leaf and $1 + \max(h(\ell), h(r))$ for a node.
 
 ## 2. The two models
@@ -34,7 +34,7 @@ is stated here as the target of ongoing work; the theorems below are
 proved per model.)
 
 **Cost model.** No operational cost is charged; the quantity of
-interest is *structural* — the height of the returned tree, a random
+interest is structural — the height of the returned tree, a random
 variable through the output distribution.
 
 ## 3. Correctness
@@ -45,21 +45,21 @@ $\mathrm{Treap}(L)$) satisfies: the inorder traversal of $t$ is
 strictly increasing and is a permutation of the keys. In particular
 the traversal is deterministic even though the shape is random.
 
-*Proof (insertion model).* By Theorem 1 of the Fisher–Yates
+Proof (insertion model). By Theorem 1 of the Fisher–Yates
 companion, the shuffled list is a permutation of the keys. Standard
 BST insertion preserves the invariants "inorder is strictly
 increasing" and "inorder is a permutation of the multiset of keys
 inserted so far" (stated; routine structural induction on the tree).
 Folding over the whole permutation yields the claim.
 
-*Proof (recursive model).* Strong induction on $|L|$: the root $p$
+Proof (recursive model). Strong induction on $|L|$: the root $p$
 separates the strictly smaller keys (left) from the larger ones
 (right); by the induction hypothesis both subtrees are BSTs over
 their key sets, and concatenating
 $\text{inorder}(\ell), p, \text{inorder}(r)$ is strictly increasing
 and enumerates all keys. $\blacksquare$
 
-**Theorem 2 (deterministic height bound).** In **both** models, every
+**Theorem 2 (deterministic height bound).** In both models, every
 supported tree has height $\le n$: by Theorem 1 the traversal of such
 a tree enumerates the $n$ keys, so the tree has exactly $n$ nodes, and
 the height of a binary tree is at most its number of nodes.
@@ -74,7 +74,7 @@ $n$).
 **Theorem 3 (exponential-height bound).**
 $$\mathbb{E}\bigl[2^{H_n}\bigr] \;\le\; \binom{n+3}{3}.$$
 
-*Proof.* Induction on $n$; write $Y_n := 2^{H_n}$. For $n = 0$,
+Proof. Induction on $n$; write $Y_n := 2^{H_n}$. For $n = 0$,
 $Y_0 = 1 = \binom{3}{3}$. For $n \ge 1$, condition on the root's
 rank $j \in \{0, \dots, n-1\}$ (uniform: the uniformly chosen root
 is the $(j{+}1)$-st smallest key with probability $1/n$); the two
@@ -88,13 +88,13 @@ $$\mathbb{E}[Y_n] \le \frac{2}{n}\sum_{j=0}^{n-1}
  = \frac{4}{n}\binom{n+3}{4},$$
 by the hockey-stick identity
 $\sum_{j=0}^{n-1}\binom{j+3}{3} = \binom{n+3}{4}$; and
-$4\binom{n+3}{4} = n\binom{n+3}{3}$, closing the induction **with
-equality** in the last step. $\blacksquare$
+$4\binom{n+3}{4} = n\binom{n+3}{3}$, closing the induction with
+equality in the last step. $\blacksquare$
 
 **Theorem 4 (logarithmic expected height).**
 $$\mathbb{E}[H_n] \;\le\; 3\lfloor\log_2(n+3)\rfloor + 4 .$$
 
-*Proof.* For every $k \in \mathbb{N}$ and every $h \in \mathbb{N}$,
+Proof. For every $k \in \mathbb{N}$ and every $h \in \mathbb{N}$,
 $$h \le k + \frac{2^h}{2^k}$$
 (if $h \le k$ this is clear; if $h > k$ then $2^{h-k} \ge h - k$).
 Taking expectations and choosing
