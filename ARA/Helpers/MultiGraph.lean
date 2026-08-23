@@ -33,11 +33,10 @@ Two divergences, both forced by executability and documented at their
 definitions: multiplicity is carried by repetition in a `List` rather
 than by an `Edge.edgeLabel` over a noncomputable `Set` (our
 `List (Sym2 α)` is their `Set (Edge α (Fin m))` with the list position
-as the label), and contraction is the supervertex `∪`-merge on
-`MultiGraph (Finset β)` rather than a quotient of the vertex type by a
-`Setoid`: merging is symmetric, so contraction is a genuine function
-of the unordered edge (no order, no choice, no tie-break), and the
-vertex type survives the contraction loop.
+as the label), and contraction merges the two endpoints into a vertex
+of the same type, chosen by the caller, rather than into a quotient of
+the vertex type by a `Setoid`: the vertex type survives the
+contraction loop.
 
 When GraphLib publishes on a matching toolchain, this file should
 shrink to an adapter.
@@ -324,8 +323,8 @@ private lemma countP_crossing_map_filter {g : MultiGraph α} (hwf : g.WF)
 
 /-! ### Two-vertex graphs
 
-When two supervertices remain, every edge crosses every cut, so the
-edge count is exactly the minimum-cut value. -/
+When two vertices remain, every edge crosses every cut, so the edge
+count is exactly the minimum-cut value. -/
 
 /-- In a well-formed graph on two vertices, every cut consists of all
 the edges. -/
@@ -387,8 +386,7 @@ vertex `w` enters, every edge is redirected through the merge, and the
 loops this creates (the parallel copies of the contracted edge) are
 dropped. The models differ only in how `w` is chosen: the smaller
 endpoint under a linear order, the endpoint of smaller label under an
-upfront enumeration, a brand-new vertex, or the union of the endpoint
-supervertices (the supervertex model below).
+upfront enumeration, or a brand-new vertex.
 
 The entire cut theory needs exactly one hypothesis about that
 choice: `w` collides with no untouched vertex,
