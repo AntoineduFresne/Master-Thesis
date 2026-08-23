@@ -9,7 +9,6 @@ import ARA.Infrastructure.Tactics
 import ARA.Infrastructure.Randomness.LawfulRandMonad
 import ARA.Infrastructure.Randomness.Prob
 import ARA.Infrastructure.Randomness.RandVec
-import ARA.Infrastructure.Randomness.SPMF
 import ARA.Infrastructure.Randomness.Geometric
 import ARA.Infrastructure.Complexity.TimeMT
 import ARA.Infrastructure.Complexity.MonadCost
@@ -28,14 +27,13 @@ import ARA.Algorithms.Tutorial
 import ARA.Algorithms.Quicksort.Quicksort
 import ARA.Algorithms.Quickselect.Quickselect
 import ARA.Algorithms.Karger.Karger
-import ARA.Algorithms.Karger.DesignDiscussion.KargerVariants
-import ARA.Algorithms.KargerStein.KargerStein
 import ARA.Algorithms.ReservoirSampling.ReservoirSampling
 import ARA.Algorithms.Freivalds.Freivalds
 import ARA.Algorithms.SchwartzZippel.SchwartzZippel
 import ARA.Algorithms.CouponCollector.CouponCollector
 import ARA.Algorithms.FisherYates.FisherYates
 import ARA.Algorithms.Treap.Treap
+import ARA.FutureWork.SPMF
 
 /-!
 # ARA — Analysis of Randomized Algorithms

@@ -1,6 +1,6 @@
 # ARA — Analysis of Randomized Algorithms in Lean 4
 
-A framework where a randomized algorithm is written once and that single definition serves, depending on the instantiation of the abstract source of randomness, as:
+A framework where a randomized algorithm is written once and that single definition serves, depending on the instantiation of the abstract random monad, as:
 
 * an **executable program** (`IO`, real randomness — `#eval` it),
 * a **distribution** (`PMF`, the mathematical specification),
@@ -38,10 +38,8 @@ ARA/
 │   │   │                          (`randIdx`, `randBit`/`randVec`,
 │   │   │                          `randElem`/`randVecOn`) with the counting
 │   │   │                          principles #accepting / #choices
-│   │   ├── Geometric.lean         geometric + `geometricTrials` laws (retry
-│   │   │                          cost), 𝔼 = q/(1−q) failures, 1/p trials
-│   │   └── SPMF.lean              sub-probability (`OptionT PMF`) and the
-│   │                              `RetryMonad` Las-Vegas retry primitive
+│   │   └── Geometric.lean         geometric + `geometricTrials` laws (retry
+│   │                              cost), 𝔼 = q/(1−q) failures, 1/p trials
 │   ├── Complexity/     proving what it costs
 │   │   ├── TimeMT.lean            cost transformer over any monad
 │   │   ├── MonadCost.lean         abstract `tick` (no-op by default)
@@ -71,12 +69,15 @@ ARA/
 │   │                          degree/handshake — Karger's graph theory
 │   ├── Counting.lean          involution pairing (½-soundness counts)
 │   └── HarmonicSums.lean      prefix sums Σ H_r, Σ r·H_r, Σ (r+1)·H_r
+├── FutureWork/         components designed but not yet connected to the
+│                       framework (not used by any case study)
+│   └── SPMF.lean              sub-probability (`OptionT PMF`) and the
+│                              `RetryMonad` Las-Vegas retry primitive
 └── Algorithms/
     ├── Tutorial.lean          ← start here
-    ├── Quicksort/             Quickselect/       KargerStein/
-    ├── Karger/                (Karger: abstract-pick Karger returning the
-    │                           cut and its value; DesignDiscussion/:
-    │                           KargerVariants, MergeRule + the three rules)
+    ├── Quicksort/             Quickselect/
+    ├── Karger/                (abstract-pick Karger returning the cut
+    │                           and its value)
     ├── ReservoirSampling/     Freivalds/         Treap/
     ├── FisherYates/           SchwartzZippel/    CouponCollector/
     │
@@ -95,8 +96,6 @@ analysis; together they are the proof that the framework is usable.
 | **Quicksort** | Dirac: always the sorted permutation | exact `2(n+1)H(n) − 4n`; $\leq$ `C(n,2)` for duplicates; Markov tail `ℙ[cost > k] ≤ C(n,2)/(k+1)` |
 | **Quickselect** | Dirac: always the k-th order statistic | exact Knuth 1971 bivariate-harmonic formula; `≤ 4n`; $\leq$  `C(n,2)` for duplicates |
 | **Karger** | returns an actual **minimum cut** with prob. `≥ 2/(n(n−1))` (`karger_finds_min`); one-sided error (support) | amplified: `k` runs fail with prob. `≤ (1−2/(n(n−1)))^k`; cost `≤ (n−2)·m` |
-| **Karger–Stein** | returns an actual **minimum cut** with prob. `≥ 1/(d+3)`, `d = ksDepth n ≈ 2·log₂ n` (`kargerStein_finds_min`); one-sided error | recursive contraction to `t(n) ≈ n/√2` (integer `t(n)`, no `√2` anywhere); cost `≤ (2^(d+2)−2)·n·m` |
-| **Karger variants** | the same theorems under a **pluggable contraction rule** (`MergeRule`): order / upfront-labeling / fresh-vertex merges, one shared analysis (`kargerVia_*`) | exhibit: what each contraction model assumes, and where each merge rule pays its freshness obligation |
 | **Reservoir sampling** | exact output distribution: `P[a] = count a / n` | exactly `n − 1` coins on every run (cost law), single pass |
 | **Fisher–Yates** | exact output distribution: uniform over all `n!` permutations | free — a sampler, no ticks |
 | **Schwartz–Zippel** | complete + sound (`≤ deg/\|S\|`, any integral domain) | one wholesale evaluation |
@@ -107,18 +106,25 @@ analysis; together they are the proof that the framework is usable.
 All proofs rely (after "#print axioms") only on `propext`,
 `Classical.choice`, `Quot.sound`.
 
+## Status (August 2026)
+
+This repository accompanies the master's thesis *Analysis of Randomised
+Algorithms in Lean 4*, whose Section 10 describes how it was written.
+Every proof here is checked by the Lean kernel and there is no `sorry`.
+The repository will keep being revised.
+
 ## Notation used throughout the algorithms
 
 ```lean
 𝒟_{M}[Quicksort L]              -- output distribution at random monad M
-𝔼_{M}[cost Quicksort L]      -- expected runtime (ℝ≥0∞) at random monad M
+𝔼_{M}[cost Quicksort L]      -- expected runtime (ENNReal) at random monad M
 𝔼ℝ_{M}[cost Quicksort L]     -- the same, as a real number
 ℙ_{M}[cost Quicksort L > k]  -- tail probability; ≤ 𝔼_{M}[cost …]/(k+1) by Markov
 ℙ_{M}[Karger R.pick g ∈ {o | o.2 = g.minCutValue}] -- output probability (correctness twin of 𝔼_{M}[cost ·])
 ℙ_{M}[reservoir L ∈ S]          -- probability of an event
 expVal (toPMF (treap L)) g      -- E[g(output)]
 𝔼[couponCollector n]            -- mean of a ℕ-valued law (e.g. a cost law)
-x ⊖ y                           -- |x − y| in ℝ≥0∞ (Chebyshev deviations)
+x ⊖ y                           -- |x − y| in ENNReal (Chebyshev deviations)
 pivotLT L i, pivotGE L i        -- the two sides of a pivot partition
 ```
 
@@ -134,3 +140,7 @@ as Mathlib; check any theorem with `#print axioms`.
 
 Toolchain: `leanprover/lean4 v4.32.0`, Mathlib `v4.32.0`,
 [cslib](https://github.com/leanprover/cslib) `v4.32.0` (provides `TimeM`).
+
+## License
+
+Apache License 2.0 — see [`LICENSE`](LICENSE).

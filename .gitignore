@@ -10,3 +10,8 @@ writeup/
 # local editor / assistant configuration
 .vscode/
 .claude/
+
+# Kept locally, not part of the thesis repository (23 Aug 2026): these are not
+# discussed in the thesis. Remove these two lines to publish them again.
+ARA/Algorithms/KargerStein/
+ARA/Algorithms/Karger/DesignDiscussion/
