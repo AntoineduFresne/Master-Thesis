@@ -123,6 +123,88 @@ section LinearOrder
 
 variable [LinearOrder α]
 
+/-! ### The sorting specification
+
+What we want to say about `Quicksort` is that it sorts. Sortedness is a
+property, `List.SortedLE`, and a Dirac statement needs a value; the two
+meet because "sorted, and a permutation of `L`" is satisfied by exactly
+one list. That is a definite description, so it denotes, and `sortSpec L`
+is what it denotes.
+
+The definition mentions only the existence statement. The construction
+that proves it lives inside the proof, where proof irrelevance makes it
+unobservable: any two proofs of `exists_sortedLE_perm L` are
+definitionally equal, so `sortSpec` cannot depend on which one is given.
+
+Three facts are exported and nothing downstream needs more:
+`sortedLE_sortSpec` (it is sorted), `sortSpec_perm` (it permutes `L`),
+`eq_sortSpec` (it is the only such list). The price is that `sortSpec`
+is noncomputable, which costs nothing for something that is never run —
+`Quicksort` and `Quickselect` stay executable and `#eval`-able. -/
+
+/-- Sorted permutations of a list are equal: the specification
+"sorted, and a permutation of `L`" has at most one solution.
+
+Stated in the shape the support-to-Dirac bridge
+(`eq_pure_of_support_subsingleton`) asks for, since it is exactly the
+hypothesis that pays for reading a support-tier theorem as a Dirac
+one. -/
+lemma sortedPerm_unique {L : List α} :
+    ∀ x y : List α, (x.SortedLE ∧ x.Perm L) → (y.SortedLE ∧ y.Perm L) → x = y :=
+  fun _ _ hx hy => eq_of_sortedLE_perm hx.1 hy.1 (hx.2.trans hy.2.symm)
+
+/-- The specification has at least one solution. Proved by inserting
+one element at a time into a sorted list; the construction is confined
+to this proof and, by proof irrelevance, is invisible to `sortSpec`. -/
+lemma exists_sortedLE_perm (L : List α) :
+    ∃ S : List α, S.SortedLE ∧ S.Perm L := by
+  induction L with
+  | nil => exact ⟨[], by simp [sortedLE_iff_pairwise], Perm.refl []⟩
+  | cons a l ih =>
+    obtain ⟨S, hs, hp⟩ := ih
+    exact ⟨S.orderedInsert (· ≤ ·) a,
+      sortedLE_iff_pairwise.mpr
+        ((sortedLE_iff_pairwise.mp hs).orderedInsert a _),
+      (perm_orderedInsert _ a S).trans (hp.cons a)⟩
+
+/-- The specification is a definite description: exactly one list is
+sorted and a permutation of `L`. This is the statement `sortSpec`
+denotes; the two halves are `exists_sortedLE_perm` and
+`sortedPerm_unique`. -/
+lemma existsUnique_sortedLE_perm (L : List α) :
+    ∃! S : List α, S.SortedLE ∧ S.Perm L :=
+  (exists_sortedLE_perm L).imp fun S h =>
+    ⟨h, fun y hy => sortedPerm_unique y S hy h⟩
+
+/-- The sorted list of `L`: the unique list that is sorted and a
+permutation of `L` (see the section note). -/
+noncomputable def sortSpec (L : List α) : List α :=
+  (exists_sortedLE_perm L).choose
+
+@[simp] lemma sortedLE_sortSpec (L : List α) : (sortSpec L).SortedLE :=
+  (exists_sortedLE_perm L).choose_spec.1
+
+@[simp] lemma sortSpec_perm (L : List α) : (sortSpec L).Perm L :=
+  (exists_sortedLE_perm L).choose_spec.2
+
+/-- Characterization: anything sorted and equivalent to `L` is
+`sortSpec L`. Together with the two facts above this pins the
+definition down completely, and it is the only fact about `sortSpec`
+that any proof needs. -/
+lemma eq_sortSpec {S L : List α} (hs : S.SortedLE) (hp : S.Perm L) :
+    S = sortSpec L :=
+  sortedPerm_unique S (sortSpec L) ⟨hs, hp⟩
+    ⟨sortedLE_sortSpec L, sortSpec_perm L⟩
+
+@[simp] lemma mem_sortSpec {a : α} {L : List α} : a ∈ sortSpec L ↔ a ∈ L :=
+  (sortSpec_perm L).mem_iff
+
+@[simp] lemma length_sortSpec (L : List α) : (sortSpec L).length = L.length :=
+  (sortSpec_perm L).length_eq
+
+@[simp] lemma sortSpec_nil : sortSpec ([] : List α) = [] :=
+  (eq_sortSpec (by simp [sortedLE_iff_pairwise]) (Perm.refl [])).symm
+
 /-- The `< pivot` side when partitioning `L` around the pivot `L[i]`.
 Reducible, so statements written with `pivotLT` unify definitionally
 with the raw `filter`/`eraseIdx` form an algorithm unfolds to. -/
@@ -198,34 +280,49 @@ lemma perm_filter_partition
     ((Perm.cons _ hf).trans
       (perm_getElem_cons_eraseIdx L i).symm)
 
-/-- The sorted list splits around any pivot as
-`sorted(< pivot) ++ [pivot] ++ sorted(≥ pivot)`: two sorted
-permutations of the same list are equal.
+/-!
+### The pivot-partition identity, in two tiers
 
-Oriented branch = spec (the concatenation on the left), the
-`spec_transport` convention, so `dirac_finish` can rewrite a
+The mathematics is one fact: sorting both sides of a pivot partition
+and concatenating gives a sorted permutation of the whole list. It is
+stated once, as a property (`sortedPerm_concat_pivot`), and the
+equational form used by Dirac proofs (`sortSpec_partition`) is derived
+from it by the uniqueness characterization. The two correctness tiers
+therefore share their mathematics and differ only in packaging.
+-/
+
+/-- Assembly step, property form. If the two recursive outputs are
+sorted permutations of the two pivot sides, then placing the pivot
+between them yields a sorted permutation of `L`.
+
+This is the entire mathematical content of Quicksort's correctness, and
+it is the shape a support-tier proof consumes: hypotheses about the
+recursive calls, a conclusion about the branch, no specification value
+anywhere. -/
+lemma sortedPerm_concat_pivot (L : List α) (i : Fin L.length)
+    {S1 S2 : List α}
+    (h1 : S1.SortedLE) (hp1 : S1.Perm (pivotLT L i))
+    (h2 : S2.SortedLE) (hp2 : S2.Perm (pivotGE L i)) :
+    (S1 ++ [L[i]] ++ S2).SortedLE ∧ (S1 ++ [L[i]] ++ S2).Perm L := by
+  refine ⟨sorted_concat_pivot h1 h2 (fun x hx => ?_) (fun x hx => ?_), ?_⟩
+  · simpa using of_mem_filter (hp1.mem_iff.mp hx)
+  · simpa using of_mem_filter (hp2.mem_iff.mp hx)
+  · exact ((hp1.append (Perm.refl [L[i]])).append hp2).trans
+      (perm_filter_partition L i)
+
+/-- Assembly step, equational form: the sorted list splits around any
+pivot as `sort(< pivot) ++ [pivot] ++ sort(≥ pivot)`.
+
+Derived from `sortedPerm_concat_pivot` by `eq_sortSpec` — the property
+determines the value. Oriented branch = spec (the concatenation on the
+left), the `spec_transport` convention, so `dirac_finish` can rewrite a
 collapsed Quicksort branch to the specification. -/
-lemma mergeSort_partition (L : List α) (i : Fin L.length) :
-    ((L.eraseIdx i).filter (· < L[i])).mergeSort (· ≤ ·) ++ [L[i]] ++
-      ((L.eraseIdx i).filter (· ≥ L[i])).mergeSort (· ≤ ·) =
-      L.mergeSort (· ≤ ·) := by
-  symm
-  -- Two sorted permutations of the same list are equal.
-  apply eq_of_sortedLE_perm sortedLE_mergeSort
-  · -- The concatenation is sorted: everything left of the pivot is
-    -- `< pivot`, everything right is `≥ pivot`.
-    apply sorted_concat_pivot sortedLE_mergeSort sortedLE_mergeSort
-    · intro x hx
-      rw [mem_mergeSort] at hx
-      simpa using of_mem_filter hx
-    · intro x hx
-      rw [mem_mergeSort] at hx
-      simpa using of_mem_filter hx
-  · -- Both sides are permutations of `L` (pivot + partition of the rest).
-    exact (mergeSort_perm L _).trans
-      ((perm_filter_partition L i).symm.trans
-        ((((mergeSort_perm _ _).symm.append (Perm.refl [L[i]])).append
-          (mergeSort_perm _ _).symm)))
+lemma sortSpec_partition (L : List α) (i : Fin L.length) :
+    sortSpec (pivotLT L i) ++ [L[i]] ++ sortSpec (pivotGE L i) =
+      sortSpec L :=
+  have h := sortedPerm_concat_pivot L i (sortedLE_sortSpec _)
+    (sortSpec_perm _) (sortedLE_sortSpec _) (sortSpec_perm _)
+  eq_sortSpec h.1 h.2
 
 /-!
 ### Partition size lemma for distinct lists
@@ -329,7 +426,7 @@ private noncomputable def rankEquiv (L : List α) (hnd : L.Nodup) : Fin L.length
 /-- Reindexing partition sizes by rank for nodup lists, general form:
 any function of the two partition sizes can be re-summed over ranks.
 Works in any `AddCommMonoid` (used with `ℚ` for Quicksort's exact
-formula and with `ℝ≥0∞` for Quickselect's bound).
+formula and with `ENNReal` for Quickselect's bound).
 
 The RHS is a `Finset.range` sum: everything downstream of a rank
 reindexing (`Finset.sum_range_succ`, `sum_range_reflect`, harmonic
