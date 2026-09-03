@@ -17,6 +17,10 @@ Helped by Claude code: Opus and Fable models were used.
 
 ## Start here
 
+The master's thesis this framework was built for,
+**[Analysis of Randomised Algorithms in Lean 4](docs/Analysis_of_Randomised_Algorithms_in_Lean4.pdf)**
+(ETH Zurich, D-MATH, August 2026), explains the design and the case studies.
+
 **[`ARA/Algorithms/Tutorial.lean`](ARA/Algorithms/Tutorial.lean)** is a
 tutorial to formalize a toy algorithm (`RandMax`) which is verified 
 end-to-end in nine numbered steps.
